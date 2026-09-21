@@ -6,6 +6,7 @@ import AsyncStorageLike from "expo-sqlite/kv-store";
 import { apri } from "../lib/db";
 import { caricaContenuti } from "../lib/contenuti";
 import { apriPalestra, versioneMotore, supportaWindowFunctions } from "../lib/palestra";
+import { ripristina as ripristinaPromemoria } from "../lib/notifiche";
 
 export default function Radice() {
   const [pronto, setPronto] = useState(false);
@@ -31,6 +32,10 @@ export default function Radice() {
           );
         }
         setPronto(true);
+        // Dopo il pronto e senza await: un riavvio del telefono azzera le
+        // notifiche programmate, ma ripristinarle non deve ritardare l'avvio
+        // né impedirlo se fallisce.
+        void ripristinaPromemoria();
       } catch (e) {
         setErrore(String(e));
       }

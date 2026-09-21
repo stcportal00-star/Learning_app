@@ -5,11 +5,14 @@ import { Pressable } from "react-native";
 import { database } from "../../lib/db";
 import { divergenzaCorrente } from "../../lib/sync/stato";
 import { Divergenza } from "../../lib/sync/auto";
+import { leggiPromemoria } from "../../lib/notifiche";
+import { Promemoria, PREDEFINITO, comeTesto } from "../../lib/promemoria";
 
 export default function Profilo() {
   const [art, setArt] = useState<Array<{ trimestre: string; n: number }>>([]);
   const [cred, setCred] = useState<Array<{ anno_previsto: number; n: number; costo: number }>>([]);
   const [div, setDiv] = useState<Divergenza | null>(null);
+  const [prom, setProm] = useState<Promemoria>(PREDEFINITO);
 
   useEffect(() => {
     (async () => {
@@ -17,6 +20,7 @@ export default function Profilo() {
       setArt(await d.getAllAsync("SELECT trimestre, count(*) AS n FROM artefatti GROUP BY trimestre ORDER BY trimestre"));
       setCred(await d.getAllAsync("SELECT anno_previsto, count(*) AS n, IFNULL(sum(costo_usd),0) AS costo FROM credenziali GROUP BY anno_previsto ORDER BY anno_previsto"));
       setDiv(await divergenzaCorrente());
+      setProm(await leggiPromemoria());
     })();
   }, []);
 
@@ -32,6 +36,18 @@ export default function Profilo() {
           </Text>
         </Pressable>
       </Link>
+
+      <Link href="/promemoria" asChild>
+        <Pressable style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14 }}>
+          <Text style={{ fontSize: 16, fontWeight: "500" }}>Promemoria</Text>
+          <Text style={{ fontSize: 13, opacity: 0.65, marginTop: 3, lineHeight: 18 }}>
+            {prom.attivo
+              ? `Blocco ${prom.tipo} alle ${comeTesto(prom)}, ogni giorno.`
+              : "Nessun avviso. Notifica locale, funziona anche in aereo."}
+          </Text>
+        </Pressable>
+      </Link>
+
       <View>
         <Text style={{ fontSize: 15, fontWeight: "600", marginBottom: 8 }}>Artefatti per trimestre</Text>
         {art.length === 0 ? <Text style={{ opacity: 0.6 }}>Sincronizza il piano da Supabase.</Text> :

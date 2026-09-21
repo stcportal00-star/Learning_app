@@ -7,7 +7,7 @@
     "start": "expo start --dev-client",
     "android": "expo run:android",
     "prebuild": "expo prebuild --platform android",
-    "test": "tsc -p tsconfig.test.json && node build_test/test/nucleo.test.js && node build_test/test/sync.test.js && node build_test/test/catena.test.js && node build_test/test/due-dispositivi.test.js && node build_test/test/sessioni.test.js",
+    "test": "tsc -p tsconfig.test.json && node build_test/test/nucleo.test.js && node build_test/test/sync.test.js && node build_test/test/catena.test.js && node build_test/test/due-dispositivi.test.js && node build_test/test/sessioni.test.js && node build_test/test/promemoria.test.js",
     "typecheck": "tsc --noEmit",
     "verifica": "bash verifica.sh"
   },

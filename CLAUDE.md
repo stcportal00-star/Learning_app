@@ -72,7 +72,7 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
 |---|---|
 | `npm install` | 980 pacchetti, nessun conflitto bloccante |
 | `npx tsc --noEmit` | 0 errori sull'intero progetto |
-| `npm run verifica` | typecheck + 102 test superati |
+| `npm run verifica` | typecheck + 146 test superati |
 | `.github/test-firma.sh` | 10 scenari della chiave di firma, tutti superati |
 | `npx expo config --type prebuild` | valido, SDK 54 |
 | Versioni vs `bundledNativeModules` | 15 su 15 allineate |
@@ -84,7 +84,7 @@ compilazione Gradle e l'app su un dispositivo: li farà per la prima volta GitHu
 ## Comandi
 
 ```bash
-npm run verifica  # typecheck + 92 test di logica + 10 del lettore PDF
+npm run verifica  # typecheck + 136 test di logica + 10 del lettore PDF
 npx tsc --noEmit  # typecheck dell'intero progetto
 npm start         # richiede un dev client già installato
 npx expo prebuild --platform android
