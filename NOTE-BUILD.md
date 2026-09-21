@@ -247,6 +247,124 @@ legge; va guardata al primo avvio sul telefono.
 
 ---
 
+---
+
+## Collaudo in ambiente virtuale — 21 settembre 2026, sera
+
+L'app aveva 146 test, tutti sui moduli puri: hlc, verifica, sync, sessioni,
+promemoria. Tutto ciò che importa un modulo nativo — `lib/db.ts`, che è la fonte
+di verità, e `lib/palestra.ts`, che è il motore degli esercizi — non era **mai
+stato eseguito da nessun test**. Sono le due cose che `CLAUDE.md` dichiara a
+priorità massima.
+
+La mappa iniziale ha contato **337 interazioni possibili, 276 scoperte**.
+
+### Il banco: far girare il codice vero senza dispositivo
+
+Node 22 ha `node:sqlite` incorporato, quindi il doppio di `expo-sqlite` gira su
+SQLite **vero**: le transazioni fanno davvero BEGIN/COMMIT e un ROLLBACK annulla
+davvero. Un doppio compiacente avrebbe confermato gli invarianti senza
+verificarli. `expo-file-system` sta su `node:fs`, `expo-crypto` su `node:crypto`;
+picker, sharing, intent e notifiche tengono un giornale ispezionabile.
+
+Nessuna dipendenza nuova: l'invariante 8 resta intatta.
+
+Il banco si falsifica da sé, ed è la ragione per cui i suoi numeri valgono
+qualcosa. Togliendo il `ROLLBACK` al doppio diventano rosse 18 verifiche su 63;
+togliendo anche il `BEGIN`, 20. Se non ne diventasse rossa nessuna, le 63 verdi
+sarebbero compiacenza e non prova.
+
+### Le otto superfici
+
+| superficie | esito |
+|---|---|
+| `registro-eventi` | 45 scenari · 260 verifiche · verde |
+| `motore-sql` | 126 scenari · verde |
+| `import-database` | 220 scenari · verde |
+| `contenuti` | 59 scenari · 301 verifiche · verde |
+| `ripasso-e-sessioni` | 67 scenari · verde |
+| `schermate-stato` | 469 verifiche · verde |
+| `sync-fusione` | 91 verifiche · verde |
+| `promemoria-notifiche` | **405 su 408** — tre rosse, vedi sotto |
+
+Un numero verde qui non vuol dire che l'app sia sana: vuol dire che lo scenario
+fa quello che dice. Molti scenari **inchiodano** un difetto, cioè verificano che
+ci sia.
+
+Due misure rassicuranti, e vanno dette perché il resto di questa sezione è un
+elenco di guasti: le **150 soluzioni di riferimento** degli esercizi SQL sono
+state eseguite contro `palestra.db` e confrontate con `righe_attese` e
+`colonne_attese` — zero divergenze su righe, nomi e ordine delle colonne. E
+`sync-fusione` è verde su tutte e 91 le verifiche.
+
+### Corretto: `palestra.db` non era in sola lettura — `f868318`
+
+Il difetto peggiore trovato. `lib/palestra.ts` lo dichiarava in due commenti e
+il codice non lo attuava: `UPDATE` e `DELETE` battuti nel campo risposta
+venivano **eseguiti**, l'md5 del file cambiava, e da quel momento le soluzioni
+di riferimento davano risultati diversi — ogni esercizio successivo incoerente.
+Nessun avviso: l'app diceva «Non ancora» e registrava il tentativo come errato.
+
+In aereo, senza rete e senza PC, bastava una riga di scrittura per curiosità o
+per errore — o ricopiando il `CREATE INDEX` che la consegna stessa mostra — e
+la palestra era rovinata per sempre. `apriPalestra()` ricopia solo se il file
+manca, non fa `integrity_check` e non ha ripristino: l'unica uscita era
+disinstallare, che cancella il registro eventi.
+
+Corretto con `PRAGMA query_only = ON`, non con un filtro sul testo — che
+violerebbe l'invariante 3 e si aggira — e non aprendo in sola lettura, che nel
+`SQLiteOpenOptions` dell'SDK 54 **non esiste**. È SQLite a respingere, con
+*attempt to write a readonly database*.
+
+Confermato da tre revisori avversariali, nessuno dei quali è riuscito a
+confutarlo; uno l'ha riprodotto da zero, 26 prove su 26.
+
+### Corretto: l'unica chiamata non protetta in `verifica()` — `e36c869`
+
+Scoperta di conseguenza. `verifica()` proteggeva con un `try` la soluzione di
+riferimento e la risposta dell'utente, ma non `esegui(opzioni.preparazione)`.
+Finché la palestra accettava ogni scrittura non falliva mai niente e non se ne
+accorgeva nessuno; appena `query_only` ha cominciato a respingere, quel ramo è
+passato da «non fa nulla» a «fa cadere la schermata». `app/esercizi.tsx` non lo
+percorre, ma resta esportato.
+
+Correggerne uno ne ha scoperto un altro: è il senso di collaudare.
+
+### Ancora aperto
+
+Trentanove scenari del solo `motore-sql` inchiodano difetti non ancora
+corretti, e la verifica avversariale degli altri candidati era ancora in corso
+al momento di scrivere. I due più gravi in attesa di verdetto:
+
+- **`REG-06/REG-07`** — due `registra()` senza `await` intermedio (doppio tocco
+  su Salva) annidano le transazioni: il `ROLLBACK` della seconda annulla
+  l'`INSERT` dell'evento della prima, che prosegue in autocommit e scrive
+  comunque la proiezione. Resta una riga **senza il suo evento**: non
+  raggiungerà mai l'altro dispositivo. `IMP-37` arriva alla stessa radice da
+  tutt'altra strada, l'import della biblioteca. Da guardare con sospetto,
+  però: il banco ha dichiarato che la sua asincronia è finta, e una scoperta
+  sulla concorrenza trovata da uno strumento che non riproduce la concorrenza
+  vera va contestata prima di crederle.
+- **`HLC-07`** — `meta('hlc')` illeggibile rende l'orologio `NaN` per sempre e
+  blocca le scritture sull'entità; il riavvio non guarisce.
+
+Tre verifiche di `promemoria-notifiche` restano rosse, tutte sulla frase «già
+registrato». Non le ho attribuite all'app: un'asserzione rossa può voler dire
+tanto che l'app sbaglia quanto che il test sbaglia.
+
+### Una cosa che vale più dei numeri
+
+`promemoria-notifiche.mjs` è nato senza il blocco finale che stampa il riepilogo:
+contava le verifiche e usciva `0` qualunque cosa accadesse. Era un test che non
+poteva fallire. Appena l'agente ha aggiunto il riepilogo, il file ha fallito.
+
+È lo stesso guasto della biblioteca — `dimensione > 1024` che approvava tredici
+pagine HTML come libri — e della sola lettura dichiarata nei commenti e mai
+attuata. Un controllo che non può dire di no non è un controllo debole: è
+l'assenza di un controllo travestita da controllo.
+
+---
+
 ## Conteggi
 
 `npm run verifica`: typecheck a 0 errori, 92 test di logica e 10 del lettore.
@@ -258,6 +376,13 @@ conteggi dichiarati in `CLAUDE.md` sono stati aggiornati di conseguenza.
 `strumenti/rassegna/verifica_rassegna.py`: 199 test, nessuna rete.
 `strumenti/verifica_biblioteca.py`: 216 test, nessuna rete, eseguito da
 `verifica.yml` a ogni push e da `biblioteca.yml` prima di scaricare.
+
+`test/banco/`: 258 verifiche fra i tre banchi di prova.
+`test/simulazione/`: otto superfici, oltre 1400 scenari sul codice vero. **Non
+sono ancora in `verifica.sh`**: una superficie è rossa e diversi scenari
+inchiodano difetti aperti, quindi collegarli alla CI adesso la terrebbe rossa
+per ragioni che non sono regressioni. Vanno collegati quando i difetti confermati
+saranno corretti.
 
 Mai modificati: `fumo.sh`, `test-firma.sh`, il passo della chiave di firma,
 la release `firma`.
