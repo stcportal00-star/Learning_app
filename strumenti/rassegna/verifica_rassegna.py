@@ -255,6 +255,10 @@ verifica("arXiv su https (su http rispondeva HTTP 406)",
          "http://export.arxiv.org" not in _fonti_src)
 verifica("ogni richiesta dichiara un Accept (arXiv rispondeva 406 senza)",
          '"Accept"' in _fonti_src)
+# "Page size cannot be greater than 25": superarlo non tronca, fa respingere
+# tutta l'interrogazione con 400.
+verifica("Zenodo entro il tetto di pagina non autenticato",
+         fonti.ZENODO_PAGINA_MASSIMA <= 25 and "min(massimo, ZENODO_PAGINA_MASSIMA)" in _fonti_src)
 
 # ---------------------------------------------------------------- nessuna fonte ombra
 sorgenti = ""

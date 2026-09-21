@@ -54,6 +54,9 @@ CONTATTO = os.environ.get("PERCORSO_CONTATTO", "").strip()
 
 TENTATIVI = 3
 TIMEOUT = 30
+# Tetto di pagina di Zenodo per le richieste non autenticate. Dichiarato qui e
+# non sepolto nell'adattatore perché è un limite dell'archivio, non una scelta.
+ZENODO_PAGINA_MASSIMA = 25
 # Intervallo minimo fra due chiamate allo stesso host. Nessuna delle API usate
 # pubblica un limite duro per uso non autenticato: un decimo di secondo tiene
 # il traffico sotto qualunque soglia ragionevole senza allungare la rassegna.
@@ -427,7 +430,13 @@ def zenodo(termini, da, massimo=60):
     # L'ordinamento per data recente più il setaccio danno la stessa finestra.
     dati = chiedi_json("https://zenodo.org/api/records", {
         "q": espressione,
-        "size": min(massimo, 100),
+        # Venticinque è il tetto per le richieste non autenticate, e superarlo
+        # non tronca: fa respingere l'intera interrogazione con 400. Le parole
+        # dell'archivio: "Page size cannot be greater than 25. Please use
+        # authenticated requests to increase the limit to 100." Un'API key
+        # alzerebbe il tetto, ma legare la rassegna a una credenziale per
+        # venticinque voci in più non vale il vincolo che introduce.
+        "size": min(massimo, ZENODO_PAGINA_MASSIMA),
         "sort": "newest",
     })
     uscite = []
