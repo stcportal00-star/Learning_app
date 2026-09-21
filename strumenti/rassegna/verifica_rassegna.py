@@ -200,6 +200,21 @@ verifica("elenco: prefisso doi: rimosso", voci[2]["doi"] == "10.2000/abc")
 verifica("catena dei libri tutta richiamabile",
          all(callable(f) for f in fonti.CATENA_LIBRI))
 
+# ------------------------------------------------- interrogazioni già respinte dagli archivi
+# Guardie di regressione: ognuna di queste sintassi ha fatto rispondere 4xx a
+# tutto l'archivio nella rassegna del 21/09/2026. Il rapporto quotidiano le
+# segnalerebbe di nuovo, ma un giorno dopo: meglio non riscriverle affatto.
+_fonti_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "fonti_aperte.py"), encoding="utf-8").read()
+verifica("DOAJ senza intervallo su bibjson.year (era HTTP 400)",
+         "bibjson.year:[" not in _fonti_src)
+verifica("Zenodo senza access_right nell'interrogazione (era HTTP 400)",
+         "access_right:open" not in _fonti_src)
+verifica("arXiv su https (su http rispondeva HTTP 406)",
+         "http://export.arxiv.org" not in _fonti_src)
+verifica("ogni richiesta dichiara un Accept (arXiv rispondeva 406 senza)",
+         '"Accept"' in _fonti_src)
+
 # ---------------------------------------------------------------- nessuna fonte ombra
 sorgenti = ""
 for nome in ("fonti_aperte.py", "catalogo.py", "ricercatore.py"):

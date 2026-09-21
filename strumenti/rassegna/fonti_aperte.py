@@ -78,7 +78,11 @@ def chiedi(url, parametri=None, intestazioni=None, tentativi=TENTATIVI):
 
     for tentativo in range(1, tentativi + 1):
         _attendi(host)
-        richiesta = urllib.request.Request(url, headers={"User-Agent": UA, **(intestazioni or {})})
+        # Accept esplicito: senza di esso export.arxiv.org risponde 406, e altri
+        # archivi negoziano una rappresentazione HTML che poi non si sa leggere.
+        testate = {"User-Agent": UA, "Accept": "application/json, application/atom+xml, */*"}
+        testate.update(intestazioni or {})
+        richiesta = urllib.request.Request(url, headers=testate)
         try:
             with urllib.request.urlopen(richiesta, timeout=TIMEOUT) as r:
                 return r.read()
@@ -228,7 +232,7 @@ def openalex(da, a, termini=None, per_pagina=120):
 def arxiv(categorie, massimo=100):
     """arXiv: preprint, ordinati per data di inserimento. Deposito dell'autore."""
     query = " OR ".join(f"cat:{c}" for c in categorie)
-    radice = chiedi_xml("http://export.arxiv.org/api/query", {
+    radice = chiedi_xml("https://export.arxiv.org/api/query", {
         "search_query": query,
         "sortBy": "submittedDate",
         "sortOrder": "descending",
@@ -263,11 +267,17 @@ def arxiv(categorie, massimo=100):
 
 
 def doaj(termini, da, massimo=100):
-    """DOAJ: articoli di riviste interamente ad accesso aperto."""
+    """DOAJ: articoli di riviste interamente ad accesso aperto.
+
+    Nessun filtro sull'anno nell'interrogazione: `bibjson.year` è una stringa e
+    la sintassi a intervallo fa rispondere 400 all'intero archivio. Si ordina
+    per data di inserimento e si lascia la finestra al setaccio, che la applica
+    su `created_date` — a piena precisione, mentre `bibjson.year`/`month` si
+    ferma al mese e farebbe scartare articoli usciti da pochi giorni.
+    """
     espressione = " OR ".join(f'bibjson.title:"{t}"' for t in termini)
-    interrogazione = f"({espressione}) AND bibjson.year:[{da[:4]} TO *]"
     dati = chiedi_json(
-        "https://doaj.org/api/search/articles/" + urllib.parse.quote(interrogazione, safe=""),
+        "https://doaj.org/api/search/articles/" + urllib.parse.quote(espressione, safe=""),
         {"pageSize": min(massimo, 100), "sort": "created_date:desc"},
     )
     uscite = []
@@ -279,7 +289,7 @@ def doaj(termini, da, massimo=100):
         uscite.append(voce(
             b.get("title") or "(senza titolo)", "doaj", pagina or "",
             doi=doi,
-            data=_data_iso(b.get("year"), b.get("month")),
+            data=(r.get("created_date") or "")[:10] or _data_iso(b.get("year"), b.get("month")),
             autori=[a_.get("name") for a_ in b.get("author", [])],
             url_pdf=pagina if (pagina or "").lower().endswith(".pdf") else None,
             licenza=next((l.get("type") for l in (b.get("journal") or {}).get("license", [])), None),
@@ -351,16 +361,24 @@ def crossref(termini, da, massimo=100):
 def zenodo(termini, da, massimo=60):
     """Zenodo: rapporti, dati e materiali grigi depositati dagli autori."""
     espressione = " OR ".join(f'"{t}"' for t in termini)
+    # Solo i termini nell'interrogazione. Zenodo è passato a InvenioRDM: il campo
+    # `access_right` non esiste più e l'intervallo su `created` viene rifiutato,
+    # e un campo ignoto non viene ignorato — fa rispondere 400 a tutta la query.
+    # L'ordinamento per data recente più il setaccio danno la stessa finestra.
     dati = chiedi_json("https://zenodo.org/api/records", {
-        # Il filtro sull'accesso sta dentro q: passato come parametro a sé,
-        # l'API lo ignora in silenzio e restituisce anche i depositi chiusi.
-        "q": f'({espressione}) AND created:[{da} TO *] AND access_right:open',
+        "q": espressione,
         "size": min(massimo, 100),
         "sort": "newest",
     })
     uscite = []
     for r in (dati.get("hits") or {}).get("hits", []):
         m = r.get("metadata", {})
+        # L'accesso si verifica sulla risposta, dove convivono il campo nuovo
+        # (access.record) e quello vecchio (metadata.access_right).
+        aperto = ((r.get("access") or {}).get("record") == "public"
+                  or m.get("access_right") == "open")
+        if not aperto:
+            continue
         pdf = next((f.get("links", {}).get("self") for f in r.get("files", [])
                     if (f.get("key") or "").lower().endswith(".pdf")), None)
         uscite.append(voce(
