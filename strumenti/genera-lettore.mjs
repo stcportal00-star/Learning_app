@@ -11,6 +11,16 @@
  * Libreria e worker sono incorporati come stringhe e caricati tramite Blob URL:
  * evita il caricamento di moduli ES da file://, che Chromium blocca per CORS.
  *
+ * Il worker si importa sul thread principale invece di passarlo a workerSrc.
+ * Il modulo del worker termina con globalThis.pdfjsWorker = {WorkerMessageHandler};
+ * importandolo qui, pdf.js trova quel gestore e non costruisce alcun Worker.
+ * Con workerSrc impostato costruirebbe new Worker(blob, {type:"module"}), e un
+ * Worker non parte da un documento file://: pdf.js resta in attesa del messaggio
+ * "test" che non arriverà, senza sollevare nulla. È il blocco osservato nel
+ * test di fumo del build 3. Costo: l'analisi del PDF avviene sul thread
+ * principale, quindi un documento molto lungo può far scattare l'interfaccia.
+ * Un lettore che scatta è preferibile a un lettore che non apre.
+ *
  * Uso:  node strumenti/genera-lettore.mjs
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -33,17 +43,38 @@ export const VISORE_JS = `
 (async () => {
   const invia = (m) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(m));
   const stato = document.getElementById("stato");
+
+  // Un blocco silenzioso è il guasto peggiore: niente eccezione, niente
+  // messaggio, solo un'attesa che non finisce. Il guardiano lo trasforma in un
+  // errore leggibile che dice a quale passo ci si è fermati, e fa comparire il
+  // ripiego sul visore del sistema invece di lasciare l'utente davanti a nulla.
+  let fase = "avvio";
+  let pronto = false;
+  const guardiano = setTimeout(() => {
+    if (pronto) return;
+    const messaggio = "Impossibile aprire il PDF: bloccato al passo \\"" + fase + "\\"";
+    stato.textContent = messaggio;
+    invia({ tipo: "errore", messaggio });
+  }, 20000);
+
   try {
     const blob = (s) => URL.createObjectURL(new Blob([s], { type: "text/javascript" }));
+    fase = "caricamento della libreria";
     const pdfjs = await import(blob(LIB));
-    pdfjs.GlobalWorkerOptions.workerSrc = blob(WORKER);
+
+    // Definisce globalThis.pdfjsWorker: pdf.js userà il gestore sul thread
+    // principale e non costruirà un Worker, che da file:// non partirebbe.
+    fase = "caricamento del worker sul thread principale";
+    await import(blob(WORKER));
 
     const cfg = window.PERCORSO || {};
     if (!cfg.pdf) throw new Error("nessun file indicato");
 
     // Nessuna richiesta a intervalli: su file:// il caricamento in un colpo solo è il più robusto.
+    fase = "apertura del documento";
     const doc = await pdfjs.getDocument({ url: cfg.pdf, disableRange: true, disableStream: true }).promise;
     const n = doc.numPages;
+    fase = "lettura della prima pagina";
     const prima = await doc.getPage(1);
     const vp1 = prima.getViewport({ scale: 1 });
     const contenitore = document.getElementById("pagine");
@@ -57,6 +88,8 @@ export const VISORE_JS = `
       contenitore.appendChild(d);
       pagine.push(d);
     }
+    pronto = true;
+    clearTimeout(guardiano);
     stato.remove();
     invia({ tipo: "pronto", pagine: n });
 
@@ -105,8 +138,10 @@ export const VISORE_JS = `
     const iniziale = Math.min(Math.max(1, Number(cfg.pagina) || 1), n);
     if (iniziale > 1) requestAnimationFrame(() => pagine[iniziale - 1].scrollIntoView());
   } catch (e) {
-    const messaggio = String((e && e.message) || e);
-    stato.textContent = "Impossibile aprire il PDF: " + messaggio;
+    clearTimeout(guardiano);
+    const messaggio = "Impossibile aprire il PDF: " + String((e && e.message) || e)
+                    + " (al passo \\"" + fase + "\\")";
+    stato.textContent = messaggio;
     invia({ tipo: "errore", messaggio });
   }
 })();

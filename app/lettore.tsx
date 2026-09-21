@@ -50,7 +50,13 @@ export default function Lettore() {
     let m: Messaggio;
     try { m = JSON.parse(e.nativeEvent.data) as Messaggio; } catch { return; }
     if (m.tipo === "pronto") setTotale(m.pagine);
-    else if (m.tipo === "errore") setErrore(m.messaggio);
+    else if (m.tipo === "errore") {
+      // Senza PC, logcat è l'unica traccia leggibile: il workflow la raccoglie
+      // e la pubblica nel rapporto di build. Un guasto del lettore che resta
+      // solo a schermo non arriva a chi deve ripararlo.
+      console.error("lettore:", m.messaggio);
+      setErrore(m.messaggio);
+    }
     else if (m.tipo === "pagina") {
       setPagina(m.n);
       // Un evento per pagina sfogliata gonfierebbe il registro: si salva a riposo.
