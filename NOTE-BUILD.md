@@ -330,21 +330,64 @@ percorre, ma resta esportato.
 
 Correggerne uno ne ha scoperto un altro: è il senso di collaudare.
 
-### Ancora aperto
+### Corretto: l'invariante 1 si rompeva a due tocchi su Salva — `f890774`
+
+`REG-06/REG-07`. Due `registra()` accavallate annidavano le transazioni: il
+`ROLLBACK` della seconda annullava l'`INSERT` dell'evento della prima, che
+proseguiva in autocommit e scriveva comunque la proiezione. Restava una riga
+**senza il suo evento** — invisibile all'altro dispositivo, assente da una
+ricostruzione dal registro. `app/(tabs)/note.tsx:127` non ha la guardia che
+`app/esercizi.tsx:131` ha: due tocchi bastavano.
+
+Avevo scritto qui che era da guardare con sospetto, perché il banco dichiara
+la propria asincronia finta. I revisori hanno smontato il sospetto invece di
+aggirarlo: scenari rifatti con `setTimeout(1)` — esito identico; verdetto letto
+da una seconda connessione fuori dal doppio; una spia su `execSync` che ha
+registrato l'ordine vero delle istruzioni. E il sorgente Android di
+expo-sqlite: `CoroutineScope(Dispatchers.IO)`, nessun mutex per database. La
+documentazione di expo lo dice da sola, sopra il metodo: *«This transaction is
+not exclusive and can be interrupted by other async queries»*.
+
+Corretto con una coda in `lib/db.ts`: una transazione per volta. Il primo
+tentativo era incompleto — serializzare solo `registra()` non bastava, perché
+`useAutoSync` e `contenuti` aprivano transazioni per conto loro. Ora
+`inTransazione()` è l'unica porta.
+
+### Ancora aperto: la sincronizzazione non mostra mai ciò che riceve
+
+`SYN-01`, confermato, e per un'app su due dispositivi è grave.
+
+`lib/sync/useAutoSync.ts:46-63` applica gli eventi ricevuti con un solo
+`INSERT OR IGNORE INTO eventi … sincronizzato = 1`. **Nessuna proiezione**, né
+dentro né dopo la transazione. E:
+
+- `proietta()` (`lib/sync/fusione.ts:101`) ha **zero chiamanti** in tutto il
+  progetto: esiste solo la sua definizione;
+- `entitaToccate`, calcolato da `fondi()`, non viene **mai letto**;
+- nessuna ricostruzione dal registro all'avvio — `app/_layout.tsx` fa `apri()`,
+  `caricaContenuti()`, `apriPalestra()` e i promemoria;
+- tutte le schermate leggono le tabelle operative, non `eventi`.
+
+Quindi una nota scritta sul telefono arriva nel registro del tablet e **non
+compare da nessuna parte**. La sincronizzazione dice di aver funzionato, e per
+l'utente non cambia niente.
+
+**Perché non l'ho corretto stanotte.** Le proiezioni non sono centralizzate:
+sono closure che ognuno degli otto siti di chiamata passa a `registra()`. Far
+proiettare la sincronizzazione richiede di centralizzarle — un refactoring, che
+le regole di questa sessione vietano, su una funzionalità che questo stesso
+documento e `CLAUDE.md` dichiarano rinviabile («Sincronizzazione, ripasso e
+statistiche possono aspettare»), a nove giorni dalla scadenza. Correggerlo di
+mia iniziativa la notte prima della consegna sarebbe stato il rischio sbagliato.
+
+È la prima cosa da fare dopo il viaggio, o prima se si decide che i due
+dispositivi devono davvero vedersi.
+
+### Ancora aperto: il resto
 
 Trentanove scenari del solo `motore-sql` inchiodano difetti non ancora
-corretti, e la verifica avversariale degli altri candidati era ancora in corso
-al momento di scrivere. I due più gravi in attesa di verdetto:
+corretti. Il più notevole:
 
-- **`REG-06/REG-07`** — due `registra()` senza `await` intermedio (doppio tocco
-  su Salva) annidano le transazioni: il `ROLLBACK` della seconda annulla
-  l'`INSERT` dell'evento della prima, che prosegue in autocommit e scrive
-  comunque la proiezione. Resta una riga **senza il suo evento**: non
-  raggiungerà mai l'altro dispositivo. `IMP-37` arriva alla stessa radice da
-  tutt'altra strada, l'import della biblioteca. Da guardare con sospetto,
-  però: il banco ha dichiarato che la sua asincronia è finta, e una scoperta
-  sulla concorrenza trovata da uno strumento che non riproduce la concorrenza
-  vera va contestata prima di crederle.
 - **`HLC-07`** — `meta('hlc')` illeggibile rende l'orologio `NaN` per sempre e
   blocca le scritture sull'entità; il riavvio non guarisce.
 
