@@ -33,6 +33,13 @@
  * sara corretto — ed e allora che va riscritta l'attesa. L'elenco completo e
  * ristampato in fondo, separato dal conteggio.
  *
+ * E IL SUO CONTRALTARE, "CORREZIONE SORVEGLIATA: ...". Quando il difetto viene
+ * corretto lo scenario non si cancella: cambia mestiere. Stessa scena, stessa
+ * ricetta per riprodurre l'accavallamento, verdetto opposto — verifica il
+ * comportamento CORRETTO e diventa rosso se la correzione regredisce. Chi ha
+ * saputo inchiodare un difetto e il miglior guardiano che quel difetto abbia:
+ * sa gia come riprodurlo. Anche questi hanno il loro elenco in fondo.
+ *
  * COME FALSIFICARE QUESTA PROVA (fatto, non immaginato). Una prova che non puo
  * diventare rossa non dimostra niente. Da una cartella QUALSIASI fuori dal
  * progetto, senza toccare nessun file:
@@ -49,10 +56,21 @@
  * verifiche — F4, F5 e F13, cioe esattamente i tre che parlano del tetto di 30
  * carte. Neutralizzando invece il ROLLBACK del doppio (withTransactionAsync che
  * fa COMMIT anche in caso di errore, stessa ricetta di prova-registro.mjs)
- * cadono 2 scenari e 5 verifiche — G8 e H3, i due in cui una scrittura deve
- * sparire per intero. Gli altri scenari restano verdi ed e giusto: non
- * dipendono ne dal limite ne dal rollback. Sono il motore e le transazioni vere
- * a far passare questa prova, non la compiacenza del doppio.
+ * cade 1 scenario e 1 verifica — H3, quello in cui una scrittura deve sparire
+ * per intero. Gli altri scenari restano verdi ed e giusto: non dipendono ne dal
+ * limite ne dal rollback. Sono il motore e le transazioni vere a far passare
+ * questa prova, non la compiacenza del doppio.
+ *
+ * E LA GUARDIA DELLA CORREZIONE, falsificata a parte. G8 non dipende piu dal
+ * rollback: con la coda di lib/db.ts nessuna transazione si annida, quindi non
+ * c'e piu nessun ROLLBACK da neutralizzare. Si falsifica togliendo la coda,
+ * cioe sostituendo il corpo di inCoda() in lib/db.ts con `return compito();`
+ * e rieseguendo. MISURATO cosi: cade il solo G8, con tutte e 9 le sue verifiche
+ * rosse e uscita 1 — le due valutazioni tornano a fallire ("cannot start a
+ * transaction within a transaction" e "cannot rollback - no transaction is
+ * active"), il registro resta a zero eventi e la carta risulta comunque
+ * valutata una volta: l'invariante 1 rotta, di nuovo. Nessun altro scenario si
+ * muove. Poi lib/db.ts va rimesso com'era (`git checkout -- lib/db.ts`).
  *
  * LIMITI DI QUESTA SIMULAZIONE (leggere prima di fidarsi del verde):
  *   - niente interfaccia: la schermata e ricostruita come macchina a stati
@@ -61,7 +79,10 @@
  *     si disabilita, uno setState su componente smontato — qui non si vede;
  *   - sotto c'e node:sqlite, sincrono: l'interfogliamento dello scenario G8 e
  *     quello dei microcompiti di JavaScript (identico sul telefono, perche gli
- *     await sono gli stessi), non il parallelismo del thread nativo;
+ *     await sono gli stessi), non il parallelismo del thread nativo. La coda di
+ *     lib/db.ts serializza a livello di promesse, quindi e proprio questo il
+ *     piano su cui va provata; il ponte nativo di Android, che non ha nessun
+ *     lock per database, qui non c'e;
  *   - il fuso orario si cambia con process.env.TZ, che in Node ha effetto
  *     immediato: e il modo piu vicino al viaggio Roma -> Citta del Messico che si
  *     possa ottenere senza due dispositivi;
