@@ -65,14 +65,54 @@ ALTRO_DOCUMENTO = ("impact-report", "impact_report", "annual-report",
 # Aritmetica contro aritmetica non decide. Una regola sì.
 #
 # Italiano e inglese restano: sono le lingue in cui questo materiale si legge.
-LINGUE_ESCLUSE = (".ara.", ".spa.", ".fra.", ".por.", ".chi.", ".rus.",
-                  ".jpn.", ".kor.", ".deu.", ".hin.", ".zho.", ".ukr.",
-                  "-arabic", "-spanish", "-french", "-chinese", "-japanese")
+# Le lingue in cui questo materiale si legge. Tutto il resto è una traduzione
+# che non serve a nessuno qui.
+LINGUE_TENUTE = ("eng", "english", "ita", "italian", "italiano")
+
+# I nomi, non solo i codici. La prima versione elencava a mano otto codici
+# scelti da me, e la corsa successiva ha proposto per OpenIntro
+# "?id=os4_uzbek": l'uzbeco non era nel mio elenco, perché nessun elenco
+# scritto a memoria è completo. Questo almeno è una lista di dati, dichiarata
+# e allungabile, non un'ipotesi travestita da regola.
+LINGUE = (
+    "arabic", "spanish", "french", "chinese", "japanese", "korean", "german",
+    "portuguese", "russian", "hindi", "turkish", "vietnamese", "indonesian",
+    "thai", "persian", "farsi", "urdu", "bengali", "swahili", "ukrainian",
+    "polish", "dutch", "greek", "hebrew", "czech", "slovak", "romanian",
+    "hungarian", "serbian", "croatian", "bulgarian", "albanian", "armenian",
+    "georgian", "azerbaijani", "kazakh", "uzbek", "mongolian", "nepali",
+    "sinhala", "tamil", "telugu", "malay", "filipino", "tagalog", "burmese",
+    "khmer", "lao", "amharic", "somali", "hausa", "yoruba", "zulu", "afrikaans",
+    "danish", "norwegian", "swedish", "finnish", "estonian", "latvian",
+    "lithuanian", "slovenian", "macedonian", "bosnian", "catalan", "galician",
+    "basque", "welsh", "irish", "icelandic", "maltese", "punjabi", "gujarati",
+    "marathi", "kannada", "malayalam", "odia", "assamese", "pashto", "kurdish",
+    "tigrinya", "wolof", "shona", "xhosa", "kinyarwanda",
+)
+# I codici ISO a tre lettere che NIST usa nei nomi dei file: NIST.AI.100-1.ara.pdf
+CODICI = ("ara", "spa", "fra", "fre", "zho", "chi", "jpn", "kor", "deu", "ger",
+          "por", "rus", "hin", "tur", "vie", "ind", "tha", "fas", "per", "urd",
+          "ben", "swa", "ukr", "pol", "nld", "dut", "ell", "gre", "heb", "ces",
+          "cze", "ron", "rum", "hun", "srp", "hrv", "bul", "uzb", "kaz", "nep",
+          "tam", "tel", "msa", "may", "fil", "mya", "khm", "lao", "amh", "som")
+
+# Un nome di lingua conta solo se è una parola intera: os4_uzbek sì,
+# thailand-report no, laos-survey no. Senza il confine anche dopo il nome,
+# "thai" sta dentro "thailand" e "lao" dentro "laos", e un falso positivo qui
+# scarta un documento buono in silenzio — che è il guasto contro cui esiste
+# tutto questo file.
+CONFINE = r"(?:^|[_\-./=\s(?&])"
+CONFINE_FINE = r"(?=$|[_\-./=\s)?&])"
+_LINGUE_RE = re.compile(CONFINE + "(" + "|".join(LINGUE) + ")" + CONFINE_FINE)
+_CODICI_RE = re.compile(r"[_\-.](" + "|".join(CODICI) + r")\.")
 
 
 def tradotto(indirizzo, etichetta):
+    """Vero se l'indirizzo o l'etichetta indicano una lingua che non leggiamo."""
     testo = (indirizzo + " " + etichetta).lower()
-    return any(codice in testo for codice in LINGUE_ESCLUSE)
+    if any(tenuta in testo for tenuta in LINGUE_TENUTE):
+        return False
+    return bool(_LINGUE_RE.search(testo) or _CODICI_RE.search(testo))
 
 
 def parole_combacianti(indirizzo, etichetta, titolo):

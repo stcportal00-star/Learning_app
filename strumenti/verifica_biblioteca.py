@@ -164,6 +164,26 @@ verifica("l'originale non è scambiato per una traduzione",
          not trova_pdf.tradotto("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.pdf", ""))
 verifica("l'italiano non è una traduzione da escludere",
          not trova_pdf.tradotto("https://x.org/doc.ita.pdf", "versione italiana"))
+# L'elenco scritto a memoria non conteneva l'uzbeco, e la corsa successiva ha
+# proposto "?id=os4_uzbek" per OpenIntro. Nessun elenco a memoria è completo:
+# ora è una lista di dati dichiarata, e queste prove la tengono onesta.
+verifica("una lingua scritta per nome è riconosciuta (uzbeco)",
+         trova_pdf.tradotto("https://www.openintro.org/go?id=os4_uzbek", "OpenIntro"))
+verifica("la lingua nell'etichetta fra parentesi è riconosciuta",
+         trova_pdf.tradotto("https://x.org/handbook.pdf", "Handbook (Spanish)"))
+verifica("l'originale senza codice non è toccato",
+         not trova_pdf.tradotto("https://www.openintro.org/go?id=os4", "OpenIntro"))
+# Un nome di lingua conta solo se è parola intera: senza il confine anche DOPO,
+# "thai" sta dentro "thailand" e "lao" dentro "laos", e scartare un documento
+# buono in silenzio è il guasto contro cui esiste tutto questo strumento.
+verifica("thailand non è thai",
+         not trova_pdf.tradotto("https://x.org/thailand-report.pdf", "Thailand report"))
+verifica("laos non è lao",
+         not trova_pdf.tradotto("https://x.org/laos-survey.pdf", "Laos survey"))
+verifica("english nel nome non fa scartare",
+         not trova_pdf.tradotto("https://x.org/report-english.pdf", "English"))
+verifica("l'elenco delle lingue è dati dichiarati, non otto casi scelti a mano",
+         len(trova_pdf.LINGUE) >= 50)
 verifica("la traduzione vincerebbe ancora sui soli punti",
          trova_pdf.punteggio("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.ara.pdf",
                              "AI Risk Management Framework (Arabic)", _nist_tit)
