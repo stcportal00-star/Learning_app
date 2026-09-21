@@ -1,4 +1,5 @@
-# Verifica a ogni push: typecheck, 99 test, e la garanzia sulla chiave di firma.
+# Verifica a ogni push: typecheck, i test di logica, il catalogo della
+# biblioteca e la garanzia sulla chiave di firma.
 # Veloce ed economico: gira sempre, prima di qualunque build.
 name: verifica
 
@@ -21,6 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verifica
+      # Il catalogo e la copia che l'app legge devono dire la stessa cosa, e
+      # lo scaricatore deve continuare a rifiutare ciò che non è un PDF.
+      - run: python3 strumenti/verifica_biblioteca.py
 
   # La chiave di firma non deve cambiare MAI: se cambiasse, gli aggiornamenti
   # non si installerebbero e l'unico rimedio cancellerebbe i dati. Questo test

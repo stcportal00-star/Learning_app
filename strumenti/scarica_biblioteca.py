@@ -40,9 +40,33 @@ def sha256(percorso, blocco=1 << 20):
     return h.hexdigest()
 
 
+def e_pdf(percorso):
+    """Vero se il file comincia davvero con la firma di un PDF.
+
+    Il Content-Type non basta, in nessuna delle due direzioni: una pagina di
+    presentazione può dichiararsi application/octet-stream, e un PDF servito
+    male arriva come text/plain. Gli otto byte iniziali invece non mentono.
+    """
+    try:
+        with open(percorso, "rb") as f:
+            return f.read(5) == b"%PDF-"
+    except OSError:
+        return False
+
+
+def primi_byte(percorso, quanti=90):
+    try:
+        with open(percorso, "rb") as f:
+            testo = f.read(quanti).decode("utf-8", "replace")
+    except OSError:
+        return ""
+    return " ".join(testo.split())
+
+
 def scarica(url, destinazione):
-    """Scarica con ripresa e backoff. Restituisce (ok, messaggio)."""
+    """Scarica con ripresa e backoff. Restituisce (ok, messaggio, url_finale)."""
     parziale = destinazione + ".part"
+    finale = url
     for tentativo in range(1, TENTATIVI + 1):
         gia = os.path.getsize(parziale) if os.path.exists(parziale) else 0
         req = urllib.request.Request(url, headers={"User-Agent": UA})
@@ -51,25 +75,29 @@ def scarica(url, destinazione):
         try:
             with urllib.request.urlopen(req, timeout=60) as r, open(parziale, "ab" if gia else "wb") as f:
                 tipo = r.headers.get("Content-Type", "")
+                # Dove si è finiti davvero: quasi ogni link rotto di questa
+                # biblioteca è un indirizzo che redirige a una pagina di
+                # presentazione, e senza l'arrivo non si sa dove correggerlo.
+                finale = r.geturl()
                 while True:
                     blocco = r.read(1 << 16)
                     if not blocco:
                         break
                     f.write(blocco)
             os.replace(parziale, destinazione)
-            return True, tipo
+            return True, tipo, finale
         except urllib.error.HTTPError as e:
             if e.code == 416 and gia:          # già completo
                 os.replace(parziale, destinazione)
-                return True, "completo"
+                return True, "completo", finale
             if e.code in (404, 403, 410):      # inutile insistere
-                return False, f"HTTP {e.code}"
+                return False, f"HTTP {e.code}", finale
             errore = f"HTTP {e.code}"
         except Exception as e:
             errore = type(e).__name__
         if tentativo < TENTATIVI:
             time.sleep(2 ** tentativo)
-    return False, errore
+    return False, errore, finale
 
 
 def main():
@@ -100,26 +128,50 @@ def main():
 
         dest = os.path.join(a.cartella, nome_file(codice, titolo, formato))
         vecchio = manifesto.get(codice)
-        if os.path.exists(dest) and vecchio and vecchio.get("sha256") and not a.riprova_falliti:
+        # Si salta solo ciò che è già buono davvero. Un manifesto scritto prima
+        # del controllo sulla firma può contenere pagine HTML salvate come .pdf:
+        # fidarsi della sua sola presenza le renderebbe permanenti.
+        gia_buono = (os.path.exists(dest) and vecchio and vecchio.get("sha256")
+                     and (formato != "pdf" or e_pdf(dest)))
+        if gia_buono and not a.riprova_falliti:
             saltati.append(codice)
             continue
 
         print(f"  {codice}  {titolo[:58]:<58}", end=" ", flush=True)
-        ok, msg = scarica(url, dest)
-        if ok and os.path.getsize(dest) > 1024:
+        ok, msg, finale = scarica(url, dest)
+        byte = os.path.getsize(dest) if os.path.exists(dest) else 0
+
+        # Tre condizioni, non una. Prima c'era solo la dimensione, e una pagina
+        # di presentazione di 150 KB salvata con estensione .pdf passava per un
+        # libro scaricato: finiva nel manifesto, l'app la importava, e il guasto
+        # si scopriva aprendola — in viaggio, senza rete per rimediare. Un link
+        # rotto che lo dice qui vale mille volte un libro finto che tace.
+        if not ok:
+            motivo = msg
+        elif byte <= 1024:
+            motivo = f"troppo corto ({byte} byte, {msg})"
+        elif formato == "pdf" and not e_pdf(dest):
+            motivo = f"non è un PDF ({msg}) — comincia con: {primi_byte(dest)}"
+        else:
+            motivo = None
+
+        if motivo is None:
             h = sha256(dest)
             manifesto[codice] = dict(codice=codice, titolo=titolo, autore=autore,
                                      tema_slug=tema, trimestre=trim, licenza=licenza,
                                      url=url, formato=formato, nota=nota,
                                      file=os.path.basename(dest),
-                                     byte=os.path.getsize(dest), sha256=h)
-            print(f"OK  {os.path.getsize(dest)/1024:.0f} KB")
+                                     byte=byte, sha256=h)
+            print(f"OK  {byte/1024:.0f} KB")
             scaricati.append(codice)
         else:
-            if os.path.exists(dest) and os.path.getsize(dest) <= 1024:
+            # Via il file e via la voce vecchia: un manifesto che indica un file
+            # che non c'è più, o che non è quello che dice, è peggio del vuoto.
+            if os.path.exists(dest):
                 os.remove(dest)
-            print(f"FALLITO ({msg})")
-            falliti.append((codice, titolo, url, msg))
+            manifesto.pop(codice, None)
+            print(f"FALLITO ({motivo[:72]})")
+            falliti.append((codice, titolo, url, motivo, finale))
 
     with open(manifesto_path, "w", encoding="utf-8") as f:
         json.dump(list(manifesto.values()), f, ensure_ascii=False, indent=1)
@@ -128,7 +180,12 @@ def main():
                 f"Scaricati : {len(scaricati)}", f"Già presenti : {len(saltati)}",
                 f"Falliti : {len(falliti)}", f"Solo web (da stampare in PDF) : {len(solo_web)}", ""]
     if falliti:
-        rapporto += ["LINK DA CONTROLLARE A MANO:"] + [f"  {c}  {t}\n      {u}   [{m}]" for c, t, u, m in falliti] + [""]
+        rapporto += ["LINK DA CONTROLLARE A MANO:"]
+        for c, t, u, m, fin in falliti:
+            rapporto += [f"  {c}  {t}", f"      chiesto : {u}", f"      motivo  : {m}"]
+            if fin and fin != u:
+                rapporto += [f"      arrivato: {fin}"]
+        rapporto += [""]
     if solo_web:
         rapporto += ["LIBRI WEB — aprire nel browser e usare Stampa → Salva come PDF,",
                      "oppure:  wget --mirror --convert-links --page-requisites <url>", ""]

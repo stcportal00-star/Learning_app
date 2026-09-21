@@ -41,9 +41,9 @@ BIBLIOTECA = [
 ("BIB-22","The Turing Way","The Turing Way Community","qualita_dati","T2","CC BY 4.0","https://the-turing-way.netlify.app/","html","Riproducibilità, etica dei dati, collaborazione. Molto citabile."),
 
 # --- T3  IA, GDPR, AI Act
-("BIB-23","Regolamento (UE) 2016/679 — GDPR, testo integrale","Unione Europea","gdpr","T3","Riuso consentito (EUR-Lex)","https://eur-lex.europa.eu/eli/reg/2016/679/oj","pdf","Il testo, non un riassunto. Da avere offline."),
-("BIB-24","Regolamento (UE) 2024/1689 — AI Act, testo integrale","Unione Europea","ai_act","T3","Riuso consentito (EUR-Lex)","https://eur-lex.europa.eu/eli/reg/2024/1689/oj","pdf","Idem."),
-("BIB-25","Direttiva (UE) 2022/2555 — NIS2","Unione Europea","sicurezza","T3","Riuso consentito (EUR-Lex)","https://eur-lex.europa.eu/eli/dir/2022/2555/oj","pdf","Obblighi di sicurezza e notifica."),
+("BIB-23","Regolamento (UE) 2016/679 — GDPR, testo integrale","Unione Europea","gdpr","T3","Riuso consentito (EUR-Lex)","https://eur-lex.europa.eu/legal-content/IT/TXT/PDF/?uri=CELEX:32016R0679","pdf","Il testo, non un riassunto. Da avere offline."),
+("BIB-24","Regolamento (UE) 2024/1689 — AI Act, testo integrale","Unione Europea","ai_act","T3","Riuso consentito (EUR-Lex)","https://eur-lex.europa.eu/legal-content/IT/TXT/PDF/?uri=CELEX:32024R1689","pdf","Idem."),
+("BIB-25","Direttiva (UE) 2022/2555 — NIS2","Unione Europea","sicurezza","T3","Riuso consentito (EUR-Lex)","https://eur-lex.europa.eu/legal-content/IT/TXT/PDF/?uri=CELEX:32022L2555","pdf","Obblighi di sicurezza e notifica."),
 ("BIB-26","Linee guida e raccomandazioni EDPB","European Data Protection Board","gdpr","T3","Riuso consentito","https://www.edpb.europa.eu/our-work-tools/general-guidance/guidelines-recommendations-best-practices_en","hub","Interpretazione autorevole del GDPR."),
 ("BIB-27","Handbook on Data Protection in Humanitarian Action (2ª ed.)","ICRC / Brussels Privacy Hub","gdpr","T3","Accesso libero ICRC","https://www.icrc.org/en/data-protection-humanitarian-action-handbook","pdf","Il testo chiave del tuo dominio. Priorità massima."),
 ("BIB-28","Data Responsibility Guidelines","OCHA Centre for Humanitarian Data","gdpr","T3","Accesso libero OCHA","https://centre.humdata.org/data-responsibility/","pdf","Operativo, non teorico."),

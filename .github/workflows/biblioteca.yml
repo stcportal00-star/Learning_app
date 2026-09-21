@@ -12,6 +12,7 @@ on:
     paths:
       - "strumenti/biblioteca_aperta.py"
       - "strumenti/scarica_biblioteca.py"
+      - "strumenti/verifica_biblioteca.py"
       - ".github/workflows/biblioteca.yml"
 
 permissions:
@@ -23,6 +24,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+
+      - name: Verifica del catalogo (nessuna rete)
+        run: python3 strumenti/verifica_biblioteca.py
 
       - name: Download dei testi aperti
         run: python3 strumenti/scarica_biblioteca.py --cartella biblioteca

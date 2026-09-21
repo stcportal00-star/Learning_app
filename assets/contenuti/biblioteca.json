@@ -248,7 +248,7 @@
   "tema_slug": "gdpr",
   "trimestre": "T3",
   "licenza": "Riuso consentito (EUR-Lex)",
-  "url": "https://eur-lex.europa.eu/eli/reg/2016/679/oj",
+  "url": "https://eur-lex.europa.eu/legal-content/IT/TXT/PDF/?uri=CELEX:32016R0679",
   "formato": "pdf",
   "nota": "Il testo, non un riassunto. Da avere offline."
  },
@@ -259,7 +259,7 @@
   "tema_slug": "ai_act",
   "trimestre": "T3",
   "licenza": "Riuso consentito (EUR-Lex)",
-  "url": "https://eur-lex.europa.eu/eli/reg/2024/1689/oj",
+  "url": "https://eur-lex.europa.eu/legal-content/IT/TXT/PDF/?uri=CELEX:32024R1689",
   "formato": "pdf",
   "nota": "Idem."
  },
@@ -270,7 +270,7 @@
   "tema_slug": "sicurezza",
   "trimestre": "T3",
   "licenza": "Riuso consentito (EUR-Lex)",
-  "url": "https://eur-lex.europa.eu/eli/dir/2022/2555/oj",
+  "url": "https://eur-lex.europa.eu/legal-content/IT/TXT/PDF/?uri=CELEX:32022L2555",
   "formato": "pdf",
   "nota": "Obblighi di sicurezza e notifica."
  },
