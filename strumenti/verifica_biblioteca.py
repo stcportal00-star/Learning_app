@@ -148,17 +148,62 @@ verifica("i numeri di versione del titolo contano",
 
 # Il cercatore propone, non decide: restituisce ogni PDF verificato perché la
 # scelta finale vada rivista da chi conosce il titolo.
+_trova_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "trova_pdf.py"), encoding="utf-8").read()
 verifica("il cercatore restituisce tutte le vie verificate, non solo la prima",
-         "verificati.append(indirizzo)" in open(
-             os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                          "trova_pdf.py"), encoding="utf-8").read())
+         "deposito.append(indirizzo)" in _trova_src)
+
+# Aritmetica contro aritmetica non decide: sulla pagina NIST il collegamento
+# arabo porta l'etichetta descrittiva e l'originale è nudo, quindi quattro
+# parole del titolo a +4 superano gli otto punti di penalità. Serve una regola.
+_nist_tit = "NIST AI Risk Management Framework 1.0"
+verifica("una traduzione è esclusa, non solo penalizzata",
+         trova_pdf.tradotto("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.ara.pdf",
+                            "AI Risk Management Framework (Arabic)"))
+verifica("l'originale non è scambiato per una traduzione",
+         not trova_pdf.tradotto("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.pdf", ""))
+verifica("l'italiano non è una traduzione da escludere",
+         not trova_pdf.tradotto("https://x.org/doc.ita.pdf", "versione italiana"))
+verifica("la traduzione vincerebbe ancora sui soli punti",
+         trova_pdf.punteggio("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.ara.pdf",
+                             "AI Risk Management Framework (Arabic)", _nist_tit)
+         > trova_pdf.punteggio("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.pdf",
+                               "", _nist_tit))
+
+# Il nome dell'host fa combaciare ogni documento dello stesso editore.
+verifica("l'host non conta fra le parole combacianti",
+         trova_pdf.parole_combacianti("https://nvlpubs.nist.gov/x/qualunque.pdf",
+                                      "", "NIST Cybersecurity Framework 2.0") == 0)
+verifica("il percorso conta fra le parole combacianti",
+         trova_pdf.parole_combacianti("https://x.org/cybersecurity-framework-2.0.pdf",
+                                      "", "NIST Cybersecurity Framework 2.0") >= 2)
+
+# Meglio "nessun candidato convincente" che il documento sbagliato: il primo si
+# corregge, il secondo finisce in biblioteca e ci resta.
+_owasp = "OWASP Top 10 for LLM Applications"
+verifica("un altro documento dello stesso editore non è convincente",
+         not trova_pdf.convincente("https://owasp.org/docs/OWASP-Foundation-Strategic-Plan.pdf",
+                                   "Strategic Plan", _owasp))
+verifica("il documento giusto è convincente",
+         trova_pdf.convincente("https://owasp.org/x/OWASP-Top-10-for-LLM.pdf",
+                               "Top 10 for LLM Applications", _owasp))
+# Ma i deboli non si buttano: NIST.AI.100-1.pdf non contiene una sola parola del
+# suo titolo, ed è comunque l'originale che si cercava.
+verifica("un documento identificato da un codice risulta debole, non assente",
+         not trova_pdf.convincente("https://nvlpubs.nist.gov/ai/NIST.AI.100-1.pdf",
+                                   "", _nist_tit))
+verifica("i deboli vengono provati se nessun credibile regge",
+         "gruppo, deposito in ((buoni, verificati), (deboli, incerti))" in _trova_src)
+verifica("il riepilogo marca i deboli invece di spacciarli per proposte",
+         "DEBOLE" in _trova_src)
+verifica("ciò che viene scartato viene dichiarato",
+         "scartati perché traduzioni" in _trova_src
+         and "scartati perché non somigliano al titolo" in _trova_src)
 verifica("il riepilogo dichiara che sono proposte da rivedere",
          "PROPOSTE, non decisioni" in open(
              os.path.join(os.path.dirname(os.path.abspath(__file__)),
                           "trova_pdf.py"), encoding="utf-8").read())
 
-_trova_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               "trova_pdf.py"), encoding="utf-8").read()
 verifica("il cercatore legge solo un assaggio, non scarica il libro",
          trova_pdf.ASSAGGIO <= 8192 and "Range" in _trova_src)
 verifica("il cercatore esce sempre con 0", "return 0" in _trova_src)

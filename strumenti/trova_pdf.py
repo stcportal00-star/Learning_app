@@ -57,11 +57,48 @@ ALTRO_DOCUMENTO = ("impact-report", "impact_report", "annual-report",
                    "poster", "press-release", "factsheet", "one-pager")
 
 # Codici di lingua nel nome del file: NIST pubblica le traduzioni accanto
-# all'originale e la prima versione ha proposto NIST.AI.100-1.ara.pdf, cioè
-# l'arabo. Un testo che non si sa leggere è inutile quanto un link rotto.
-LINGUE_TRADOTTE = (".ara.", ".spa.", ".fra.", ".por.", ".chi.", ".rus.",
-                   ".jpn.", ".kor.", ".deu.", ".hin.", ".zho.", ".ukr.",
-                   "-arabic", "-spanish", "-french", "-chinese")
+# all'originale. Non è una penalità, è una esclusione: una penalità numerica non
+# basta, e l'ho verificato. Sulla pagina del framework NIST il collegamento
+# arabo porta l'etichetta descrittiva "AI Risk Management Framework (Arabic)"
+# mentre l'originale è un collegamento nudo: quattro parole del titolo a +4
+# l'una superano gli otto punti di penalità, e la traduzione vince lo stesso.
+# Aritmetica contro aritmetica non decide. Una regola sì.
+#
+# Italiano e inglese restano: sono le lingue in cui questo materiale si legge.
+LINGUE_ESCLUSE = (".ara.", ".spa.", ".fra.", ".por.", ".chi.", ".rus.",
+                  ".jpn.", ".kor.", ".deu.", ".hin.", ".zho.", ".ukr.",
+                  "-arabic", "-spanish", "-french", "-chinese", "-japanese")
+
+
+def tradotto(indirizzo, etichetta):
+    testo = (indirizzo + " " + etichetta).lower()
+    return any(codice in testo for codice in LINGUE_ESCLUSE)
+
+
+def parole_combacianti(indirizzo, etichetta, titolo):
+    """Quante parole distintive del titolo compaiono nel candidato.
+
+    Si guarda il percorso e l'etichetta, mai il nome dell'host: nist.gov
+    contiene "nist" e openintro.org contiene "openintro", quindi l'host fa
+    combaciare ogni documento di quell'editore e non distingue nulla.
+    """
+    pezzi = urllib.parse.urlsplit(indirizzo)
+    testo = (pezzi.path + " " + pezzi.query + " " + etichetta).lower()
+    return sum(1 for parola in parole_del_titolo(titolo) if parola in testo)
+
+
+def convincente(indirizzo, etichetta, titolo):
+    """Il candidato è plausibilmente IL documento, non solo un PDF del sito.
+
+    Senza questa soglia il cercatore proponeva il "Piano strategico della
+    fondazione OWASP" per la voce "OWASP Top 10 for LLM Applications": è un PDF,
+    sta su owasp.org, e la Top 10 su quella pagina non c'è affatto. Meglio dire
+    "nessun candidato convincente" che proporre il documento sbagliato: il primo
+    lo si corregge, il secondo finisce in biblioteca e ci resta.
+    """
+    distintive = len(parole_del_titolo(titolo))
+    richieste = 2 if distintive >= 2 else max(1, distintive)
+    return parole_combacianti(indirizzo, etichetta, titolo) >= richieste
 
 PAROLE_VUOTE = {"the", "and", "for", "with", "una", "del", "della", "delle",
                 "dei", "degli", "testo", "integrale", "ediz", "edition",
@@ -115,7 +152,8 @@ def punteggio(indirizzo, etichetta, titolo=""):
     p += sum(2 for parola in BUONE if parola in testo)
     p -= sum(3 for parola in CATTIVE if parola in testo)
     p -= sum(6 for parola in ALTRO_DOCUMENTO if parola in testo)
-    p -= sum(8 for codice in LINGUE_TRADOTTE if codice in testo)
+    if tradotto(indirizzo, etichetta):
+        p -= 8
     # Le parole del titolo pesano più di tutto il resto: sono l'unico segnale
     # che distingue questo documento dagli altri dello stesso editore.
     for parola in parole_del_titolo(titolo):
@@ -166,18 +204,48 @@ def esamina(codice, titolo, url):
         print("  nessun collegamento che somigli a un PDF in questa pagina.")
         return []
 
-    trovati.sort(key=lambda c: -punteggio(c[0], c[1], titolo))
-    print(f"  {len(trovati)} candidati, provo i primi {min(len(trovati), CANDIDATI_MASSIMI)}:")
-    verificati = []
-    for indirizzo, etichetta in trovati[:CANDIDATI_MASSIMI]:
-        time.sleep(PAUSA)
-        vero, nota = assaggia(indirizzo)
-        segno = "PDF " if vero else "  - "
-        print(f"    {segno} [{punteggio(indirizzo, etichetta, titolo):+d}] {indirizzo[:96]}")
-        print(f"          {etichetta or '(senza testo)'} · {nota[:80]}")
-        if vero:
-            verificati.append(indirizzo)
-    return verificati
+    # Due setacci prima di spendere una richiesta, e si dice cosa tolgono:
+    # scartare in silenzio è il modo migliore per non accorgersi di aver
+    # scartato proprio il documento giusto.
+    tradotti = [c for c in trovati if tradotto(*c)]
+    deboli = [c for c in trovati
+              if c not in tradotti and not convincente(c[0], c[1], titolo)]
+    buoni = [c for c in trovati if c not in tradotti and c not in deboli]
+
+    if tradotti:
+        print(f"  {len(tradotti)} scartati perché traduzioni: "
+              f"{', '.join(u.rsplit('/', 1)[-1][:34] for u, _ in tradotti[:4])}")
+    if deboli:
+        print(f"  {len(deboli)} scartati perché non somigliano al titolo: "
+              f"{', '.join(u.rsplit('/', 1)[-1][:34] for u, _ in deboli[:4])}")
+    # I deboli non si buttano: si mettono da parte. Un documento identificato da
+    # un codice invece che da un nome — NIST.AI.100-1.pdf — non contiene nessuna
+    # parola del suo titolo, e scartarlo in silenzio perderebbe proprio
+    # l'originale che si stava cercando di preferire alla traduzione. Vengono
+    # provati dopo e dichiarati deboli, così chi legge sa cosa sta guardando.
+    if not buoni and not deboli:
+        print("  nessun candidato: su questa pagina il documento non c'è.")
+        return []
+
+    buoni.sort(key=lambda c: -punteggio(c[0], c[1], titolo))
+    deboli.sort(key=lambda c: -punteggio(c[0], c[1], titolo))
+    print(f"  {len(buoni)} credibili, {len(deboli)} deboli; provo i credibili "
+          f"e, solo se nessuno regge, i deboli:")
+    verificati, incerti = [], []
+    for gruppo, deposito in ((buoni, verificati), (deboli, incerti)):
+        for indirizzo, etichetta in gruppo[:CANDIDATI_MASSIMI]:
+            time.sleep(PAUSA)
+            vero, nota = assaggia(indirizzo)
+            segno = "PDF " if vero else "  - "
+            print(f"    {segno} [{punteggio(indirizzo, etichetta, titolo):+d}] "
+                  f"[{parole_combacianti(indirizzo, etichetta, titolo)} parole] "
+                  f"{indirizzo[:76]}")
+            print(f"          {etichetta or '(senza testo)'} · {nota[:80]}")
+            if vero:
+                deposito.append(indirizzo)
+        if verificati:          # un candidato credibile basta: i deboli restano fuori
+            break
+    return [(u, True) for u in verificati] + [(u, False) for u in incerti]
 
 
 def main():
@@ -205,9 +273,15 @@ def main():
     print("una traduzione araba e il rapporto annuale di un'altra collana.\n")
     for codice, (titolo, indirizzi) in vinti.items():
         print(f"  {codice}  {titolo}")
-        print(f"       proposto     {indirizzi[0]}")
-        for alternativo in indirizzi[1:3]:
-            print(f"       alternativa  {alternativo}")
+        for posizione, (indirizzo, credibile) in enumerate(indirizzi[:3]):
+            if posizione == 0:
+                etichetta = "proposto    " if credibile else "DEBOLE      "
+            else:
+                etichetta = "alternativa " if credibile else "alt. DEBOLE "
+            print(f"       {etichetta} {indirizzo}")
+    if any(not c for _, vie in vinti.values() for _, c in vie[:1]):
+        print("\n  DEBOLE = il documento è identificato da un codice e non dal titolo,")
+        print("  quindi non si può confermare dall'indirizzo. Va aperto e guardato.")
     mancanti = [c for c, _, _ in voci if c not in vinti]
     if mancanti:
         print(f"\nSenza un PDF raggiungibile: {', '.join(mancanti)}")
