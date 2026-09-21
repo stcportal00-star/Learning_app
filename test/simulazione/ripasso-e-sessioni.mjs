@@ -103,7 +103,13 @@ async function lancia(nome, azione, frammento) {
 }
 
 async function prova(nome, azione) {
-  corrente = { nome, verifiche: 0, errori: [], difetto: nome.startsWith("DIFETTO RIPRODOTTO") };
+  corrente = {
+    nome,
+    verifiche: 0,
+    errori: [],
+    difetto: nome.startsWith("DIFETTO RIPRODOTTO"),
+    correzione: nome.startsWith("CORREZIONE SORVEGLIATA"),
+  };
   scenari.push(corrente);
   try {
     await azione();
@@ -1119,34 +1125,62 @@ await prova("G7 una carta ricaduta torna in coda solo alla riapertura, non subit
     JSON.stringify(rientro.coda.map((c) => c.id)));
 });
 
-await prova("DIFETTO RIPRODOTTO: G8 doppio tocco su due gradi: la proiezione passa senza evento (RIP-10)", async () => {
+await prova("CORREZIONE SORVEGLIATA: G8 doppio tocco su due gradi: due scritture accavallate, entrambe intere (RIP-10)", async () => {
   const { app, base } = await avvia("valuta08");
   await seminaScheda(base, "Q-100");
   const schermata = await new SchermataRipasso(app).monta();
   schermata.mostraRisposta();
   // Due tocchi rapidi prima che il primo await sia risolto: i Pressable non si
   // disabilitano, quindi sul telefono e esattamente questo che parte.
+  //
+  // Prima della coda di lib/db.ts qui si rompeva l'invariante 1: il BEGIN della
+  // seconda transazione falliva, il suo ROLLBACK annullava l'INSERT dell'evento
+  // della prima, che intanto proseguiva in autocommit e lasciava la riga di
+  // ripasso SENZA il suo evento. Questo scenario sapeva riprodurre il difetto:
+  // per questo e il posto giusto dove sorvegliare che non torni.
   const esiti = await Promise.allSettled([schermata.valuta(2), schermata.valuta(3)]);
-  ok("entrambe le valutazioni falliscono", esiti.every((e) => e.status === "rejected"),
-    JSON.stringify(esiti.map((e) => e.status)));
-  const messaggi = esiti.map((e) => String(e.reason?.message ?? e.reason));
-  ok("una lamenta una transazione annidata",
-    messaggi.some((m) => m.includes("cannot start a transaction within a transaction")),
-    JSON.stringify(messaggi));
-  ok("l'altra dice che non c'e transazione da annullare: messaggio fuorviante",
-    messaggi.some((m) => m.includes("cannot rollback - no transaction is active")),
-    JSON.stringify(messaggi));
-  const eventi = (await base.getFirstAsync("SELECT count(*) AS n FROM eventi")).n;
+  ok("entrambe le valutazioni riescono", esiti.every((e) => e.status === "fulfilled"),
+    JSON.stringify(esiti.map((e) => (e.status === "rejected" ? String(e.reason?.message ?? e.reason) : "ok"))));
+  const eventi = await base.getAllAsync(
+    "SELECT id, entita, entita_id, tipo, payload, hlc FROM eventi ORDER BY hlc");
   const riga = await base.getFirstAsync("SELECT * FROM ripasso WHERE esercizio_id='Q-100'");
-  ok("NESSUN evento e finito nel registro", eventi === 0, String(eventi));
-  ok("ma la carta risulta comunque valutata: ripetizioni e salita",
-    riga.ripetizioni === 1, String(riga.ripetizioni));
-  ok("invariante 1 rotta: proiezione applicata senza il suo evento",
-    eventi === 0 && riga.ripetizioni > 0);
-  ok("la scadenza e stata spostata: la carta sparisce dalla coda senza traccia nel registro",
-    riga.prossima_revisione > new Date().toISOString(), riga.prossima_revisione);
-  ok("a schermo non arriva niente: nel .tsx valuta() non e attesa ne protetta",
-    schermata.render().vuota === false || schermata.render().vuota === true);
+  // Senza la coda il registro resta VUOTO: si legge quel che c'e senza dare per
+  // scontato che ci sia, cosi ogni guardia diventa rossa in modo leggibile
+  // invece di far cadere lo scenario con un TypeError.
+  const [primo = null, secondo = null] = eventi;
+  const caricoPrimo = primo ? JSON.parse(primo.payload) : null;
+  const caricoSecondo = secondo ? JSON.parse(secondo.payload) : null;
+  ok("due tocchi, due eventi nel registro", eventi.length === 2, JSON.stringify(eventi));
+  ok("due tocchi, due ripetizioni sulla carta", riga.ripetizioni === 2, String(riga.ripetizioni));
+  ok("invariante 1: tante proiezioni quanti eventi, tutti di questa carta",
+    riga.ripetizioni === eventi.length &&
+      eventi.every((e) => e.entita === "ripasso" && e.entita_id === "Q-100" && e.tipo === "aggiorna"),
+    JSON.stringify(eventi));
+  ok("i due tocchi restano due eventi distinti e ordinati, non uno solo",
+    primo !== null && secondo !== null && primo.id !== secondo.id && primo.hlc < secondo.hlc,
+    JSON.stringify(eventi.map((e) => e.hlc)));
+  ok("una transazione per volta, in ordine di ARRIVO: prima il grado 2, poi il grado 3",
+    caricoPrimo?.grado === 2 && caricoSecondo?.grado === 3,
+    JSON.stringify(eventi.map((e) => e.payload)));
+  // Tutto-o-niente per davvero: lo stato finale della riga e quello scritto
+  // dall'ULTIMA transazione della coda, non un miscuglio delle due.
+  ok("la riga porta la stabilita dell'ultimo evento, non un miscuglio delle due scritture",
+    caricoSecondo !== null && riga.stabilita === caricoSecondo.stabilita,
+    `${riga.stabilita} contro ${secondo?.payload}`);
+  // Tre giorni e la scadenza del grado 3, cioe del SECONDO tocco: se la seconda
+  // scrittura si fosse persa la carta tornerebbe a due giorni, quelli del grado 2.
+  const giorniDiScadenza = Math.round(
+    (new Date(riga.prossima_revisione).getTime() - Date.now()) / 864e5);
+  ok("la scadenza e quella del secondo grado (tre giorni) e la carta esce dalla coda",
+    giorniDiScadenza === 3 && riga.prossima_revisione > new Date().toISOString() &&
+      riga.stato === "ripasso",
+    `${riga.prossima_revisione} (${giorniDiScadenza} giorni) / ${riga.stato}`);
+  ok("nessuno dei due eventi si e perso per strada: la sincronizzazione ne vede due",
+    (await app.daSincronizzare()).length === 2,
+    String((await app.daSincronizzare()).length));
+  // La coda protegge il REGISTRO, non il Pressable: il doppio tocco fa comunque
+  // avanzare l'indice di due e saltare una carta. Quello e un difetto della
+  // schermata, non dell'invariante 1, e non si sorveglia da qui.
 });
 
 await prova("G9 valutazioni sequenziali rapide (senza sovrapposizione) restano integre", async () => {
@@ -1374,7 +1408,13 @@ const verificheTotali = scenari.reduce((n, s) => n + s.verifiche, 0);
 const verificheFallite = scenari.reduce((n, s) => n + s.errori.length, 0);
 const scenariPassati = scenari.filter((s) => s.errori.length === 0).length;
 const difetti = scenari.filter((s) => s.difetto);
+const correzioni = scenari.filter((s) => s.correzione);
 
+if (correzioni.length) {
+  console.log("");
+  console.log("CORREZIONI SORVEGLIATE (erano difetti riprodotti, ora sono guardie)");
+  for (const c of correzioni) console.log("  - " + c.nome.replace("CORREZIONE SORVEGLIATA: ", ""));
+}
 console.log("");
 console.log("DIFETTI DELL'APP RIPRODOTTI (non corretti: decide il coordinatore)");
 for (const d of difetti) console.log("  - " + d.nome.replace("DIFETTO RIPRODOTTO: ", ""));

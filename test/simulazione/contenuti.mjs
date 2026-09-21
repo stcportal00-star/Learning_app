@@ -24,7 +24,7 @@
  *      riferimento eseguite davvero su palestra.db e confrontate con
  *      righe_attese e colonne_attese;
  *   H. campi del contenuto che il caricamento PERDE per strada;
- *   I. due caricaContenuti() concorrenti, e l'assenza di rete.
+ *   I. due caricaContenuti() concorrenti (ora serializzate), e l'assenza di rete.
  *
  * COME SI SIMULANO PIU "PRIMI AVVII" IN UN PROCESSO SOLO.
  * lib/db.ts tiene la connessione in una variabile di modulo: apri() una volta
@@ -47,6 +47,13 @@
  * comportamento OSSERVATO, cosi resta una rete di sicurezza che diventera rossa
  * il giorno in cui il difetto verra corretto. L'elenco viene ristampato in
  * fondo, separato dal conteggio.
+ *
+ * E QUANDO IL DIFETTO VIENE CORRETTO. Lo scenario non si cancella: cambia
+ * mestiere e si chiama "CORREZIONE SORVEGLIATA: ...". Verdetto rovesciato, le
+ * stesse asserzioni riscritte sul comportamento CORRETTO e concreto. Chi ha
+ * inchiodato un difetto e il miglior guardiano della sua correzione, perche sa
+ * gia come riprodurlo. Anche questi hanno il loro elenco in fondo. E la forma
+ * di corretto() in test/simulazione/motore-sql.mjs, adattata agli scenari.
  *
  * FALSIFICAZIONE (fatta e misurata, non immaginata). Una prova che non puo
  * diventare rossa non dimostra niente. Tre indebolimenti, tutti applicati DA
@@ -86,10 +93,25 @@
  *      MISURATO: 47 su 59, 289 verifiche su 305. Cadono B4-B11, E1, G5, G7 e H3: le verifiche sui
  *      riferimenti e sui conteggi non sopravvivono a un contenuto falsificato.
  *
+ *   4) SENZA LA CODA DELLE SCRITTURE — si disattiva la serializzazione che
+ *      corregge CON-13, sostituendo il corpo di inCoda() in lib/db.ts con
+ *      `return compito();`. E l'unica falsificazione che tocca il progetto:
+ *      lib/db.ts e stato rimesso com'era subito dopo (git diff vuoto, stesso
+ *      sha256). Serve a misurare che la guardia I1 sappia diventare rossa.
+ *      MISURATO: 58 scenari su 59, 301 verifiche su 308, uscita 1. Cade il solo
+ *      I1, e dentro I1 cadono 7 asserzioni sulle 14: le due chiamate tornano a
+ *      rigettare («cannot start a transaction within a transaction» e «cannot
+ *      rollback - no transaction is active»), nessuna delle due dichiara di
+ *      aver caricato, e i temi tornano 21 su 22 senza 'gestione' — prima e dopo
+ *      la terza chiamata. Le altre 7 (381 esercizi, 52 volumi, 199 carte, un
+ *      solo aggiunto_a, nessun orfano) restano verdi anche col difetto: sono
+ *      contorno, non sono loro a reggere la guardia, e sta scritto qui perche
+ *      nessuno le scambi per una misura della coda.
+ *
  * LIMITI DI QUESTA SIMULAZIONE (leggere prima di fidarsi del verde) — in fondo
  * al file, sotto "LIMITI NOTI".
  *
- * Esito dell'ultima esecuzione: 59 scenari su 59, 305 verifiche su 305.
+ * Esito dell'ultima esecuzione: 59 scenari su 59, 308 verifiche su 308.
  */
 import { copyFileSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1291,10 +1313,13 @@ process.exit(passati === totali ? 0 : 1);
  * 3. L'ASINCRONIA E' FINTA. Sotto c'e node:sqlite, sincrono. L'interfogliamento
  *    dello scenario I1 e quello dei microcompiti di JavaScript, che sul
  *    telefono c'e uguale (gli await sono gli stessi); il vero parallelismo del
- *    thread nativo no. Il numero «21 temi» e misurato qui ed e deterministico
- *    qui; sul telefono il punto di taglio puo cadere altrove, ma la MUTILAZIONE
- *    resta, perche dipende dalla ROLLBACK della seconda transazione, non dalla
- *    velocita.
+ *    thread nativo no. La coda di lib/db.ts vive su quella stessa catena di
+ *    promesse, quindi cio che I1 sorveglia vale per il telefono quanto qui:
+ *    due chiamate dello stesso modulo non si accavallano piu. Quel che resta
+ *    fuori portata e un secondo contesto JavaScript (due istanze del modulo,
+ *    o una scrittura che entrasse da fuori senza passare da inTransazione):
+ *    la coda e una variabile di modulo, e un'altra copia del modulo avrebbe
+ *    la sua. Questo il banco non lo prova.
  * 4. SQLITE 3.51.2 di Node 22, non quello del telefono. Gli scenari G4-G7
  *    eseguono le 150 soluzioni su QUESTO motore: su un motore sotto 3.25 le 25
  *    soluzioni con window functions (23 nel tema + le 2 di G8) fallirebbero.
