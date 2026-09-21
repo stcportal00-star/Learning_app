@@ -81,21 +81,26 @@
  *   };
  *   await import("/home/user/learning_app/test/simulazione/registro-eventi.mjs");
  *
- * Misurato: togliendo il ROLLBACK cadono 6 scenari (13 verifiche) — C1, C2, C5,
+ * Misurato: togliendo il ROLLBACK cadono 6 scenari (11 verifiche) — C1, C2, C5,
  * C6, C7, E7; sostituendo withTransactionAsync con la sola chiamata al compito
- * (ne BEGIN ne ROLLBACK) cadono 7 scenari con 21 verifiche (gli stessi sei piu
- * F3, che senza BEGIN vede il pacchetto remoto entrare a pezzi). C3 e C4
+ * (ne BEGIN ne ROLLBACK) cadono gli stessi 6 scenari con 12 verifiche. C3 e C4
  * restano verdi ed e giusto: li l'errore arriva PRIMA di qualunque scrittura
  * (CHECK su eventi.tipo, JSON.stringify), quindi non dipendono dal rollback.
  *
- * (2) LA CODA (le guardie F1, F2, F3). L'atomicita da sola non le copre: con la
- * coda in funzione le transazioni non si accavallano mai, quindi non c'e
- * rollback da togliere. Si disattiva la serializzazione sostituendo il corpo di
- * inCoda() in lib/db.ts con `return compito();` e si riesegue. Misurato: cadono
- * i 3 scenari convertiti con 15 delle 22 verifiche corretto() — l'accavallamento
- * torna esattamente com'era (BEGIN annidato, ROLLBACK che annulla l'evento
- * dell'altra transazione, riga operativa orfana). lib/db.ts va poi rimesso
- * com'era: e un file del progetto, questa prova non lo modifica.
+ * (2) LA CODA (le guardie F1, F2, F3). Questa via NON le copre, e il motivo e
+ * istruttivo: con la coda in funzione, in quei tre scenari nessuna transazione
+ * fallisce piu, quindi non c'e nessun ROLLBACK da togliere e restano verdi.
+ * Servono due falsificazioni, non una. La seconda disattiva la serializzazione
+ * sostituendo il corpo di inCoda() in lib/db.ts con `return compito();`.
+ *
+ * Misurato: cadono esattamente i 3 scenari convertiti, con TUTTE e 24 le
+ * verifiche corretto() rosse (264 -> 240) e nessun altro scenario toccato.
+ * L'accavallamento torna identico a com'era prima della correzione: BEGIN
+ * annidato ("cannot start a transaction within a transaction"), ROLLBACK della
+ * seconda transazione che annulla l'evento della prima, riga operativa orfana,
+ * pacchetto remoto applicato a meta (resta solo R2:e2). lib/db.ts va poi
+ * rimesso com'era con `git checkout -- lib/db.ts`: e un file del progetto, e
+ * questa prova non lo modifica.
  *
  * LIMITI DI QUESTA SIMULAZIONE (leggere prima di fidarsi del verde):
  *   - sotto c'e node:sqlite, sincrono: l'interfogliamento della parte F e
@@ -107,8 +112,8 @@
  *   - due dispositivi veri non ci sono: gli eventi "remoti" delle parti F e G
  *     sono scritti a mano con la forma esatta di lib/sync/pacchetto.ts.
  *
- * Esito dell'ultima esecuzione: 45 scenari su 45, 273 verifiche su 273
- * (di cui 22 sono guardie corretto() sulla coda delle scritture).
+ * Esito dell'ultima esecuzione: 45 scenari su 45, 264 verifiche su 264
+ * (di cui 24 sono guardie corretto() sulla coda delle scritture).
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -1102,8 +1107,12 @@ await prova("CORREZIONE SORVEGLIATA: F1 due registra() senza await intermedio (R
   corretto("INVARIANTE 1: nessuna riga operativa senza il suo evento", orfane.n === 0, String(orfane.n));
   const senzaRiga = await base.getFirstAsync(
     "SELECT count(*) AS n FROM eventi WHERE hlc NOT IN (SELECT hlc FROM note)");
-  corretto("e nessun evento senza la sua riga: le due facce restano appaiate",
-    senzaRiga.n === 0, String(senzaRiga.n));
+  const appaiati = await base.getFirstAsync(
+    "SELECT count(*) AS n FROM eventi e JOIN note t ON t.hlc = e.hlc");
+  // Il solo "nessuno spaiato" sarebbe vero anche con il registro VUOTO, cioe
+  // proprio nel caso peggiore: si pretende anche il numero di coppie.
+  corretto("e nessun evento senza la sua riga: due coppie evento-riga, nessuna spaiata",
+    senzaRiga.n === 0 && appaiati.n === 2, `spaiati=${senzaRiga.n} coppie=${appaiati.n}`);
 
   const meta = await base.getFirstAsync("SELECT valore FROM meta WHERE chiave='hlc'");
   const [ms, cont] = String(meta?.valore).split("-");
