@@ -260,6 +260,31 @@ verifica("ogni richiesta dichiara un Accept (arXiv rispondeva 406 senza)",
 verifica("Zenodo entro il tetto di pagina non autenticato",
          fonti.ZENODO_PAGINA_MASSIMA <= 25 and "min(massimo, ZENODO_PAGINA_MASSIMA)" in _fonti_src)
 
+# --------------------------------------------- una fonte spenta non tace mai
+# Unpaywall senza recapito non parte: ogni voce con DOI perde la fonte che da
+# sola risponde alla domanda. Il 21/09/2026 sono uscite 19 voci su 19 "senza via
+# di accesso" e dal rapporto sembravano un esito, non uno strumento spento.
+_ricerc_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                "ricercatore.py"), encoding="utf-8").read()
+_cat_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "catalogo.py"), encoding="utf-8").read()
+_flusso = open(os.path.join(RADICE, ".github", "workflows", "rassegna.yml"),
+               encoding="utf-8").read()
+
+verifica("il ricercatore dichiara le fonti spente prima di trattare le voci",
+         "if not fonti.CONTATTO:" in _ricerc_src and "spente.append" in _ricerc_src)
+verifica("le fonti spente finiscono anche nel file dell'esito",
+         '"fonti_spente": spente' in _ricerc_src)
+verifica("le fonti spente si rileggono accanto ai numeri del riepilogo",
+         "Fonti spente in questa corsa" in _ricerc_src)
+verifica("il rapporto quotidiano distingue una fonte muta da una spenta",
+         "RECAPITO NON DICHIARATO" in _cat_src)
+# Il recapito viaggia in un segreto, mai nel sorgente: è un dato personale.
+verifica("il flusso passa il recapito ai due passi che lo usano",
+         _flusso.count("PERCORSO_CONTATTO: ${{ secrets.PERCORSO_CONTATTO }}") == 2)
+verifica("nessun indirizzo di posta scritto nei sorgenti della rassegna",
+         not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", _fonti_src + _ricerc_src + _cat_src))
+
 # ------------------------------------------------------------- diagnosi di arXiv
 # La diagnosi vale solo se la prima variante è davvero identica alla richiesta
 # che fallisce: se UA o Accept cambiano in fonti_aperte e non qui, il controllo

@@ -69,6 +69,7 @@ jobs:
         env:
           # Alla prima corsa la finestra di un giorno darebbe un catalogo quasi
           # vuoto: si parte da una settimana per avere qualcosa da leggere subito.
+          PERCORSO_CONTATTO: ${{ secrets.PERCORSO_CONTATTO }}
           GIORNI: ${{ github.event.inputs.giorni || '1' }}
           PRIMO: ${{ steps.stato.outputs.primo }}
           TEMI: ${{ github.event.inputs.temi }}
@@ -114,6 +115,14 @@ jobs:
       - name: Ricerca delle copie accessibili
         continue-on-error: true
         timeout-minutes: 12
+        env:
+          # Unpaywall lo pretende: senza, non parte affatto e ogni voce con DOI
+          # perde la fonte che da sola dice se ne esiste una copia aperta. Nella
+          # corsa del 21/09/2026 il segreto non c'era e sono uscite diciannove
+          # voci "senza via di accesso" che nessuno aveva davvero cercato.
+          # Se il segreto non è impostato la variabile resta vuota, il
+          # ricercatore lo dichiara in testa e nel riepilogo, e prosegue.
+          PERCORSO_CONTATTO: ${{ secrets.PERCORSO_CONTATTO }}
         run: |
           set -euo pipefail
           # Solo le voci senza testo pieno già noto, e con due tetti: venticinque

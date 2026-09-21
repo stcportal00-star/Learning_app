@@ -175,6 +175,19 @@ def main():
     voci = voci[:a.massimo]
     oltre_massimo = totali - len(voci)
 
+    # Senza recapito, Unpaywall non parte affatto: ogni voce con DOI perde la
+    # fonte che da sola risponde alla domanda "esiste una copia aperta di questo
+    # articolo?". Il risultato è un elenco di "nulla trovato" che sembra un
+    # esito e invece è uno strumento spento. Nella corsa del 21/09/2026 sono
+    # state diciannove voci su diciannove, e dal rapporto non si vedeva.
+    spente = []
+    if not fonti.CONTATTO:
+        spente.append("unpaywall (manca PERCORSO_CONTATTO)")
+        print("AVVISO: Unpaywall è spento perché manca il recapito PERCORSO_CONTATTO.")
+        print("        È la fonte principale per gli articoli con DOI: senza di essa")
+        print("        un 'nulla trovato' non significa che non esista una copia aperta.")
+        print("        OpenAlex e Crossref rispondono lo stesso, dalla coda comune.\n")
+
     scadenza = time.monotonic() + a.minuti * 60 if a.minuti > 0 else None
     esiti, senza, interrotto = [], 0, 0
     for indice, v in enumerate(voci, 1):
@@ -211,6 +224,7 @@ def main():
         os.makedirs(os.path.dirname(a.uscita) or ".", exist_ok=True)
         with open(a.uscita, "w", encoding="utf-8") as f:
             json.dump({"generato": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "fonti_spente": spente,
                        "trattate": len(esiti),
                        "non_trattate_per_tempo": interrotto,
                        "non_trattate_per_massimo": oltre_massimo,
@@ -222,6 +236,11 @@ def main():
           f"senza via di accesso {senza}")
     if interrotto or oltre_massimo:
         print(f"Non trattate: {interrotto} per tempo, {oltre_massimo} oltre il massimo.")
+    if spente:
+        # Ripetuto qui perché è qui che si legge il bilancio: un conteggio di
+        # zeri accanto a una fonte spenta non è un risultato, è una misura
+        # mancata, e va detto nello stesso punto in cui si vede il numero.
+        print(f"Fonti spente in questa corsa: {', '.join(spente)}.")
     return 0
 
 

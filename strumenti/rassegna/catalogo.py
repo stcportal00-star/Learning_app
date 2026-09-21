@@ -225,6 +225,13 @@ def scrivi_catalogo(cartella, nuove, scartate, rapporto_fonti, da, a):
                 f"Voci nuove      : {len(nuove)}",
                 f"Catalogo totale : {len(storico)}", "",
                 "SCARTATE:"] + [f"  {k:<18} {n}" for k, n in sorted(scartate.items())] + [""]
+    # Chi legge il rapporto deve sapere se una fonte è muta o semplicemente
+    # spenta: sono due diagnosi diverse e portano a due rimedi diversi.
+    if not fonti.CONTATTO:
+        rapporto += ["RECAPITO NON DICHIARATO (PERCORSO_CONTATTO):",
+                     "  Unpaywall non viene interrogata affatto — è la fonte principale",
+                     "  per gli articoli con DOI. OpenAlex e Crossref rispondono lo stesso,",
+                     "  dalla coda comune invece che da quella di cortesia.", ""]
     if ko:
         rapporto += ["FONTI NON DISPONIBILI (la rassegna è proseguita senza):"]
         rapporto += [f"  {n:<26} {stato}: {msg}" for n, stato, msg, _, _ in ko] + [""]
