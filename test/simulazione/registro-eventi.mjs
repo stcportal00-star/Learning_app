@@ -50,10 +50,26 @@
  * corretto (ed e allora che va riscritta l'attesa). L'elenco completo viene
  * ristampato in fondo, separato dal conteggio.
  *
+ * E QUANDO IL DIFETTO VIENE CORRETTO DAVVERO. Lo scenario non si cancella:
+ * cambia mestiere. Si chiama "CORREZIONE SORVEGLIATA: ..." e le sue verifiche
+ * passano da ok() a corretto(), stessa forma e verdetto opposto a quello di
+ * prima. La scena resta identica — e questo e il punto: chi ha gia dimostrato
+ * di saper riprodurre il difetto e il miglior sorvegliante che quel difetto
+ * possa avere. Anche le correzioni sorvegliate hanno il loro elenco in fondo.
+ *
+ * Gli scenari F1, F2 e F3 sono passati di qui: inchiodavano l'accavallamento
+ * di due registra() (invariante 1 rotta in silenzio, riga operativa senza il
+ * suo evento). La coda di lib/db.ts — una transazione per volta, in ordine di
+ * arrivo, esportata anche come inTransazione() per la sincronizzazione e per
+ * il caricamento dei contenuti — ha chiuso il difetto, e ora i tre scenari
+ * pretendono il comportamento corretto: tutte le scritture riescono, ogni
+ * riga ha il suo evento, il pacchetto remoto entra tutto o niente.
+ *
  * COME VERIFICARE CHE QUESTA PROVA NON SIA UN TIMBRO (falsificazione fatta, non
- * immaginata). Una prova che non puo diventare rossa non dimostra niente. Si
- * indebolisce il doppio DA FUORI, senza toccare nessun file del progetto, e si
- * guarda quante verifiche cadono:
+ * immaginata). Una prova che non puo diventare rossa non dimostra niente.
+ *
+ * (1) L'ATOMICITA. Si indebolisce il doppio DA FUORI, senza toccare nessun
+ * file del progetto, e si guarda quante verifiche cadono:
  *
  *   // in una cartella qualsiasi FUORI dal progetto
  *   import "/home/user/learning_app/test/banco/carica.mjs";
@@ -65,13 +81,21 @@
  *   };
  *   await import("/home/user/learning_app/test/simulazione/registro-eventi.mjs");
  *
- * Misurato: togliendo il ROLLBACK cadono 9 scenari (19 verifiche) — C1, C2, C5,
- * C6, C7, E7, F1, F2, F3; sostituendo withTransactionAsync con la sola chiamata
- * al compito (ne BEGIN ne ROLLBACK) cadono gli stessi 9 scenari con 26 verifiche.
- * C3 e C4 restano verdi ed e giusto: li l'errore arriva PRIMA di qualunque
- * scrittura (CHECK su eventi.tipo, JSON.stringify), quindi non dipendono dal
- * rollback. Sono le transazioni a far passare questa prova, non la compiacenza
- * del doppio.
+ * Misurato: togliendo il ROLLBACK cadono 6 scenari (13 verifiche) — C1, C2, C5,
+ * C6, C7, E7; sostituendo withTransactionAsync con la sola chiamata al compito
+ * (ne BEGIN ne ROLLBACK) cadono 7 scenari con 21 verifiche (gli stessi sei piu
+ * F3, che senza BEGIN vede il pacchetto remoto entrare a pezzi). C3 e C4
+ * restano verdi ed e giusto: li l'errore arriva PRIMA di qualunque scrittura
+ * (CHECK su eventi.tipo, JSON.stringify), quindi non dipendono dal rollback.
+ *
+ * (2) LA CODA (le guardie F1, F2, F3). L'atomicita da sola non le copre: con la
+ * coda in funzione le transazioni non si accavallano mai, quindi non c'e
+ * rollback da togliere. Si disattiva la serializzazione sostituendo il corpo di
+ * inCoda() in lib/db.ts con `return compito();` e si riesegue. Misurato: cadono
+ * i 3 scenari convertiti con 15 delle 22 verifiche corretto() — l'accavallamento
+ * torna esattamente com'era (BEGIN annidato, ROLLBACK che annulla l'evento
+ * dell'altra transazione, riga operativa orfana). lib/db.ts va poi rimesso
+ * com'era: e un file del progetto, questa prova non lo modifica.
  *
  * LIMITI DI QUESTA SIMULAZIONE (leggere prima di fidarsi del verde):
  *   - sotto c'e node:sqlite, sincrono: l'interfogliamento della parte F e
@@ -83,7 +107,8 @@
  *   - due dispositivi veri non ci sono: gli eventi "remoti" delle parti F e G
  *     sono scritti a mano con la forma esatta di lib/sync/pacchetto.ts.
  *
- * Esito dell'ultima esecuzione: 45 scenari su 45, 260 verifiche su 260.
+ * Esito dell'ultima esecuzione: 45 scenari su 45, 273 verifiche su 273
+ * (di cui 22 sono guardie corretto() sulla coda delle scritture).
  */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -93,13 +118,38 @@ import "../banco/carica.mjs";
 import { configuraCartella } from "../banco/expo-sqlite.mjs";
 
 // ------------------------------------------------------------------ CONTEGGIO
+const PREFISSO_DIFETTO = "DIFETTO RIPRODOTTO: ";
+const PREFISSO_CORREZIONE = "CORREZIONE SORVEGLIATA: ";
+
 const scenari = [];
+const correzioniSorvegliate = [];
 let corrente = null;
 
 function ok(nome, condizione, extra = "") {
   if (!corrente) throw new Error("ok() fuori da uno scenario: " + nome);
   corrente.verifiche++;
   if (!condizione) corrente.errori.push(`${nome}${extra ? " — " + extra : ""}`);
+}
+
+/**
+ * Il contraltare di ok() per le guardie nate da un difetto ormai corretto:
+ * stessa forma, verdetto opposto a quello che lo scenario pretendeva prima.
+ * Passa quando vale il comportamento CORRETTO, e si accumula in un elenco
+ * separato che il riepilogo stampa a parte.
+ *
+ * Perche un elenco a parte e non un ok() qualunque: chi legge un rosso qui
+ * deve capire subito che non e una verifica nuova ad essersi rotta, ma una
+ * correzione ad essere REGREDITA — e sa gia dove guardare, perche lo scenario
+ * conserva la scena esatta con cui il difetto era stato riprodotto.
+ */
+function corretto(nome, condizione, extra = "") {
+  if (!corrente) throw new Error("corretto() fuori da uno scenario: " + nome);
+  corrente.verifiche++;
+  if (condizione) {
+    correzioniSorvegliate.push(`${corrente.nome.replace(PREFISSO_CORREZIONE, "")} — ${nome}`);
+  } else {
+    corrente.errori.push(`${nome} — LA CORREZIONE E' REGREDITA${extra ? " — " + extra : ""}`);
+  }
 }
 
 /** Attende che `azione` lanci, e che il messaggio contenga `frammento`. */
@@ -119,7 +169,13 @@ async function lancia(nome, azione, frammento) {
 }
 
 async function prova(nome, azione) {
-  corrente = { nome, verifiche: 0, errori: [], difetto: nome.startsWith("DIFETTO RIPRODOTTO") };
+  corrente = {
+    nome,
+    verifiche: 0,
+    errori: [],
+    difetto: nome.startsWith(PREFISSO_DIFETTO),
+    correzione: nome.startsWith(PREFISSO_CORREZIONE),
+  };
   scenari.push(corrente);
   try {
     await azione();
@@ -1009,50 +1065,92 @@ await prova("E10 il costruttore di Orologio modifica lo stato che riceve (HLC-13
 // F. CONCORRENZA
 // ============================================================================
 
-await prova("DIFETTO RIPRODOTTO: F1 due registra() senza await intermedio (REG-06)", async () => {
+await prova("CORREZIONE SORVEGLIATA: F1 due registra() senza await intermedio (REG-06)", async () => {
   const { app, base } = await avvia("foxtrot1");
+  // La seconda proiezione annota cosa vede quando tocca a lei. Con la coda la
+  // prima transazione e gia COMMITTATA, quindi vede la riga E il suo evento:
+  // e la prova che le due non si sono mai sovrapposte. Senza coda non ci
+  // arriverebbe nemmeno, perche il suo BEGIN fallirebbe prima.
+  let vistoDallaSeconda = null;
   const esiti = await Promise.allSettled([
     app.registra("note", "n1", "crea", { testo: "a" }, proiettaNotaCrea("n1", null, "a", false)),
-    app.registra("note", "n2", "crea", { testo: "b" }, proiettaNotaCrea("n2", null, "b", false)),
+    app.registra("note", "n2", "crea", { testo: "b" }, async (d, hlc) => {
+      vistoDallaSeconda = {
+        note: (await d.getFirstAsync("SELECT count(*) AS n FROM note")).n,
+        eventoDellaPrima: (await d.getFirstAsync(
+          "SELECT count(*) AS n FROM eventi WHERE entita_id='n1'")).n,
+      };
+      await proiettaNotaCrea("n2", null, "b", false)(d, hlc);
+    }),
   ]);
   const motivi = esiti.map((e) => (e.status === "rejected" ? e.reason.message : "riuscita"));
-  ok("entrambe falliscono", esiti.every((e) => e.status === "rejected"), motivi.join(" | "));
-  ok("la seconda dice 'cannot start a transaction within a transaction'",
-    motivi.some((m) => m.includes("cannot start a transaction within a transaction")), motivi.join(" | "));
-  ok("la prima muore su un rollback senza transazione (messaggio fuorviante)",
-    motivi.some((m) => m.includes("cannot rollback - no transaction is active")), motivi.join(" | "));
+  corretto("le due scritture riescono entrambe",
+    esiti.every((e) => e.status === "fulfilled"), motivi.join(" | "));
+  const [h1, h2] = esiti.map((e) => (e.status === "fulfilled" ? e.value : null));
+  corretto("la coda le serve in ordine di arrivo: due timbri distinti e crescenti",
+    typeof h1 === "string" && typeof h2 === "string" && h1 < h2, `${h1} / ${h2}`);
+  corretto("quando tocca alla seconda, la prima e gia chiusa: riga e evento entrambi visibili",
+    vistoDallaSeconda !== null && vistoDallaSeconda.note === 1 &&
+      vistoDallaSeconda.eventoDellaPrima === 1, JSON.stringify(vistoDallaSeconda));
 
   const eventi = await contaEventi(base);
   const note = (await base.getAllAsync("SELECT id FROM note ORDER BY id")).map((r) => r.id);
+  corretto("due eventi nel registro", eventi === 2, `eventi=${eventi}`);
+  corretto("due righe proiettate, una per chiamata", note.join(",") === "n1,n2", note.join(","));
+  const orfane = await base.getFirstAsync(
+    "SELECT count(*) AS n FROM note WHERE hlc NOT IN (SELECT hlc FROM eventi)");
+  corretto("INVARIANTE 1: nessuna riga operativa senza il suo evento", orfane.n === 0, String(orfane.n));
+  const senzaRiga = await base.getFirstAsync(
+    "SELECT count(*) AS n FROM eventi WHERE hlc NOT IN (SELECT hlc FROM note)");
+  corretto("e nessun evento senza la sua riga: le due facce restano appaiate",
+    senzaRiga.n === 0, String(senzaRiga.n));
+
   const meta = await base.getFirstAsync("SELECT valore FROM meta WHERE chiave='hlc'");
-  ok("nessuno dei due eventi sopravvive", eventi === 0, `eventi=${eventi}`);
-  ok("INVARIANTE 1 ROTTA: una riga proiettata sopravvive SENZA il suo evento",
-    note.length === 1, `note=${note.join(",")}`);
-  ok("ed e quella della prima chiamata", note[0] === "n1", note.join(","));
-  ok("meta('hlc') e avanzata pur non essendoci nessun evento", meta !== null, JSON.stringify(meta));
+  const [ms, cont] = String(meta?.valore).split("-");
+  corretto("meta('hlc') e ferma sul timbro dell'ULTIMO evento committato, non oltre",
+    meta !== null && parseInt(ms, 16) === parseInt(String(h2).split("-")[0], 16) &&
+      parseInt(cont, 16) === parseInt(String(h2).split("-")[1], 16), `${meta?.valore} vs ${h2}`);
   ok("non si resta dentro una transazione", (await base.isInTransactionAsync()) === false);
 
-  const h = await app.registra("note", "n3", "crea", {}, proiettaNotaCrea("n3", null, "c", false));
-  ok("dopo il disastro il registro riprende a scrivere", typeof h === "string");
-  ok("ma la nota orfana resta li per sempre, invisibile alla sincronizzazione",
-    (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n === 2);
+  const h3 = await app.registra("note", "n3", "crea", {}, proiettaNotaCrea("n3", null, "c", false));
+  ok("dopo il doppio tocco il registro continua a scrivere", typeof h3 === "string");
+  corretto("tre note e tre eventi: nessuna riga orfana e rimasta sul disco",
+    (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n === 3 &&
+      (await contaEventi(base)) === 3);
 });
 
-await prova("DIFETTO RIPRODOTTO: F2 tre registra() sovrapposte (doppio tocco su Salva)", async () => {
+await prova("CORREZIONE SORVEGLIATA: F2 tre registra() sovrapposte (doppio tocco su Salva)", async () => {
   const { app, base } = await avvia("foxtrot2");
+  // Ogni proiezione annota quante sessioni GIA COMMITTATE vede prima di
+  // scrivere la propria. Con la coda la sequenza e 0, 1, 2: una transazione
+  // per volta, in ordine di arrivo. E il conto che nessuna finta serializzazione
+  // puo produrre per caso.
+  const visto = [];
+  const conSpia = (id, tipo, minuti) => async (d, hlc) => {
+    visto.push((await d.getFirstAsync("SELECT count(*) AS n FROM sessioni")).n);
+    await proiettaSessione(id, tipo, Date.now(), minuti)(d, hlc);
+  };
   const esiti = await Promise.allSettled([
-    app.registra("sessioni", "s1", "crea", { tipo: "mattina", minuti: 30 },
-      proiettaSessione("s1", "mattina", Date.now(), 30)),
-    app.registra("sessioni", "s2", "crea", { tipo: "lettura", minuti: 25 },
-      proiettaSessione("s2", "lettura", Date.now(), 25)),
-    app.registra("sessioni", "s3", "crea", { tipo: "paper", minuti: 25 },
-      proiettaSessione("s3", "paper", Date.now(), 25)),
+    app.registra("sessioni", "s1", "crea", { tipo: "mattina", minuti: 30 }, conSpia("s1", "mattina", 30)),
+    app.registra("sessioni", "s2", "crea", { tipo: "lettura", minuti: 25 }, conSpia("s2", "lettura", 25)),
+    app.registra("sessioni", "s3", "crea", { tipo: "paper", minuti: 25 }, conSpia("s3", "paper", 25)),
   ]);
+  const motivi = esiti.map((e) => (e.status === "rejected" ? e.reason.message : "riuscita"));
   const riuscite = esiti.filter((e) => e.status === "fulfilled").length;
-  ok("nessuna delle tre arriva in fondo", riuscite === 0, `riuscite=${riuscite}`);
-  ok("il registro resta vuoto", (await contaEventi(base)) === 0);
+  corretto("tutte e tre arrivano in fondo", riuscite === 3, motivi.join(" | "));
+  corretto("una transazione per volta: le proiezioni vedono 0, poi 1, poi 2 sessioni committate",
+    visto.join(",") === "0,1,2", visto.join(","));
+
+  corretto("tre eventi nel registro", (await contaEventi(base)) === 3);
   const sessioni = (await base.getAllAsync("SELECT id FROM sessioni ORDER BY id")).map((r) => r.id);
-  ok("ma qualche sessione resta scritta fuori dal registro", sessioni.length >= 1, sessioni.join(","));
+  corretto("tre blocchi del cronometro sul disco", sessioni.join(",") === "s1,s2,s3", sessioni.join(","));
+  const orfane = await base.getFirstAsync(
+    "SELECT count(*) AS n FROM sessioni WHERE hlc NOT IN (SELECT hlc FROM eventi)");
+  corretto("INVARIANTE 1: nessuna sessione senza il suo evento", orfane.n === 0, String(orfane.n));
+  const ordine = (await base.getAllAsync(
+    "SELECT entita_id FROM eventi ORDER BY hlc")).map((r) => r.entita_id);
+  corretto("ORDER BY hlc restituisce l'ordine dei tocchi, non un ordine qualsiasi",
+    ordine.join(",") === "s1,s2,s3", ordine.join(","));
   ok("non si resta dentro una transazione", (await base.isInTransactionAsync()) === false);
 });
 

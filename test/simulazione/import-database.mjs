@@ -31,12 +31,16 @@
  *   P. doppio tocco su "Aggiungi PDF": due importazioni concorrenti;
  *   Q. stato finale: file orfani e righe che puntano al vuoto.
  *
- * DUE TIPI DI VERIFICA, e la differenza conta:
+ * TRE TIPI DI VERIFICA, e la differenza conta:
  *   ok(...)      — il comportamento CORRETTO atteso. Rosso = qualcosa non va.
  *   difetto(...) — inchioda un comportamento SBAGLIATO dell'app, misurato qui.
  *                  Verde = il difetto è ancora lì. Rosso = qualcuno l'ha
  *                  corretto e questa prova va aggiornata. I difetti NON sono
  *                  stati corretti: la correzione la decide il coordinatore.
+ *   corretto(...)— sorveglia un difetto GIÀ corretto. Verde = la correzione
+ *                  regge. Rosso = è regredita. Uno scenario che ha inchiodato
+ *                  un difetto non si cancella quando il difetto sparisce:
+ *                  cambia mestiere, perché sa già come riprodurlo.
  *
  * Non tocca nulla del progetto: lavora in una radice temporanea che cancella
  * alla fine, e che LASCIA se qualcosa fallisce, per poterla aprire.
@@ -80,6 +84,7 @@ if (!process.env.IMPORT_DATABASE_IN_CORSO) {
 let passati = 0;
 const falliti = [];
 const difettiInchiodati = [];
+const correzioniSorvegliate = [];
 
 function ok(nome, condizione, extra = "") {
   if (condizione) passati++;
@@ -100,6 +105,20 @@ function difetto(codice, nome, condizione, extra = "") {
       `${codice}: ${nome} — il comportamento è CAMBIATO (difetto corretto?): ` +
         `aggiornare la prova${extra ? " — " + extra : ""}`
     );
+  }
+}
+
+/**
+ * Il contraltare di difetto(): passa quando vale il comportamento CORRETTO.
+ * Stessa forma, verdetto opposto, elenco separato nel riepilogo. Se diventa
+ * rosso non è la prova a dover cambiare: è la correzione ad essere regredita.
+ */
+function corretto(codice, nome, condizione, extra = "") {
+  if (condizione) {
+    passati++;
+    correzioniSorvegliate.push(`${codice}: ${nome}`);
+  } else {
+    falliti.push(`${codice}: ${nome} — LA CORREZIONE È REGREDITA${extra ? " — " + extra : ""}`);
   }
 }
 
@@ -1268,6 +1287,12 @@ Intento.programmaNessunVisore(false);
 Condivisione.programmaDisponibilita(true);
 
 // =============== P. DOPPIO TOCCO SU "AGGIUNGI PDF": DUE IMPORTAZIONI INSIEME
+// Qui stava la corsa che rompeva l'invariante 1: due registra() accavallati,
+// e il ROLLBACK della transazione perdente che annullava l'INSERT dell'evento
+// della vincente, la quale proseguiva in autocommit. La coda di lib/db.ts —
+// una transazione per volta, in ordine di arrivo — l'ha chiusa. Questi due
+// scenari restano al loro posto con il verdetto rovesciato: sono il modo più
+// economico che abbiamo di riprodurre la corsa, e quindi la guardia migliore.
 const pdfGemelloA = scriviEsterno("gemello-a.pdf", contenutoPdf(410, "gemelloA"));
 const pdfGemelloB = scriviEsterno("gemello-b.pdf", contenutoPdf(420, "gemelloB"));
 const fileprimaP = fileBiblioteca().length;
@@ -1275,7 +1300,8 @@ const eventiPrimaP = await contaEventi();
 const righePrimaP = await contaBiblioteca();
 Selettore.programma({ percorsi: [pdfGemelloA] }, { percorsi: [pdfGemelloB] });
 const esitiP = await Promise.allSettled([P.importaPdf(), P.importaPdf()]);
-const riusciteP = esitiP.filter((e) => e.status === "fulfilled").length;
+const volumiP = esitiP.filter((e) => e.status === "fulfilled").map((e) => e.value);
+const riusciteP = volumiP.length;
 const motiviP = esitiP.filter((e) => e.status === "rejected").map((e) => String(e.reason?.message ?? e.reason));
 const fileNuoviP = fileBiblioteca().length - fileprimaP;
 const righeNuoveP = (await contaBiblioteca()) - righePrimaP;
@@ -1284,17 +1310,33 @@ const eventiNuoviP = (await contaEventi()) - eventiPrimaP;
 console.log(`    (P: due importazioni concorrenti — riuscite ${riusciteP}/2, file copiati ${fileNuoviP}, ` +
   `righe ${righeNuoveP}, eventi ${eventiNuoviP}${motiviP.length ? ", errori: " + motiviP.join(" | ") : ""})`);
 ok("P01 entrambi i file vengono comunque copiati sul disco", fileNuoviP === 2, String(fileNuoviP));
-difetto(
+corretto(
   "IMP-36",
-  "due importazioni concorrenti (doppio tocco su 'Aggiungi PDF') non producono due volumi: le transazioni si annidano e qualcosa va perso",
-  righeNuoveP < 2 || eventiNuoviP < 2,
-  `righe ${righeNuoveP}, eventi ${eventiNuoviP}, errori: ${motiviP.join(" | ")}`
+  "due importazioni concorrenti (doppio tocco su 'Aggiungi PDF') producono DUE volumi distinti: nessuna delle due scritture viene persa, due righe e due eventi",
+  riusciteP === 2 && motiviP.length === 0 &&
+    volumiP[0]?.id !== volumiP[1]?.id &&
+    righeNuoveP === 2 && eventiNuoviP === 2,
+  `riuscite ${riusciteP}/2, righe ${righeNuoveP}, eventi ${eventiNuoviP}, errori: ${motiviP.join(" | ")}`
 );
-difetto(
+
+// Contare righe ed eventi non basta: due e due tornerebbero anche se un evento
+// appartenesse al volume sbagliato. Si guarda dentro, volume per volume, che
+// ogni riga abbia il SUO evento e che i due portino lo stesso hlc — è la forma
+// concreta dell'invariante 1 su questa superficie.
+const accoppiatiP = [];
+for (const v of volumiP) {
+  const r = await riga(v.id);
+  const e = await eventiDi(v.id);
+  accoppiatiP.push(
+    r !== null && e.length === 1 && e[0].tipo === "crea" && e[0].entita === "biblioteca" &&
+      e[0].hlc === r.hlc && e[0].id === `${r.hlc}:${v.id}`
+  );
+}
+corretto(
   "IMP-37",
-  "la corsa lascia una RIGA in biblioteca SENZA il suo evento: il ROLLBACK della seconda transazione annulla l'INSERT dell'evento della prima, che intanto prosegue fuori transazione e scrive la proiezione in autocommit. L'invariante 1 si rompe: quel volume non raggiungera mai l'altro dispositivo e sparirebbe da una ricostruzione dal registro",
-  righeNuoveP > eventiNuoviP,
-  `righe ${righeNuoveP}, eventi ${eventiNuoviP}`
+  "la corsa non lascia nessuna riga SENZA il suo evento: ogni volume ha la sua riga, un solo evento 'crea' e lo stesso hlc su entrambi (invariante 1)",
+  accoppiatiP.length === 2 && accoppiatiP.every(Boolean) && righeNuoveP === eventiNuoviP,
+  `accoppiati ${JSON.stringify(accoppiatiP)}, righe ${righeNuoveP}, eventi ${eventiNuoviP}`
 );
 
 // Se la concorrenza lascia una transazione aperta, tutto ciò che viene dopo
@@ -1350,6 +1392,10 @@ ok("Q03 nessun trasferimento di rete è stato tentato (il doppio di expo-file-sy
 // ------------------------------------------------------------------ RIEPILOGO
 const versione = (await base.getFirstAsync("SELECT sqlite_version() AS v")).v;
 console.log("\nsimulazione import-database (lib/palestra.ts, biblioteca) — SQLite " + versione);
+if (correzioniSorvegliate.length) {
+  console.log(`\nCorrezioni sorvegliate (erano difetti, ora sono guardie): ${correzioniSorvegliate.length}`);
+  for (const c of correzioniSorvegliate) console.log("  - " + c);
+}
 if (difettiInchiodati.length) {
   console.log(`\nDifetti dell'app inchiodati da questa prova: ${difettiInchiodati.length}`);
   for (const d of difettiInchiodati) console.log("  - " + d);
@@ -1383,8 +1429,10 @@ process.exit(falliti.length ? 1 : 0);
  * da 40 MB, permessi negati, disco pieno, manifesti rotti e ostili, rimozione,
  * apertura con il visore, doppio tocco su "Aggiungi PDF".
  *
- * Quarantacinque comportamenti difettosi sono inchiodati da una verifica che
- * diventerà rossa il giorno in cui verranno corretti. I quattro che contano:
+ * Quarantatré comportamenti difettosi sono inchiodati da una verifica che
+ * diventerà rossa il giorno in cui verranno corretti, e due correzioni già
+ * applicate sono sorvegliate da altrettante guardie (IMP-36 e IMP-37, che
+ * quel difetto lo inchiodavano). I quattro punti che contano:
  *
  * 1. NESSUN CONTROLLO SUL TIPO DEL FILE. `importaPdf()` decide l'estensione con
  *    un solo `endsWith('.epub')`: qualunque altro file diventa un "pdf". Provato
@@ -1405,12 +1453,15 @@ process.exit(falliti.length ? 1 : 0);
  *    `../` nel manifesto scrive fuori dalla cartella biblioteca. `sha256` e
  *    `byte` sono scritti come li dichiara il manifesto, senza mai confrontarli
  *    con il file copiato.
- * 4. DOPPIO TOCCO SU "Aggiungi PDF". Due `importaPdf()` concorrenti annidano le
- *    transazioni: il ROLLBACK della seconda annulla l'INSERT dell'evento della
- *    prima, che prosegue fuori transazione e scrive la proiezione in
- *    autocommit. Misurato: due file copiati, UNA riga di biblioteca, ZERO
- *    eventi. È l'invariante 1 rotta — quel volume non raggiungerà mai l'altro
- *    dispositivo e sparirebbe da una ricostruzione dal registro.
+ * 4. DOPPIO TOCCO SU "Aggiungi PDF": CORRETTO, e ora sorvegliato. Due
+ *    `importaPdf()` concorrenti annidavano le transazioni: il ROLLBACK della
+ *    seconda annullava l'INSERT dell'evento della prima, che proseguiva fuori
+ *    transazione e scriveva la proiezione in autocommit — l'invariante 1 rotta.
+ *    La coda di `lib/db.ts` (una transazione per volta, in ordine di arrivo) l'ha
+ *    chiusa. Misurato ora: due file copiati, DUE righe di biblioteca, DUE
+ *    eventi, ogni riga con il suo evento e lo stesso hlc. IMP-36 e IMP-37 non
+ *    sono stati cancellati: sono diventati le guardie di quella correzione, e
+ *    tornano rossi se la coda viene rimossa (verificato disattivandola).
  *
  * Quello che questo verde NON dice: il banco non riproduce i permessi di
  * Android (sono simulati sostituendo `File.copy`), non riproduce un visore PDF
