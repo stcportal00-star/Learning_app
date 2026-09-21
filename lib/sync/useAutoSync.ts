@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus } from "react-native";
-import { daSincronizzare, segnaSincronizzati, database } from "../db";
+import { daSincronizzare, segnaSincronizzati, database, inTransazione } from "../db";
 import { sincronizza, DiarioSync } from "./trasporto";
 import { TrasportoFile } from "./file";
 import { TrasportoWifi } from "./wifi";
@@ -49,7 +49,9 @@ export function useAutoSync(dispositivo: string) {
           "SELECT id, hlc, dispositivo, entita, entita_id, tipo, payload FROM eventi"
         );
         const f = fondi(locali, r.esito.ricevuti);
-        await d.withTransactionAsync(async () => {
+        // In coda come le scritture dell'utente: un pacchetto che arriva
+        // mentre si salva una nota non deve più potersi accavallare.
+        await inTransazione(async (d) => {
           for (const e of f.nuovi) {
             await d.runAsync(
               `INSERT OR IGNORE INTO eventi

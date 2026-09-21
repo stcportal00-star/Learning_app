@@ -142,6 +142,55 @@ export function derivaSospetta(): boolean {
  * Nessuna scrittura passa per un'altra strada: è ciò che rende la
  * sincronizzazione una semplice concatenazione di registri.
  */
+/**
+ * Coda delle scritture. Una sola transazione per volta, in ordine di arrivo.
+ *
+ * Senza, due registra() che si accavallano rompono l'invariante 1 e lo fanno
+ * in silenzio. Misurato: A apre la transazione; il BEGIN di B fallisce con
+ * "cannot start a transaction within a transaction"; il ROLLBACK di B annulla
+ * l'INSERT dell'evento di A, che intanto prosegue e scrive la proiezione in
+ * autocommit. Sul disco resta la riga operativa SENZA il suo evento: non
+ * raggiungerà mai l'altro dispositivo e sparirebbe da una ricostruzione dal
+ * registro.
+ *
+ * Non è un caso di laboratorio. Due tocchi su Salva in Note bastano
+ * (app/(tabs)/note.tsx non ha la guardia che app/esercizi.tsx ha), e lo stesso
+ * accade quando la sincronizzazione applica un pacchetto mentre l'utente
+ * scrive. Il ponte nativo non protegge: expo-sqlite su Android gira in
+ * CoroutineScope(Dispatchers.IO) e non ha nessun lock per database, quindi
+ * l'accavallamento sul dispositivo è più probabile che qui, non meno.
+ *
+ * La guardia sta qui e non nei bottoni perché l'invariante è del registro:
+ * ogni chiamante nuovo la eredita senza doversela ricordare.
+ *
+ * E deve coprire OGNI transazione su questo database, non solo registra():
+ * basta che una scrittura passi da un'altra strada — la sincronizzazione che
+ * applica un pacchetto, il caricamento dei contenuti al primo avvio — perché
+ * l'accavallamento torni possibile. Per questo `inTransazione` è esportata: è
+ * l'unico modo consentito di aprire una transazione qui dentro.
+ */
+let codaScritture: Promise<unknown> = Promise.resolve();
+
+function inCoda<T>(compito: () => Promise<T>): Promise<T> {
+  // Il .catch() tiene la catena viva: senza, una scrittura fallita
+  // bloccherebbe per sempre tutte quelle dopo.
+  const mio = codaScritture.then(compito, compito);
+  codaScritture = mio.catch(() => undefined);
+  return mio;
+}
+
+/**
+ * Una transazione, in coda dietro tutte le altre. Da usare al posto di
+ * `db.withTransactionAsync()` ovunque: due transazioni aperte insieme sulla
+ * stessa connessione non si annidano, si danneggiano.
+ */
+export function inTransazione(
+  compito: (d: SQLite.SQLiteDatabase) => Promise<void>
+): Promise<void> {
+  const d = richiediDb();
+  return inCoda(() => d.withTransactionAsync(() => compito(d)));
+}
+
 export async function registra(
   entita: string,
   entitaId: string,
@@ -149,7 +198,19 @@ export async function registra(
   payload: Record<string, unknown>,
   proiezione: (d: SQLite.SQLiteDatabase, hlc: string) => Promise<void>
 ): Promise<string> {
+  return inCoda(() => scriviEvento(entita, entitaId, tipo, payload, proiezione));
+}
+
+async function scriviEvento(
+  entita: string,
+  entitaId: string,
+  tipo: "crea" | "aggiorna" | "elimina",
+  payload: Record<string, unknown>,
+  proiezione: (d: SQLite.SQLiteDatabase, hlc: string) => Promise<void>
+): Promise<string> {
   const d = richiediDb();
+  // Il timbro si prende DENTRO la coda: prenderlo fuori darebbe a due scritture
+  // in attesa due timbri nell'ordine sbagliato rispetto a come verranno scritte.
   const h = timbro();
   const hlc = serializza(h);
   await d.withTransactionAsync(async () => {

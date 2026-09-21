@@ -6,7 +6,7 @@
  * sono dati dell'utente e sono identici su tutti i dispositivi. Solo i tentativi,
  * le note e i progressi sono eventi sincronizzabili.
  */
-import { database } from "./db";
+import { database, inTransazione } from "./db";
 
 type EsercizioSql = {
   id: string; tema: string; livello: number; consegna: string;
@@ -78,7 +78,7 @@ export async function caricaContenuti(): Promise<{
   const scenari: Scenario[] = require("../assets/contenuti/scenari_rubrica.json");
   const volumi: VolumeAperto[] = require("../assets/contenuti/biblioteca.json");
 
-  await d.withTransactionAsync(async () => {
+  await inTransazione(async (d) => {
     for (const [slug, nome, pista, trimestre] of TEMI) {
       await d.runAsync(
         `INSERT OR IGNORE INTO temi (id, slug, nome, pista, trimestre) VALUES (?,?,?,?,?)`,
