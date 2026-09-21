@@ -29,6 +29,7 @@ Forma della voce:
     editore   str oppure None
 """
 import json
+import os
 import re
 import time
 import urllib.error
@@ -38,11 +39,18 @@ import xml.etree.ElementTree as ET
 
 from specializzazioni import normalizza
 
-UA = "PercorsoRassegna/1.0 (strumento personale di studio; stdlib urllib)"
+UA = "PercorsoRassegna/1.0 (strumento personale di studio)"
 
-# Recapito richiesto dai "polite pool" di OpenAlex, Crossref e Unpaywall: senza
-# di esso le stesse API rispondono da una coda più lenta e più soggetta a 429.
-CONTATTO = "alessio.mirra.00@gmail.com"
+# Recapito per i "polite pool" di OpenAlex, Crossref e Unpaywall: dichiarandolo
+# quelle API rispondono da una coda più veloce e meno soggetta a 429.
+#
+# Vuoto per impostazione predefinita, e si prende da PERCORSO_CONTATTO. Un
+# indirizzo di posta scritto nel sorgente finirebbe in ogni richiesta a ogni
+# archivio interrogato, per sempre, senza che nessuno l'abbia deciso: è un dato
+# personale e la scelta di diffonderlo spetta a chi lo possiede, non a questo
+# file. Senza recapito tutto funziona lo stesso, dalla coda comune; solo
+# Unpaywall lo pretende, e lo dice chiaramente invece di fallire di nascosto.
+CONTATTO = os.environ.get("PERCORSO_CONTATTO", "").strip()
 
 TENTATIVI = 3
 TIMEOUT = 30
@@ -56,6 +64,13 @@ _ultima_chiamata = {}
 
 class FonteNonDisponibile(Exception):
     """La fonte non ha risposto. Non ferma la rassegna: la annota e prosegue."""
+
+
+def _cortesia(parametri, chiave="mailto"):
+    """Aggiunge il recapito solo se è stato dichiarato. Senza, non lo inventa."""
+    if CONTATTO:
+        parametri[chiave] = CONTATTO
+    return parametri
 
 
 def _motivo(errore):
@@ -72,12 +87,22 @@ def _motivo(errore):
         return ""
     if not corpo:
         return ""
-    try:                                   # quasi sempre JSON: si prende il messaggio
+    try:                                   # quasi sempre JSON
         dati = json.loads(corpo)
-        for chiave in ("message", "error", "detail", "errors", "title"):
-            if chiave in dati:
-                corpo = json.dumps(dati[chiave], ensure_ascii=False)
+        # Prima il campo specifico, poi quello generico. Zenodo risponde
+        # message="A validation error occurred." e mette in errors il campo che
+        # ha rifiutato: leggendo message per primo si ottiene una frase vera e
+        # inutile, che è peggio di nessuna frase perché sembra una risposta.
+        pezzi = []
+        for chiave in ("errors", "error_description", "detail", "message", "error", "title"):
+            if isinstance(dati, dict) and dati.get(chiave):
+                valore = dati[chiave]
+                pezzi.append(valore if isinstance(valore, str)
+                             else json.dumps(valore, ensure_ascii=False))
+            if len(pezzi) == 2:            # il campo specifico e uno di contorno bastano
                 break
+        if pezzi:
+            corpo = " | ".join(pezzi)
     except ValueError:
         corpo = re.sub(r"<[^>]+>", " ", corpo)   # HTML: via i tag
     corpo = " ".join(corpo.split())
@@ -232,8 +257,8 @@ def openalex(da, a, termini=None, per_pagina=120):
         "filter": ",".join(filtri),
         "per-page": per_pagina,
         "sort": "cited_by_count:desc",
-        "mailto": CONTATTO,
     }
+    _cortesia(parametri)
     if termini:
         parametri["search"] = " OR ".join(f'"{t}"' for t in termini)
 
@@ -368,7 +393,7 @@ def crossref(termini, da, massimo=100):
         "filter": f"from-pub-date:{da},has-abstract:true",
         "rows": min(massimo, 100),
         "sort": "published", "order": "desc",
-        "mailto": CONTATTO,
+        **_cortesia({}),
     })
     uscite = []
     for r in (dati.get("message") or {}).get("items", []):
@@ -519,8 +544,11 @@ def unpaywall(doi):
     pirata: circa metà della letteratura recente ha una copia depositata
     regolarmente, e questa API la trova.
     """
+    if not CONTATTO:
+        raise FonteNonDisponibile(
+            "Unpaywall richiede un recapito: imposta PERCORSO_CONTATTO per usarlo")
     dati = chiedi_json(f"https://api.unpaywall.org/v2/{urllib.parse.quote(doi)}",
-                       {"email": CONTATTO})
+                       _cortesia({}, "email"))
     posizione = dati.get("best_oa_location") or {}
     if not dati.get("is_oa") or not (posizione.get("url_for_pdf") or posizione.get("url")):
         return None
@@ -536,9 +564,8 @@ def unpaywall(doi):
 
 def openalex_per_titolo(titolo):
     """Risolve un titolo in DOI e, se esiste, nella sua copia aperta."""
-    dati = chiedi_json("https://api.openalex.org/works", {
-        "search": titolo, "per-page": 3, "mailto": CONTATTO,
-    })
+    dati = chiedi_json("https://api.openalex.org/works",
+                       _cortesia({"search": titolo, "per-page": 3}))
     for w in dati.get("results", []):
         if normalizza(w.get("title") or "")[:60] != normalizza(titolo)[:60]:
             continue

@@ -11,6 +11,7 @@ per quelle c'è `catalogo.py --prova`, che gira su dati finti, e il rapporto
 quotidiano, che elenca quali hanno risposto.
 """
 import json
+import re
 import os
 import sys
 import tempfile
@@ -219,6 +220,26 @@ verifica("motivo: un corpo illeggibile non solleva",
          fonti._motivo(urllib.error.HTTPError("https://e.org", 400, "x", {}, None)) == "")
 verifica("motivo: la riga resta breve",
          len(fonti._motivo(_errore(400, '{"message": "' + "x" * 4000 + '"}'))) < 260)
+
+# Forma reale della risposta di Zenodo: il messaggio generico da solo non dice
+# nulla di azionabile, il campo rifiutato sta in errors e deve venire prima.
+_zenodo = ('{"message": "A validation error occurred.", "status": 400, '
+           '"errors": [{"field": "sort", "messages": ["Not a valid choice."]}]}')
+_reso = fonti._motivo(_errore(400, _zenodo))
+verifica("motivo: il campo rifiutato precede il messaggio generico",
+         _reso.index("sort") < _reso.index("A validation error"))
+verifica("motivo: conserva comunque il messaggio generico",
+         "A validation error" in _reso)
+
+# Il recapito non è nel sorgente: si dichiara, non si eredita.
+verifica("contatto assente se PERCORSO_CONTATTO non è impostato",
+         fonti.CONTATTO == os.environ.get("PERCORSO_CONTATTO", "").strip())
+verifica("cortesia non inventa un recapito",
+         ("mailto" in fonti._cortesia({})) == bool(fonti.CONTATTO))
+verifica("nessun indirizzo di posta scritto nel sorgente delle fonti",
+         not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+",
+                       open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                         "fonti_aperte.py"), encoding="utf-8").read()))
 
 # ------------------------------------------------- interrogazioni già respinte dagli archivi
 # Guardie di regressione: ognuna di queste sintassi ha fatto rispondere 4xx a
