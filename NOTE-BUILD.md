@@ -14,16 +14,16 @@ dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
 | 6 | fumo superato | `HTTP 403` creando la release |
 | 7 | **annullato** | l'ho cancellato io: vedi sotto |
 | 8 | fumo superato | `HTTP 403` creando la release, cinque volte |
+| 9 | **riuscito** | — release `apk-9` pubblicata |
 
-Stato del test di fumo al build 8: schermata Oggi in **6 secondi**, tutte e
+Stato del test di fumo al build 9: schermata Oggi in **6 secondi**, tutte e
 cinque le rotte percorse, lettore PDF che apre il documento di prova e ne conta
 le **2 pagine in 4 secondi**, riavvio a freddo superato. Firma in modalità
 **automatica**, impronta SHA-256
 `CF:5C:B0:6D:24:F6:DE:44:AF:FC:4B:76:AD:09:17:41:A1:26:B3:29:20:6F:18:1E:27:B3:69:78:57:1C:C9:09`.
 
-L'APK del build 8 non è in una release ma fra gli artefatti della corsa:
-<https://github.com/stcportal00-star/Learning_app/actions/runs/35638783313>
-— 27,9 MB, scade il 5 ottobre 2026.
+APK: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-9>
+— `percorso-9.apk`, 58,0 MB, più le otto schermate del test di fumo.
 
 ---
 
@@ -117,16 +117,28 @@ con `PERCORSO_CONTATTO`.
 
 ---
 
-## Aperto
+### Il `403` sulla pubblicazione era passeggero, e mi ero sbagliato a dire il contrario
 
-### La pubblicazione dell'APK è respinta con `HTTP 403` — **fermato qui**
+`POST /repos/.../releases` ha risposto `403 Resource not accessible by
+integration` per sette tentativi: il build 6, il suo riavvio, e cinque nel build
+8 fra le 18:54 e le 19:01. Mi sono fermato, come dice la regola, e ho scritto
+che **non** era una condizione passeggera.
 
-`POST /repos/.../releases` risponde `403 Resource not accessible by
-integration`. Cinque tentativi con attese crescenti fra 18:54 e 19:01, tutti
-respinti. Prima ancora: il build 6 e il suo riavvio. Sette tentativi in tutto
-sulla stessa causa, quindi mi sono fermato — è la regola della sessione.
+Era sbagliato. Il build 9 ha pubblicato al **primo tentativo** alle 19:26:02,
+con `apk.yml` invariato — stesso comando, stesso `--latest`, stesso token. Il
+limite si è esaurito da solo in circa venticinque minuti. La lettura originale
+era giusta; era la finestra di ritenti a essere corta, sette minuti e mezzo.
 
-Ciò che è accertato, non ipotizzato:
+Cade anche l'esperimento che avevo indicato come prossimo: **`--latest` non
+c'entra**, ha pubblicato con `--latest`. E *Workflow permissions* non andava
+toccato: era corretto fin dall'inizio, come diceva il log di "Set up job".
+
+Resta utile la traccia del ragionamento, perché l'errore è istruttivo: avevo
+una differenza reale fra due chiamate (`--latest` contro `--prerelease`) e l'ho
+scambiata per la causa. Una differenza osservata non è una causa finché non la
+si prova, e qui la prova è arrivata da sola e diceva di no.
+
+Ciò che resta accertato:
 
 - il build 5 ha creato `apk-5` alle 16:39 **con lo stesso workflow, mai
   modificato in quel passo prima del fallimento**;
@@ -141,15 +153,19 @@ Ciò che è accertato, non ipotizzato:
   può essere la causa;
 - nella stessa corsa il job `rapporto` (`issues: write`) scrive senza problemi.
 
-Le due chiamate differiscono per due sole opzioni: `apk.yml` usa `--latest`
-(più `--repo` e `--target`), `biblioteca.yml` usa `--prerelease`. È l'unica
-differenza rimasta fra un'operazione che riesce e una che fallisce, ed è
-l'esperimento da fare per primo — una variabile sola. **Non l'ho fatto**: la
-regola dice di fermarsi e riportare, e l'APK è comunque scaricabile.
+Con l'esito del build 9, la spiegazione più semplice è un limite secondario
+legato alla sequenza di chiamate, non una differenza di permessi. Si esaurisce
+da sé.
 
-Da controllare, nell'ordine: Impostazioni → Actions → General → Workflow
-permissions ("Read and write"); poi se esiste un limite di spesa o una
-restrizione sul repository.
+**Se ricapita**: l'APK resta comunque fra gli artefatti della corsa, e la
+release si può rifare avviando `apk` a mano mezz'ora dopo. Il passo ritenta già
+cinque volte in sette minuti e mezzo; allargare la finestra costerebbe minuti di
+runner fermo, e la degradazione attuale — artefatto sempre presente, release
+talvolta no — è accettabile.
+
+---
+
+## Aperto
 
 ### La biblioteca aperta non conteneva un solo PDF vero
 
