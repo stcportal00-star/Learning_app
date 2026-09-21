@@ -110,6 +110,10 @@ const RADICE = new URL("../..", import.meta.url).pathname.replace(/\/$/, "");
 const scenari = [];
 let corrente = null;
 const difettiRiprodotti = [];
+// Il contraltare di difettiRiprodotti: gli scenari che sorvegliano una
+// correzione gia applicata. Stesso meccanismo, verdetto opposto — cfr.
+// corretto() in test/simulazione/motore-sql.mjs, che e la forma d'origine.
+const correzioniSorvegliate = [];
 
 function ok(nome, condizione, extra = "") {
   if (!corrente) throw new Error("ok() fuori da uno scenario: " + nome);
@@ -152,6 +156,7 @@ async function scenario(nome, corpo) {
   corrente = { nome, verifiche: 0, errori: [] };
   scenari.push(corrente);
   if (/^DIFETTO RIPRODOTTO/.test(nome)) difettiRiprodotti.push(nome);
+  if (/^CORREZIONE SORVEGLIATA/.test(nome)) correzioniSorvegliate.push(nome);
   try {
     await corpo();
   } catch (errore) {
@@ -1120,33 +1125,48 @@ await scenario("H4 · esercizi_sql.json porta un campo anteprima che non viene m
 // ====================================================================== PARTE I
 // I. Concorrenza e rete.
 
-await scenario("DIFETTO RIPRODOTTO I1 · due caricaContenuti() concorrenti lasciano il contenuto MUTILO per sempre", async () => {
-  // CON-13. La mappa prevedeva «grazie a OR IGNORE non si duplica nulla».
-  // Non e cosi: le due transazioni si annidano, la ROLLBACK della seconda
-  // annulla la prima, e la prima prosegue FUORI da ogni transazione, in
-  // autocommit. Quel che era stato scritto prima del ROLLBACK e perduto, quel
-  // che viene dopo resta. Esito misurato, identico su tre giri: 21 temi su 22
-  // (manca il primo, 'gestione'), 381 esercizi, 52 volumi, 199 carte — e da
-  // quel momento la guardia salta per sempre, perche `esercizi` non e vuota.
+await scenario("CORREZIONE SORVEGLIATA I1 · due caricaContenuti() concorrenti riescono entrambe e il contenuto resta intero", async () => {
+  // CON-13, CORRETTO. Prima: le due transazioni si annidavano sulla stessa
+  // connessione, la ROLLBACK della seconda annullava quel che la prima aveva
+  // gia scritto, e la prima proseguiva FUORI da ogni transazione, in
+  // autocommit. Restavano 21 temi su 22 (mancava il primo, 'gestione') con
+  // 381 esercizi gia dentro: da li in poi la guardia saltava per sempre,
+  // perche guarda solo `esercizi`, e il buco era definitivo.
+  // Ora lib/db.ts mette in coda: inTransazione() serializza, una transazione
+  // per volta e in ordine di arrivo. La seconda chiamata parte quando la
+  // prima ha gia committato, trova tutto scritto e i suoi INSERT OR IGNORE
+  // non toccano niente. Lo scenario che inchiodava il difetto sorveglia ora
+  // la correzione: sa gia come riprodurre la corsa, e resta il posto giusto
+  // da cui accorgersi se la coda venisse tolta.
   azzeraContenuti();
   const esiti = await Promise.allSettled([contenuti.caricaContenuti(), contenuti.caricaContenuti()]);
-  uguale("entrambe le chiamate rigettano", esiti.filter((e) => e.status === "rejected").length, 2);
-  const messaggi = esiti.map((e) => String(e.reason?.message ?? ""));
-  ok("una dice che non si puo aprire una transazione dentro una transazione",
-    messaggi.some((m) => m.includes("cannot start a transaction within a transaction")), messaggi.join(" || "));
-  ok("l'altra dice che non c'e nessuna transazione da annullare (il messaggio fuorviante di expo)",
-    messaggi.some((m) => m.includes("cannot rollback - no transaction is active")), messaggi.join(" || "));
-  uguale("DIFETTO: sono rimasti 21 temi su 22", conta("temi"), 21);
-  uguale("DIFETTO: manca proprio il primo, 'gestione'", conta("temi", "WHERE slug='gestione'"), 0);
-  uguale("gli esercizi invece ci sono tutti", conta("esercizi"), 381);
-  uguale("i volumi anche", conta("biblioteca"), 52);
-  uguale("e le carte anche", conta("ripasso"), 199);
+  const messaggi = esiti.map((e) => String(e.reason?.message ?? "")).join(" || ");
+  uguale("nessuna delle due chiamate rigetta", esiti.filter((e) => e.status === "rejected").length, 0, messaggi);
+  ok("nessuna transazione aperta dentro un'altra transazione",
+    !messaggi.includes("cannot start a transaction within a transaction"), messaggi);
+  ok("nessuna ROLLBACK senza transazione attiva",
+    !messaggi.includes("cannot rollback - no transaction is active"), messaggi);
+  uguale("entrambe dichiarano di aver caricato (nessuna delle due e stata saltata)",
+    esiti.filter((e) => e.status === "fulfilled" && e.value.saltato === false).length, 2);
+  // Il contenuto e INTERO: e il punto esatto in cui il difetto si vedeva.
+  uguale("i 22 temi ci sono tutti", conta("temi"), 22);
+  uguale("compreso il primo, 'gestione', che era quello che spariva", conta("temi", "WHERE slug='gestione'"), 1);
+  uguale("i 381 esercizi", conta("esercizi"), 381);
+  uguale("i 52 volumi", conta("biblioteca"), 52);
+  uguale("le 199 carte di ripasso", conta("ripasso"), 199);
+  // La seconda passata non ha riscritto niente: se avesse ricominciato da capo
+  // fuori transazione, i volumi porterebbero due istanti di inserimento.
+  uguale("un solo istante di aggiunta in biblioteca: la seconda passata non ha riscritto nulla",
+    dbApp.database().getFirstSync("SELECT count(DISTINCT aggiunto_a) AS n FROM biblioteca").n, 1);
+  uguale("nessun esercizio con un tema orfano",
+    conta("esercizi e LEFT JOIN temi t ON t.slug=e.tema_slug", "WHERE e.tema_slug IS NOT NULL AND t.slug IS NULL"), 0);
+  uguale("nessuna carta di ripasso senza il suo esercizio",
+    conta("ripasso r LEFT JOIN esercizi e ON e.id=r.esercizio_id", "WHERE e.id IS NULL"), 0);
+  // La guardia del secondo avvio ora scatta su un contenuto COMPLETO, non su
+  // un contenuto mutilo: saltare e la cosa giusta da fare.
   const terza = await contenuti.caricaContenuti();
-  uguale("DIFETTO: la terza chiamata salta, perche esercizi non e vuota", terza.saltato, true);
-  uguale("DIFETTO: e i 21 temi restano tali per sempre", conta("temi"), 21);
-  uguale("da quel momento gli esercizi di 'gestione' hanno un tema orfano",
-    conta("esercizi e LEFT JOIN temi t ON t.slug=e.tema_slug", "WHERE e.tema_slug='gestione' AND t.slug IS NULL"),
-    conta("esercizi", "WHERE tema_slug='gestione'"));
+  uguale("la terza chiamata salta, perche esercizi e piena", terza.saltato, true);
+  uguale("e i 22 temi restano 22", conta("temi"), 22);
 });
 
 await scenario("I2 · la connessione resta utilizzabile dopo la corsa: nessuna transazione appesa", async () => {
@@ -1237,6 +1257,13 @@ const verificheRosse = scenari.reduce((n, s) => n + s.errori.length, 0);
 console.log("");
 console.log("DIFETTI DELL'APP RIPRODOTTI (non corretti, la decisione e del coordinatore):");
 for (const d of difettiRiprodotti) console.log("  · " + d);
+if (correzioniSorvegliate.length) {
+  console.log("");
+  console.log(`CORREZIONI SORVEGLIATE (erano difetti riprodotti, ora sono guardie): ${correzioniSorvegliate.length}`);
+  console.log("Verdetto rovesciato: qui il verde vuol dire che la correzione regge. Se uno di");
+  console.log("questi torna rosso, e la correzione a essere regredita, non la prova a essere vecchia.");
+  for (const c of correzioniSorvegliate) console.log("  · " + c);
+}
 console.log("");
 console.log(`verifiche: ${verifiche - verificheRosse} su ${verifiche}`);
 console.log(`passati ${passati} su ${totali}`);
