@@ -196,6 +196,12 @@ def main():
     with open(os.path.join(a.cartella, "rapporto.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(rapporto) + "\n")
 
+    # Un codice per riga, per chi viene dopo: il rapporto è fatto per essere
+    # letto da una persona, questo per essere passato a trova_pdf.py senza
+    # doverlo ritagliare con una espressione regolare fragile.
+    with open(os.path.join(a.cartella, "falliti.txt"), "w", encoding="utf-8") as f:
+        f.write("".join(f"{c}\n" for c, _, _, _, _ in falliti))
+
     print(f"\nScaricati {len(scaricati)} · già presenti {len(saltati)} · falliti {len(falliti)} · solo web {len(solo_web)}")
     print(f"Manifesto : {manifesto_path}")
     print(f"Rapporto  : {os.path.join(a.cartella, 'rapporto.txt')}")

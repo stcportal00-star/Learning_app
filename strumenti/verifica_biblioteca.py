@@ -10,8 +10,13 @@ salvata con estensione .pdf, passava per un libro scaricato, entrava nel
 manifesto con il suo sha256 e l'app la importava come gli altri. Il guasto si
 scopriva aprendola — in viaggio, senza rete per rimediare.
 
-Sei link su diciannove sono stati segnalati come rotti. Quelli erano onesti.
-I pericolosi erano gli altri, che tacevano.
+La corsa successiva, col controllo sulla firma acceso, ha detto: "Scaricati 0 ·
+falliti 19". Tutti. I sei segnalati come rotti erano gli onesti; gli altri
+tredici erano pagine di presentazione che passavano per libri — compreso un
+"Causal Inference: What If" da 2,6 MB che era HTML.
+
+La biblioteca non ha mai contenuto un solo PDF vero. Per questo i test qui non
+si fidano di nessun conteggio: si fidano solo dei primi cinque byte.
 """
 import json
 import os
@@ -77,6 +82,52 @@ verifica("ciò che era già in cartella viene ricontrollato, non creduto",
 verifica("il rapporto dice dove è arrivata la richiesta dopo i redirect",
          "arrivato:" in _src and "r.geturl()" in _src)
 
+# --------------------------------------- il cercatore di indirizzi veri
+# Diciannove indirizzi sbagliati non si correggono a memoria: è indovinare
+# diciannove volte. Il cercatore li chiede alla pagina che li presenta e prova
+# ogni candidato leggendone i primi byte.
+import trova_pdf
+
+_doc = """<a href="/book/os4.pdf">Download the full book (PDF)</a>
+<a href="errata.pdf">Errata (PDF)</a>
+<a href="https://x.org/ch1.pdf">Chapter 1 (PDF)</a>
+<a href="/style.css">foglio di stile</a>
+<a href="#alto">torna su</a>
+<a href="mailto:a@b.c">scrivici</a>"""
+_base = "https://www.openintro.org/book/os/"
+_trovati = trova_pdf.collegamenti(_doc, _base)
+_indirizzi = [u for u, _ in _trovati]
+
+verifica("gli href relativi diventano assoluti",
+         "https://www.openintro.org/book/os4.pdf" in _indirizzi)
+verifica("gli href gia assoluti restano", "https://x.org/ch1.pdf" in _indirizzi)
+verifica("cio che non somiglia a un PDF e scartato",
+         not any("style.css" in u for u in _indirizzi))
+verifica("le ancore interne sono scartate", not any(u.endswith("#alto") for u in _indirizzi))
+verifica("mailto e scartato", not any(u.startswith("mailto:") for u in _indirizzi))
+
+_ordinati = sorted(_trovati, key=lambda c: -trova_pdf.punteggio(*c))
+verifica("il libro intero viene prima dell'errata e dei capitoli",
+         _ordinati[0][0].endswith("os4.pdf"))
+verifica("l'errata e penalizzata",
+         trova_pdf.punteggio("https://x.org/errata.pdf", "Errata")
+         < trova_pdf.punteggio("https://x.org/full.pdf", "Full book"))
+verifica("un capitolo e penalizzato",
+         trova_pdf.punteggio("https://x.org/chapter3.pdf", "Chapter 3")
+         < trova_pdf.punteggio("https://x.org/book.pdf", "Complete book"))
+
+_doppio = trova_pdf.collegamenti(
+    '<a href="/a.pdf">uno</a><a href="/a.pdf">due</a>', "https://x.org/")
+verifica("un indirizzo ripetuto conta una volta sola", len(_doppio) == 1)
+
+_trova_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "trova_pdf.py"), encoding="utf-8").read()
+verifica("il cercatore legge solo un assaggio, non scarica il libro",
+         trova_pdf.ASSAGGIO <= 8192 and "Range" in _trova_src)
+verifica("il cercatore esce sempre con 0", "return 0" in _trova_src)
+verifica("lo scaricatore lascia l'elenco dei falliti leggibile da un programma",
+         "falliti.txt" in _src)
+
 # --------------------------------------------------- catalogo e copia per l'app
 FORMATI = {"pdf", "html", "hub"}
 codici = [t[0] for t in BIBLIOTECA]
@@ -109,6 +160,12 @@ for t in BIBLIOTECA:
 # anno, R per il regolamento o L per la direttiva, numero a quattro cifre.
 # Questo test riapplica la regola: se un giorno si aggiunge una quarta norma
 # scrivendo l'indirizzo a mano, si accorge dell'errore qui e non in viaggio.
+#
+# Va detto chiaro: il percorso CELEX NON ha ancora risolto il download. La
+# corsa delle 18:33 restituisce "0 byte, text/html" per tutti e tre — un
+# fallimento diverso dal precedente, ma pur sempre un fallimento. Il test
+# garantisce che l'indirizzo sia derivato e non inventato, non che funzioni.
+# Se il cercatore troverà l'indirizzo vero, questa regola andrà rivista.
 ATTESO = {"BIB-23": ("reg", 2016, 679), "BIB-24": ("reg", 2024, 1689),
           "BIB-25": ("dir", 2022, 2555)}
 for codice, (tipo, anno, numero) in ATTESO.items():

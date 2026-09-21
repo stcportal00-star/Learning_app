@@ -13,6 +13,7 @@ on:
       - "strumenti/biblioteca_aperta.py"
       - "strumenti/scarica_biblioteca.py"
       - "strumenti/verifica_biblioteca.py"
+      - "strumenti/trova_pdf.py"
       - ".github/workflows/biblioteca.yml"
 
 permissions:
@@ -30,6 +31,32 @@ jobs:
 
       - name: Download dei testi aperti
         run: python3 strumenti/scarica_biblioteca.py --cartella biblioteca
+
+      # Gira solo quando qualcosa è fallito, e smette da sé quando la biblioteca
+      # è a posto. Serve a non correggere diciannove indirizzi a memoria: li
+      # chiede alla pagina che li presenta e prova ciascun candidato leggendone
+      # i primi byte. Quello che risponde %PDF- è giusto perché verificato.
+      - name: Ricerca degli indirizzi veri (solo se qualcosa è fallito)
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          set -uo pipefail
+          if [ ! -s biblioteca/falliti.txt ]; then
+            echo "Nessun fallimento: niente da cercare."
+            exit 0
+          fi
+          echo "Falliti: $(tr '\n' ' ' < biblioteca/falliti.txt)"
+          # shellcheck disable=SC2046
+          python3 strumenti/trova_pdf.py $(cat biblioteca/falliti.txt) \
+            | tee biblioteca/indirizzi-trovati.txt
+          {
+            echo "## Indirizzi veri trovati"
+            echo ""
+            echo '```'
+            tail -n 40 biblioteca/indirizzi-trovati.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Riepilogo
         run: |
