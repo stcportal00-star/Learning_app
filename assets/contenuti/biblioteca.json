@@ -138,7 +138,7 @@
   "tema_slug": "statistica",
   "trimestre": "T2",
   "licenza": "Accesso libero degli autori",
-  "url": "https://www.statlearning.com/",
+  "url": "https://www.statlearning.com/s/ISLR-Seventh-Printing.pdf",
   "formato": "pdf",
   "nota": "PDF ufficiale gratuito, edizioni R e Python."
  },
@@ -150,7 +150,7 @@
   "trimestre": "T2",
   "licenza": "Accesso libero degli autori",
   "url": "https://hastie.su.domains/ElemStatLearn/",
-  "formato": "pdf",
+  "formato": "html",
   "nota": "Versione avanzata del precedente."
  },
  {
@@ -160,7 +160,7 @@
   "tema_slug": "epidemiologia",
   "trimestre": "T2",
   "licenza": "Accesso libero degli autori",
-  "url": "https://miguelhernan.org/whatifbook",
+  "url": "https://miguelhernan.org/s/hernanrobins_WhatIf_19aug26.pdf",
   "formato": "pdf",
   "nota": "Confondimento, causalità, bias. Il testo più utile per il tuo dominio."
  },
@@ -292,7 +292,7 @@
   "tema_slug": "gdpr",
   "trimestre": "T3",
   "licenza": "Accesso libero ICRC",
-  "url": "https://www.icrc.org/en/data-protection-humanitarian-action-handbook",
+  "url": "https://www.cambridge.org/core/services/aop-cambridge-core/content/view/025CE3DFD1FAD908DD1412C20E49F955/9781009414623AR.pdf/Handbook_on_Data_Protection_in_Humanitarian_Action.pdf",
   "formato": "pdf",
   "nota": "Il testo chiave del tuo dominio. Priorità massima."
  },
@@ -303,7 +303,7 @@
   "tema_slug": "gdpr",
   "trimestre": "T3",
   "licenza": "Accesso libero OCHA",
-  "url": "https://centre.humdata.org/data-responsibility/",
+  "url": "https://data.humdata.org/dataset/2048a947-5714-4220-905b-e662cbcd14c8/resource/8bc5b848-8ece-4f1f-a78b-18dd972bb21a/download/data-responsibility-guidelines-2025.pdf",
   "formato": "pdf",
   "nota": "Operativo, non teorico."
  },
@@ -314,7 +314,7 @@
   "tema_slug": "ia",
   "trimestre": "T3",
   "licenza": "Pubblico dominio",
-  "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+  "url": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
   "formato": "pdf",
   "nota": "Govern, Map, Measure, Manage."
  },
@@ -413,7 +413,7 @@
   "tema_slug": "sicurezza",
   "trimestre": "T5",
   "licenza": "Pubblico dominio",
-  "url": "https://csrc.nist.gov/pubs/sp/800/61/r2/final",
+  "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf",
   "formato": "pdf",
   "nota": "Sequenza di risposta agli incidenti."
  },
@@ -424,7 +424,7 @@
   "tema_slug": "hardware",
   "trimestre": "T5",
   "licenza": "Pubblico dominio",
-  "url": "https://csrc.nist.gov/pubs/sp/800/34/r1/upd1/final",
+  "url": "https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-34r1.pdf",
   "formato": "pdf",
   "nota": "RTO, RPO, continuità operativa."
  },
@@ -435,7 +435,7 @@
   "tema_slug": "hardware",
   "trimestre": "T5",
   "licenza": "Pubblico dominio",
-  "url": "https://csrc.nist.gov/pubs/sp/800/124/r2/final",
+  "url": "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-124r2.pdf",
   "formato": "pdf",
   "nota": "Gestione di flotte di dispositivi sul campo."
  },
@@ -513,7 +513,7 @@
   "trimestre": "T6",
   "licenza": "Accesso libero",
   "url": "https://spherestandards.org/handbook/",
-  "formato": "pdf",
+  "formato": "html",
   "nota": "Standard minimi. Disponibile anche in italiano."
  },
  {
@@ -524,7 +524,7 @@
   "trimestre": "T6",
   "licenza": "Accesso libero",
   "url": "https://corehumanitarianstandard.org/the-standard",
-  "formato": "pdf",
+  "formato": "html",
   "nota": "I nove impegni."
  },
  {
@@ -535,7 +535,7 @@
   "trimestre": "T6",
   "licenza": "Accesso libero",
   "url": "https://www.alnap.org/help-library/evaluation-of-humanitarian-action-guide",
-  "formato": "pdf",
+  "formato": "html",
   "nota": "Metodologia di valutazione umanitaria."
  },
  {
@@ -546,7 +546,7 @@
   "trimestre": "T6",
   "licenza": "Accesso libero",
   "url": "https://smartmethodology.org/survey-planning-tools/smart-methodology/",
-  "formato": "pdf",
+  "formato": "html",
   "nota": "Campionamento a grappoli, design effect, indagini nutrizionali."
  },
  {
