@@ -830,3 +830,146 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
   ok("F/tipo fuori dai cinque: titolo undefined e corpo 'undefined minuti'",
      fuori.titolo === undefined && fuori.corpo.startsWith("undefined minuti"), JSON.stringify(fuori));
 }
+
+// ==========================================================================
+// PARTE G — il deposito della preferenza (lib/notifiche.ts + kv-store vero)
+// ==========================================================================
+{
+  pulisci();
+  // Nessuna chiave: si parte dal predefinito e NON si scrive niente. Un'app
+  // che inizializzasse il deposito al primo sguardo perderebbe la differenza
+  // fra "mai impostato" e "impostato cosi".
+  uguali("G/preferenza assente da il predefinito", await notifiche.leggiPromemoria(), PREDEFINITO);
+  ok("G/leggere non scrive nulla nel deposito", Kv.chiaviGrezze().length === 0,
+     JSON.stringify(Kv.chiaviGrezze()));
+  ok("G/la lettura tocca la chiave 'promemoria' e basta",
+     Kv.giornale.length === 1 && Kv.giornale[0].azione === "legge" && Kv.giornale[0].chiave === "promemoria",
+     JSON.stringify(Kv.giornale));
+
+  // Valore vuoto o illeggibile: la schermata si deve aprire lo stesso.
+  pulisci();
+  Kv.default.setItemSync("promemoria", "");
+  uguali("G/valore vuoto da il predefinito", await notifiche.leggiPromemoria(), PREDEFINITO);
+  Kv.default.setItemSync("promemoria", "{tronc");
+  uguali("G/valore illeggibile da il predefinito", await notifiche.leggiPromemoria(), PREDEFINITO);
+  Kv.default.setItemSync("promemoria", "[object Object]");
+  uguali("G/valore scritto male da una versione futura da il predefinito",
+         await notifiche.leggiPromemoria(), PREDEFINITO);
+
+  // Il deposito che si guasta in lettura: leggiPromemoria ha un catch.
+  pulisci();
+  Kv.guasto.lettura = "database is locked";
+  const letto = await nonLancia("G/deposito guasto in lettura non solleva", () => notifiche.leggiPromemoria());
+  uguali("G/deposito guasto in lettura da il predefinito", letto, PREDEFINITO);
+  Kv.guasto.lettura = null;
+
+  // Scrittura: la forma esatta di cio che finisce sul disco.
+  pulisci();
+  await notifiche.salvaPromemoria({ attivo: true, ora: 6, minuto: 45, tipo: "lettura" });
+  const grezzo = Kv.leggiGrezzo("promemoria");
+  uguali("G/salva scrive esattamente i quattro campi",
+         Object.keys(JSON.parse(grezzo)).sort(), ["attivo", "minuto", "ora", "tipo"]);
+  uguali("G/salva scrive i valori giusti", JSON.parse(grezzo),
+         { attivo: true, ora: 6, minuto: 45, tipo: "lettura" });
+  ok("G/salva usa la chiave 'promemoria'", Kv.chiaviGrezze().includes("promemoria"));
+  ok("G/salva non crea altre chiavi", Kv.chiaviGrezze().length === 1, JSON.stringify(Kv.chiaviGrezze()));
+  uguali("G/giro completo deposito -> lettura", await notifiche.leggiPromemoria(),
+         { attivo: true, ora: 6, minuto: 45, tipo: "lettura" });
+
+  // Campi estranei dell'oggetto in memoria non devono finire sul disco.
+  await notifiche.salvaPromemoria({ attivo: false, ora: 8, minuto: 0, tipo: "paper", extra: "x" });
+  uguali("G/i campi estranei non arrivano al disco",
+         Object.keys(JSON.parse(Kv.leggiGrezzo("promemoria"))).sort(),
+         ["attivo", "minuto", "ora", "tipo"]);
+
+  // Scritture rapide consecutive: vince l'ultima, senza residui.
+  await Promise.all([
+    notifiche.salvaPromemoria(acceso(5, 0)),
+    notifiche.salvaPromemoria(acceso(6, 0)),
+    notifiche.salvaPromemoria(acceso(9, 15)),
+  ]);
+  const dopoTre = await notifiche.leggiPromemoria();
+  ok("G/tre scritture rapide lasciano una sola chiave", Kv.chiaviGrezze().length === 1);
+  ok("G/tre scritture rapide: vince una delle tre, senza mescolanze",
+     [5, 6, 9].includes(dopoTre.ora) && (dopoTre.ora !== 9 || dopoTre.minuto === 15),
+     JSON.stringify(dopoTre));
+
+  // Il guasto in scrittura NON e gestito, a differenza della lettura: la
+  // promessa rigetta e il chiamante deve occuparsene.
+  pulisci();
+  Kv.guasto.scrittura = "disk I/O error";
+  await lancia("G/deposito guasto in scrittura rigetta (nessun catch in salvaPromemoria)",
+               () => notifiche.salvaPromemoria(acceso()), "disk I/O error");
+  ok("G/dopo un guasto in scrittura il deposito resta vuoto", Kv.chiaviGrezze().length === 0);
+  Kv.guasto.scrittura = null;
+
+  // Una preferenza corrotta non blocca: si rilegge il predefinito e si
+  // sovrascrive alla prima modifica. L'effetto collaterale va conosciuto:
+  // la preferenza vera e perduta senza che nessuno lo dica.
+  pulisci();
+  Kv.default.setItemSync("promemoria", '{"attivo":true,"ora":21,"minuto":30,"tipo":"ripasso"');
+  const rotta = await notifiche.leggiPromemoria();
+  ok("G/preferenza corrotta: l'utente vede spento alle 07:00", rotta.attivo === false && rotta.ora === 7);
+  await notifiche.salvaPromemoria(rotta);
+  ok("G/DIFETTO RIPRODOTTO: salvando dopo una lettura corrotta la preferenza vera sparisce senza avviso",
+     JSON.parse(Kv.leggiGrezzo("promemoria")).ora === 7);
+}
+
+// ==========================================================================
+// PARTE H — i permessi: chiedere solo quando serve, e mai insistere
+// ==========================================================================
+{
+  // Concesso: non si chiede mai, in nessuno dei due modi.
+  pulisci();
+  Banco.programmaPermesso({ status: "granted" });
+  ok("H/permesso concesso: permessoConcesso(false) e vero", (await notifiche.permessoConcesso(false)) === true);
+  ok("H/permesso concesso: permessoConcesso(true) e vero", (await notifiche.permessoConcesso(true)) === true);
+  ok("H/permesso concesso: nessuna richiesta sprecata", Banco.conteggioRichiestePermesso() === 0);
+
+  // Mai chiesto: leggere non deve far comparire il dialogo di sistema. E il
+  // percorso dell'apertura della schermata, dove un dialogo a sorpresa
+  // sarebbe esattamente cio che fa disinstallare l'app.
+  pulisci();
+  Banco.programmaPermesso({ status: "undetermined", canAskAgain: true });
+  ok("H/mai chiesto: permessoConcesso(false) e falso", (await notifiche.permessoConcesso(false)) === false);
+  ok("H/mai chiesto: leggere NON fa comparire il dialogo", Banco.conteggioRichiestePermesso() === 0);
+  uguali("H/mai chiesto: si e solo letto lo stato", azioni(), ["legge-permesso"]);
+
+  // Mai chiesto e l'utente concede.
+  pulisci();
+  Banco.programmaPermesso({ status: "undetermined", canAskAgain: true });
+  Banco.programmaRispostaRichiesta({ status: "granted" });
+  ok("H/richiesta accolta: restituisce vero", (await notifiche.permessoConcesso(true)) === true);
+  ok("H/richiesta accolta: chiesto una volta sola", Banco.conteggioRichiestePermesso() === 1);
+  uguali("H/richiesta accolta: prima si legge, poi si chiede", azioni(), ["legge-permesso", "chiede-permesso"]);
+
+  // Mai chiesto e l'utente nega.
+  pulisci();
+  Banco.programmaPermesso({ status: "undetermined", canAskAgain: true });
+  Banco.programmaRispostaRichiesta({ status: "denied", canAskAgain: false });
+  ok("H/richiesta negata: restituisce falso", (await notifiche.permessoConcesso(true)) === false);
+  ok("H/richiesta negata: chiesto una volta sola", Banco.conteggioRichiestePermesso() === 1);
+
+  // Negato per sempre: Android non ripropone il dialogo, e l'app non deve
+  // sprecare l'unica richiesta che il sistema concede.
+  pulisci();
+  Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+  ok("H/negato per sempre: permessoConcesso(false) e falso", (await notifiche.permessoConcesso(false)) === false);
+  ok("H/negato per sempre: permessoConcesso(true) resta falso", (await notifiche.permessoConcesso(true)) === false);
+  ok("H/negato per sempre: NON si chiede mai", Banco.conteggioRichiestePermesso() === 0);
+
+  // Negato ma ancora richiedibile (revoca dalle impostazioni): si puo chiedere.
+  pulisci();
+  Banco.programmaPermesso({ status: "denied", canAskAgain: true });
+  Banco.programmaRispostaRichiesta({ status: "granted" });
+  ok("H/negato ma richiedibile: chiedendo si puo riottenere", (await notifiche.permessoConcesso(true)) === true);
+  ok("H/negato ma richiedibile: una sola richiesta", Banco.conteggioRichiestePermesso() === 1);
+
+  // Il modulo nativo presente ma guasto: l'errore risale (permessoConcesso
+  // non ha catch). E il percorso che lascia bianca la schermata, vedi PARTE L.
+  pulisci();
+  Doppio.guasto.attivo = "Cannot find native module 'ExpoNotifications'";
+  await lancia("H/nativo guasto: permessoConcesso rigetta e non inghiotte",
+               () => notifiche.permessoConcesso(false), "ExpoNotifications");
+  Doppio.guasto.attivo = null;
+}
