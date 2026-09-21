@@ -22,6 +22,13 @@ let versioneSqlite: string | null = null;
  * Copia palestra.db dagli asset nella cartella dell'app, una sola volta,
  * e la apre in sola lettura. Gli esercizi che creano indici lavorano su una
  * copia temporanea, così l'originale resta intatto.
+ *
+ * La sola lettura è `PRAGMA query_only`, non un'opzione di apertura:
+ * `SQLiteOpenOptions` dell'SDK 54 non ne espone nessuna. E non è un filtro sul
+ * testo della query, che violerebbe l'invariante 3 — è SQLite stesso a
+ * respingere ogni scrittura, con "attempt to write a readonly database".
+ * È una proprietà della connessione e non del file: va richiesta a ogni
+ * apertura, e questa funzione apre una volta sola per avvio.
  */
 export async function apriPalestra(): Promise<SQLite.SQLiteDatabase> {
   if (palestra) return palestra;
@@ -36,6 +43,8 @@ export async function apriPalestra(): Promise<SQLite.SQLiteDatabase> {
   }
 
   palestra = await SQLite.openDatabaseAsync("palestra.db");
+  // Prima di qualunque altra cosa: da qui in poi la connessione non scrive più.
+  await palestra.execAsync("PRAGMA query_only = ON");
   const v = await palestra.getFirstAsync<{ v: string }>("SELECT sqlite_version() AS v");
   versioneSqlite = v?.v ?? null;
   return palestra;
@@ -52,7 +61,14 @@ export function versioneMotore(): string {
   return versioneSqlite ?? "sconosciuta";
 }
 
-/** Esecutore da passare a verifica(). Non modifica mai il database originale. */
+/**
+ * Esecutore da passare a verifica(). Non modifica mai il database originale.
+ *
+ * Una risposta di scrittura — UPDATE, DELETE, DROP battuti nel campo per
+ * distrazione o per curiosità — viene respinta da SQLite e risale a verifica(),
+ * che la restituisce come `errore_sql` con il messaggio del motore. L'utente
+ * legge perché, e la palestra resta intatta.
+ */
 export async function esegui(sql: string): Promise<{ colonne: string[]; righe: Riga[] }> {
   const d = await apriPalestra();
   const righe = await d.getAllAsync<Record<string, unknown>>(sql);
@@ -75,6 +91,10 @@ export async function eseguiConPreparazione(
   const d = await SQLite.openDatabaseAsync(temporanea);
   try {
     await d.execAsync(preparazione);
+    // La preparazione ha finito di scrivere: da qui la copia è in sola lettura
+    // come l'originale. Senza, la risposta dell'utente potrebbe alterare gli
+    // indici appena creati e falsare il confronto con la soluzione.
+    await d.execAsync("PRAGMA query_only = ON");
     const righe = await d.getAllAsync<Record<string, unknown>>(sql);
     const colonne = righe.length ? Object.keys(righe[0]) : [];
     return { colonne, righe: righe.map((r) => colonne.map((c) => r[c])) };
