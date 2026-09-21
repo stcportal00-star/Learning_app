@@ -973,3 +973,367 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
                () => notifiche.permessoConcesso(false), "ExpoNotifications");
   Doppio.guasto.attivo = null;
 }
+
+// ==========================================================================
+// PARTE I — applica(): portare il sistema nello stato descritto dalla preferenza
+// ==========================================================================
+{
+  const coda = () => Banco.giornale.filter((v) => v.azione === "programma").map((v) => v.notifica);
+
+  // ------------------------------------------------------------- spento
+  pulisci();
+  ok("I/spento: applica riesce", (await notifiche.applica(spento())) === true);
+  uguali("I/spento: cancella e basta, non legge il permesso e non crea canali",
+         azioni(), ["cancella-tutte"]);
+  ok("I/spento: nessuna notifica in coda", (await inCoda()) === 0);
+  ok("I/spento: nessun canale creato", Banco.canaliRegistrati().length === 0);
+  ok("I/spento: nessuna richiesta di permesso", Banco.conteggioRichiestePermesso() === 0);
+
+  // Spento con permesso negato per sempre: deve funzionare lo stesso.
+  pulisci();
+  Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+  ok("I/spento senza permesso: riesce comunque", (await notifiche.applica(spento())) === true);
+  ok("I/spento senza permesso: non chiede niente", Banco.conteggioRichiestePermesso() === 0);
+  uguali("I/spento senza permesso: solo la cancellazione", azioni(), ["cancella-tutte"]);
+
+  // -------------------------------------------------- acceso, permesso dato
+  pulisci();
+  ok("I/acceso: applica riesce", (await notifiche.applica(acceso(7, 30))) === true);
+  uguali("I/acceso: l'ordine e cancella, leggi permesso, canale, programma",
+         azioni(), ["cancella-tutte", "legge-permesso", "canale", "programma"]);
+  ok("I/acceso: esattamente una notifica in coda", (await inCoda()) === 1);
+  const unica = coda()[0];
+  uguali("I/acceso: il trigger e quotidiano all'ora chiesta, sul canale blocchi",
+         unica.trigger, { type: "daily", hour: 7, minute: 30, channelId: "blocchi" });
+  uguali("I/acceso: il contenuto e quello di testoNotifica",
+         { title: unica.content.title, body: unica.content.body },
+         { title: testoNotifica(acceso(7, 30)).titolo, body: testoNotifica(acceso(7, 30)).corpo });
+  const canale = Banco.canaliRegistrati()[0];
+  uguali("I/acceso: il canale Android e 'blocchi' con nome, importanza e suono",
+         { id: canale.id, name: canale.name, importance: canale.importance, sound: canale.sound },
+         { id: "blocchi", name: "Blocchi di studio", importance: 5, sound: "default" });
+  ok("I/acceso: il canale viene creato PRIMA di programmare",
+     azioni().indexOf("canale") < azioni().indexOf("programma"));
+  ok("I/acceso: non chiede il permesso, lo legge soltanto", Banco.conteggioRichiestePermesso() === 0);
+
+  // Mezzanotte e l'ultimo minuto: gli zeri non devono sparire per strada.
+  pulisci();
+  await notifiche.applica(acceso(0, 0));
+  uguali("I/mezzanotte: hour 0 e minute 0 arrivano al sistema", coda()[0].trigger,
+         { type: "daily", hour: 0, minute: 0, channelId: "blocchi" });
+  pulisci();
+  await notifiche.applica(acceso(23, 59));
+  uguali("I/23:59: arriva al sistema", coda()[0].trigger,
+         { type: "daily", hour: 23, minute: 59, channelId: "blocchi" });
+
+  // ------------------------------------------------- acceso, permesso mancante
+  pulisci();
+  Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+  ok("I/acceso senza permesso: restituisce FALSO, cosi lo schermo puo dirlo",
+     (await notifiche.applica(acceso())) === false);
+  uguali("I/acceso senza permesso: ha cancellato e letto, poi si e fermato",
+         azioni(), ["cancella-tutte", "legge-permesso"]);
+  ok("I/acceso senza permesso: coda vuota", (await inCoda()) === 0);
+  ok("I/acceso senza permesso: nessun canale creato", Banco.canaliRegistrati().length === 0);
+  ok("I/acceso senza permesso: non chiede il permesso da dentro applica",
+     Banco.conteggioRichiestePermesso() === 0);
+
+  // Permesso mai chiesto: applica non lo chiede (chiederlo qui sarebbe un
+  // dialogo a sorpresa all'avvio, dentro ripristina()).
+  pulisci();
+  Banco.programmaPermesso({ status: "undetermined", canAskAgain: true });
+  ok("I/permesso mai chiesto: applica restituisce falso senza chiedere",
+     (await notifiche.applica(acceso())) === false && Banco.conteggioRichiestePermesso() === 0);
+
+  // ------------------------------------------------------------ idempotenza
+  pulisci();
+  let sempreUna = true;
+  for (let i = 0; i < 10; i++) {
+    await notifiche.applica(acceso(7, 0));
+    if ((await inCoda()) !== 1) sempreUna = false;
+  }
+  ok("I/dieci applica consecutivi lasciano sempre UNA sola notifica", sempreUna);
+  ok("I/dieci applica: dieci cancellazioni e dieci programmazioni",
+     azioni().filter((a) => a === "cancella-tutte").length === 10
+     && azioni().filter((a) => a === "programma").length === 10);
+  ok("I/ogni programmazione e preceduta da una cancellazione, sempre",
+     Banco.giornale.every((v, i) => v.azione !== "programma"
+       || Banco.giornale.slice(0, i).some((w) => w.azione === "cancella-tutte")),
+     azioni().join(","));
+
+  // ------------------------------------------------------- cambio dell'ora
+  pulisci();
+  await notifiche.applica(acceso(7, 0));
+  await notifiche.applica(acceso(8, 30));
+  ok("I/cambio d'ora: resta una sola notifica", (await inCoda()) === 1);
+  uguali("I/cambio d'ora: e quella nuova, nessun residuo alle 07:00",
+         (await Doppio.getAllScheduledNotificationsAsync()).map((v) => `${v.trigger.hour}:${v.trigger.minute}`),
+         ["8:30"]);
+  await notifiche.applica(acceso(9, 0));
+  await notifiche.applica(acceso(10, 0));
+  await notifiche.applica(acceso(11, 0));
+  uguali("I/tre cambi d'ora di fila: una sola notifica, l'ultima",
+         (await Doppio.getAllScheduledNotificationsAsync()).map((v) => `${v.trigger.hour}:${v.trigger.minute}`),
+         ["11:0"]);
+  await notifiche.applica(acceso(11, 5));
+  uguali("I/cambio del solo minuto: una sola notifica",
+         (await Doppio.getAllScheduledNotificationsAsync()).map((v) => `${v.trigger.hour}:${v.trigger.minute}`),
+         ["11:5"]);
+
+  // ------------------------------------------------------- cambio del tipo
+  pulisci();
+  await notifiche.applica(acceso(7, 0, "mattina"));
+  await notifiche.applica(acceso(7, 0, "ripasso"));
+  ok("I/cambio di tipo: resta una sola notifica", (await inCoda()) === 1);
+  const dopoTipo = (await Doppio.getAllScheduledNotificationsAsync())[0];
+  uguali("I/cambio di tipo: cambia il contenuto, non l'ora",
+         { t: dopoTipo.content.title, h: dopoTipo.trigger.hour },
+         { t: "Ripasso", h: 7 });
+  // Tutti e cinque i tipi, uno dopo l'altro.
+  pulisci();
+  let tuttiUno = true;
+  for (const t of ["mattina", "artefatto", "lettura", "paper", "ripasso"]) {
+    await notifiche.applica(acceso(7, 0, t));
+    const v = (await Doppio.getAllScheduledNotificationsAsync());
+    if (v.length !== 1 || v[0].content.title !== testoNotifica(acceso(7, 0, t)).titolo) tuttiUno = false;
+  }
+  ok("I/i cinque tipi programmati in fila: sempre una sola notifica, contenuto giusto", tuttiUno);
+
+  // ------------------------------------------------------------------ iOS
+  pulisci();
+  RN.configuraPiattaforma("ios");
+  await notifiche.applica(acceso());
+  ok("I/su iOS non si crea nessun canale Android", Banco.canaliRegistrati().length === 0);
+  ok("I/su iOS si programma lo stesso", (await inCoda()) === 1);
+  ok("I/su iOS il channelId resta nel trigger, ignorato dalla piattaforma",
+     (await Doppio.getAllScheduledNotificationsAsync())[0].trigger.channelId === "blocchi");
+  RN.configuraPiattaforma("android");
+
+  // ------------------------------------------- ampiezza della cancellazione
+  // cancelAllScheduledNotificationsAsync non e ristretta al canale 'blocchi':
+  // oggi l'app non ha altre notifiche locali, quindi il difetto e latente,
+  // ma il giorno in cui ne aggiungesse una verrebbe spazzata via a ogni
+  // modifica del promemoria.
+  pulisci();
+  await Doppio.scheduleNotificationAsync({
+    content: { title: "Estranea", body: "di un'altra funzione dell'app" },
+    trigger: { type: "daily", hour: 20, minute: 0, channelId: "altro" },
+  });
+  ok("I/preparazione: la notifica estranea e in coda", (await inCoda()) === 1);
+  await notifiche.applica(acceso(7, 0));
+  const dopoApplica = await Doppio.getAllScheduledNotificationsAsync();
+  ok("I/DIFETTO RIPRODOTTO: applica cancella TUTTE le notifiche locali, non solo quelle del canale blocchi",
+     dopoApplica.length === 1 && dopoApplica[0].content.title !== "Estranea",
+     JSON.stringify(dopoApplica.map((v) => v.content.title)));
+  // Anche spegnendo: uno spegnimento del promemoria azzera tutto il sistema.
+  pulisci();
+  await Doppio.scheduleNotificationAsync({ content: { title: "Estranea" }, trigger: null });
+  await notifiche.applica(spento());
+  ok("I/DIFETTO RIPRODOTTO: anche spegnere il promemoria spazza via le notifiche estranee",
+     (await inCoda()) === 0);
+
+  // ------------------------------------------------------- ore impossibili
+  // applica non valida nulla: passa al sistema operativo quello che riceve.
+  // Oggi deserializza fa da guardia, ma una scorciatoia futura no.
+  pulisci();
+  await lancia("I/DIFETTO RIPRODOTTO: ora 99 non viene fermata da applica, la rifiuta il sistema",
+               () => notifiche.applica(acceso(99, 0)), "Trigger is invalid");
+  ok("I/dopo il rifiuto la coda e VUOTA: la cancellazione era gia avvenuta",
+     (await inCoda()) === 0);
+  ok("I/dopo il rifiuto il canale era gia stato creato",
+     Banco.canaliRegistrati().length === 1);
+  pulisci();
+  await lancia("I/ora frazionaria rifiutata dal sistema",
+               () => notifiche.applica(acceso(7.5, 0)), "Trigger is invalid");
+  pulisci();
+  await lancia("I/minuto negativo rifiutato dal sistema",
+               () => notifiche.applica(acceso(7, -1)), "Trigger is invalid");
+
+  // --------------------------------------------- guasto della programmazione
+  pulisci();
+  await notifiche.applica(acceso(7, 0));
+  ok("I/preparazione: una notifica buona in coda", (await inCoda()) === 1);
+  Banco.programmaErrore("Failed to schedule the notification");
+  await lancia("I/DIFETTO RIPRODOTTO: se la programmazione fallisce, applica rigetta senza rimediare",
+               () => notifiche.applica(acceso(8, 0)), "Failed to schedule");
+  ok("I/dopo il guasto l'utente resta SENZA notifiche: la vecchia era gia stata cancellata",
+     (await inCoda()) === 0);
+
+  // Il nativo guasto: applica rigetta subito, senza toccare niente.
+  pulisci();
+  Doppio.guasto.attivo = "Cannot find native module 'ExpoNotifications'";
+  await lancia("I/nativo assente: applica rigetta", () => notifiche.applica(acceso()), "ExpoNotifications");
+  Doppio.guasto.attivo = null;
+  ok("I/nativo assente: il giornale del sistema resta vuoto", Banco.giornale.length === 0);
+}
+
+// ==========================================================================
+// PARTE J — due applica() che si accavallano
+// ==========================================================================
+// applica() non ha lucchetto: cancella, poi programma. Se due chiamate si
+// interfogliano, le due cancellazioni avvengono PRIMA delle due
+// programmazioni e nella coda restano due notifiche quotidiane. Qui
+// l'interfogliamento non e lasciato al caso: lo si costruisce con i ritardi
+// dell'involucro, cosi la prova e ripetibile.
+{
+  // Scaldata: il primo import dinamico dentro applica() costa qualche tick in
+  // piu, e senza questa chiamata i due percorsi non partirebbero pari.
+  pulisci();
+  await notifiche.applica(acceso());
+
+  // --------------------------------- due accensioni identiche, senza ritardi
+  pulisci();
+  await Promise.all([notifiche.applica(acceso(7, 0)), notifiche.applica(acceso(7, 0))]);
+  ok("J/DIFETTO RIPRODOTTO: due applica concorrenti lasciano DUE notifiche quotidiane",
+     (await inCoda()) === 2, String(await inCoda()));
+  uguali("J/l'interfogliamento: le due cancellazioni precedono le due programmazioni",
+         azioni().filter((a) => a === "cancella-tutte" || a === "programma"),
+         ["cancella-tutte", "cancella-tutte", "programma", "programma"]);
+
+  // ------------------------------- due accensioni a ore diverse: suona due volte
+  pulisci();
+  await Promise.all([notifiche.applica(acceso(7, 0)), notifiche.applica(acceso(9, 0))]);
+  uguali("J/DIFETTO RIPRODOTTO: due ore diverse restano entrambe programmate",
+         (await Doppio.getAllScheduledNotificationsAsync())
+           .map((v) => `${v.trigger.hour}:${v.trigger.minute}`).sort(),
+         ["7:0", "9:0"]);
+
+  // --------------------- ordine di risoluzione invertito: l'esito CAMBIA
+  // La prima chiamata si attarda sulla cancellazione: quando riprende,
+  // cancella anche il lavoro gia finito della seconda. Stesso codice, stesso
+  // ingresso, esito diverso: e la firma di una corsa.
+  pulisci();
+  Doppio.ritardi.cancella.push(40, 0);
+  await Promise.all([notifiche.applica(acceso(7, 0)), notifiche.applica(acceso(9, 0))]);
+  uguali("J/DIFETTO RIPRODOTTO: invertendo l'ordine di risoluzione ne resta UNA sola, e non e l'ultima chiesta",
+         (await Doppio.getAllScheduledNotificationsAsync())
+           .map((v) => `${v.trigger.hour}:${v.trigger.minute}`),
+         ["7:0"]);
+  Doppio.azzeraInvolucro();
+
+  // ----------------- spegnimento che arriva mentre l'accensione e in volo
+  // Esito: la preferenza dice SPENTO e il telefono ha una notifica in coda.
+  pulisci();
+  Doppio.ritardi.programma.push(30);
+  const accensione = notifiche.applica(acceso(7, 0));
+  ok("J/lo spegnimento concorrente riesce", (await notifiche.applica(spento())) === true);
+  await accensione;
+  ok("J/DIFETTO RIPRODOTTO: spegnendo durante un'accensione resta programmata una notifica con la preferenza SPENTA",
+     (await inCoda()) === 1, String(await inCoda()));
+  Doppio.azzeraInvolucro();
+
+  // --------------- accensione che arriva mentre lo spegnimento e in volo
+  pulisci();
+  await notifiche.applica(acceso(7, 0));
+  Doppio.ritardi.cancella.push(30);
+  const spegnimento = notifiche.applica(spento());
+  await notifiche.applica(acceso(8, 0));
+  await spegnimento;
+  ok("J/DIFETTO RIPRODOTTO: accendendo durante uno spegnimento la notifica appena chiesta sparisce",
+     (await inCoda()) === 0, String(await inCoda()));
+  Doppio.azzeraInvolucro();
+
+  // ------------------------------------ tre accensioni sovrapposte: tre avvisi
+  pulisci();
+  await Promise.all([
+    notifiche.applica(acceso(7, 0)),
+    notifiche.applica(acceso(8, 0)),
+    notifiche.applica(acceso(9, 0)),
+  ]);
+  ok("J/DIFETTO RIPRODOTTO: tre applica sovrapposti lasciano TRE notifiche",
+     (await inCoda()) === 3, String(await inCoda()));
+
+  // -------------------------------- e invece in sequenza va sempre bene
+  // La controprova: il difetto sta nella sovrapposizione, non in applica().
+  pulisci();
+  for (const o of [7, 8, 9, 10, 11, 12]) await notifiche.applica(acceso(o, 0));
+  ok("J/in sequenza (con await) resta sempre una sola notifica", (await inCoda()) === 1);
+}
+
+// ==========================================================================
+// PARTE K — ripristina() all'avvio e programmate(): non devono mai sollevare
+// ==========================================================================
+{
+  // Preferenza spenta: ripristina non deve nemmeno toccare la coda di sistema.
+  pulisci();
+  await notifiche.salvaPromemoria(spento());
+  await Doppio.scheduleNotificationAsync({ content: { title: "Estranea" }, trigger: null });
+  const giornalePrima = Banco.giornale.length;
+  await notifiche.ripristina();
+  ok("K/promemoria spento: ripristina NON chiama applica e non tocca la coda",
+     Banco.giornale.length === giornalePrima, azioni().join(","));
+  ok("K/promemoria spento: la notifica estranea sopravvive all'avvio", (await inCoda()) === 1);
+  ok("K/promemoria spento: nessuna richiesta di permesso all'avvio",
+     Banco.conteggioRichiestePermesso() === 0);
+
+  // Preferenza assente: equivale a spento.
+  pulisci();
+  await nonLancia("K/preferenza assente: ripristina non solleva", () => notifiche.ripristina());
+  uguali("K/preferenza assente: non si tocca nulla", azioni(), []);
+
+  // Dopo un riavvio del telefono la coda di sistema e vuota: si riprogramma.
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(6, 15, "lettura"));
+  await notifiche.ripristina();
+  ok("K/dopo il riavvio ripristina riporta la coda a 1", (await inCoda()) === 1);
+  uguali("K/dopo il riavvio la notifica e quella della preferenza salvata",
+         (await Doppio.getAllScheduledNotificationsAsync())
+           .map((v) => ({ h: v.trigger.hour, m: v.trigger.minute, t: v.content.title })),
+         [{ h: 6, m: 15, t: "Blocco lettura" }]);
+  ok("K/ripristina non chiede mai il permesso all'utente", Banco.conteggioRichiestePermesso() === 0);
+
+  // Ripristina e idempotente quanto applica: due avvii di fila, una notifica.
+  await notifiche.ripristina();
+  await notifiche.ripristina();
+  ok("K/tre ripristina consecutivi lasciano una sola notifica", (await inCoda()) === 1);
+
+  // Permesso revocato nel frattempo: niente notifica, nessuna eccezione.
+  pulisci();
+  await notifiche.salvaPromemoria(acceso());
+  Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+  await nonLancia("K/permesso revocato: ripristina non solleva", () => notifiche.ripristina());
+  ok("K/permesso revocato: coda a 0", (await inCoda()) === 0);
+
+  // Deposito guasto: l'avvio prosegue comunque.
+  pulisci();
+  await notifiche.salvaPromemoria(acceso());
+  await notifiche.applica(acceso());
+  Kv.guasto.lettura = "database is locked";
+  await nonLancia("K/deposito guasto: ripristina non solleva", () => notifiche.ripristina());
+  ok("K/deposito guasto: legge il predefinito (spento) e quindi non tocca la coda",
+     (await inCoda()) === 1);
+  Kv.guasto.lettura = null;
+
+  // Modulo nativo assente: e il caso dell'invariante 8 andata storta.
+  pulisci();
+  await notifiche.salvaPromemoria(acceso());
+  Doppio.guasto.attivo = "Cannot find native module 'ExpoNotifications'";
+  await nonLancia("K/nativo assente: ripristina non solleva (l'app parte lo stesso)",
+                  () => notifiche.ripristina());
+  Doppio.guasto.attivo = null;
+
+  // Programmazione che fallisce all'avvio: idem.
+  pulisci();
+  await notifiche.salvaPromemoria(acceso());
+  Banco.programmaErrore("Failed to schedule the notification");
+  await nonLancia("K/programmazione fallita: ripristina non solleva", () => notifiche.ripristina());
+  ok("K/programmazione fallita: coda a 0, in silenzio", (await inCoda()) === 0);
+
+  // ------------------------------------------------------------ programmate()
+  pulisci();
+  ok("K/programmate() su coda vuota vale 0", (await notifiche.programmate()) === 0);
+  await notifiche.applica(acceso());
+  ok("K/programmate() conta quelle vere", (await notifiche.programmate()) === 1);
+  await Doppio.scheduleNotificationAsync({ content: { title: "Estranea" }, trigger: null });
+  ok("K/programmate() conta TUTTE le notifiche locali, non solo le nostre",
+     (await notifiche.programmate()) === 2);
+
+  Doppio.guasto.attivo = "Cannot find native module 'ExpoNotifications'";
+  const conteggioGuasto = await nonLancia("K/programmate() non solleva mai",
+                                          () => notifiche.programmate());
+  ok("K/DIFETTO RIPRODOTTO: programmate() in errore restituisce 0, indistinguibile da 'nessuna notifica'",
+     conteggioGuasto === 0, String(conteggioGuasto));
+  Doppio.guasto.attivo = null;
+  ok("K/...e infatti la coda vera in quel momento non era vuota",
+     (await notifiche.programmate()) === 2);
+}
