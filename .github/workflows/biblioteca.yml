@@ -1,0 +1,52 @@
+# Scarica la biblioteca aperta (52 testi con licenza dichiarata) sui server di
+# GitHub e la pubblica come release privata. Sostituisce lo script da eseguire
+# sul PC: dal telefono si scarica un solo archivio.
+#
+# Parte da sola quando cambia il catalogo — quindi anche al primo push del
+# progetto — oppure a mano. Nessuno deve ricordarsi di avviarla.
+name: biblioteca
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "strumenti/biblioteca_aperta.py"
+      - "strumenti/scarica_biblioteca.py"
+      - ".github/workflows/biblioteca.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  scarica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download dei testi aperti
+        run: python3 strumenti/scarica_biblioteca.py --cartella biblioteca
+
+      - name: Riepilogo
+        run: |
+          set -euo pipefail
+          {
+            echo "## Biblioteca"
+            echo ""
+            echo '```'
+            head -n 8 biblioteca/rapporto.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release privata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="biblioteca-$(date +%Y%m%d)"
+          (cd biblioteca && zip -q -r ../biblioteca.zip .)
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" biblioteca.zip biblioteca/rapporto.txt \
+            --prerelease \
+            --title "Biblioteca aperta — $(date +%d/%m/%Y)" \
+            --notes "Testi ad accesso libero con licenza dichiarata, per uso personale. Sul telefono: scarica biblioteca.zip, estrailo con l'app File, poi in Percorso usa Libreria > Importa biblioteca e seleziona manifesto.json insieme ai PDF. I link non riusciti sono elencati in rapporto.txt."

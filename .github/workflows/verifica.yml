@@ -1,0 +1,33 @@
+# Verifica a ogni push: typecheck, 99 test, e la garanzia sulla chiave di firma.
+# Veloce ed economico: gira sempre, prima di qualunque build.
+name: verifica
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verifica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verifica
+
+  # La chiave di firma non deve cambiare MAI: se cambiasse, gli aggiornamenti
+  # non si installerebbero e l'unico rimedio cancellerebbe i dati. Questo test
+  # esegue il passo reale di apk.yml in tutti gli scenari di transizione.
+  firma:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash .github/test-firma.sh

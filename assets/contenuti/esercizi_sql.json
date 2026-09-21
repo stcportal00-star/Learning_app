@@ -1,0 +1,3715 @@
+[
+ {
+  "id": "SQL-001",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Elenca nome, tipo e regione di tutte le strutture del Sud Sudan, ordinate per nome.",
+  "soluzione": "SELECT nome, tipo, regione FROM strutture WHERE paese = 'Sud Sudan' ORDER BY nome;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "nome",
+   "tipo",
+   "regione"
+  ],
+  "anteprima": [
+   [
+    "Centro Nutrizionale Unity 004",
+    "centro nutrizionale",
+    "Unity"
+   ],
+   [
+    "Clinica Mobile Warrap 008",
+    "clinica mobile",
+    "Warrap"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-002",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Quante strutture sono attualmente attive? Restituisci un'unica colonna chiamata strutture_attive.",
+  "soluzione": "SELECT count(*) AS strutture_attive FROM strutture WHERE attiva = 1;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "strutture_attive"
+  ],
+  "anteprima": [
+   [
+    "36"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-003",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Elenca i tipi di struttura distinti presenti nel database.",
+  "soluzione": "SELECT DISTINCT tipo FROM strutture ORDER BY tipo;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "tipo"
+  ],
+  "anteprima": [
+   [
+    "centro nutrizionale"
+   ],
+   [
+    "centro salute"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-004",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Mostra le 10 strutture con più letti: nome, paese, letti.",
+  "soluzione": "SELECT nome, paese, letti FROM strutture ORDER BY letti DESC LIMIT 10;",
+  "righe_attese": 10,
+  "colonne_attese": [
+   "nome",
+   "paese",
+   "letti"
+  ],
+  "anteprima": [
+   [
+    "Ospedale Jonglei 002",
+    "Sud Sudan",
+    "233"
+   ],
+   [
+    "Ospedale Borno 037",
+    "Nigeria",
+    "232"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-005",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Conta i pazienti per sesso.",
+  "soluzione": "SELECT sesso, count(*) AS pazienti FROM pazienti GROUP BY sesso ORDER BY sesso;",
+  "righe_attese": 2,
+  "colonne_attese": [
+   "sesso",
+   "pazienti"
+  ],
+  "anteprima": [
+   [
+    "F",
+    "1281"
+   ],
+   [
+    "M",
+    "1119"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-006",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Quanti pazienti risultano sfollati e quanti no? Usa un'etichetta leggibile ('sfollato' / 'non sfollato').",
+  "soluzione": "SELECT CASE sfollato WHEN 1 THEN 'sfollato' ELSE 'non sfollato' END AS stato,\n       count(*) AS pazienti FROM pazienti GROUP BY sfollato ORDER BY sfollato DESC;",
+  "righe_attese": 2,
+  "colonne_attese": [
+   "stato",
+   "pazienti"
+  ],
+  "anteprima": [
+   [
+    "sfollato",
+    "950"
+   ],
+   [
+    "non sfollato",
+    "1450"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-007",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Elenca le visite del tipo 'emergenza' avvenute nel 2026, con data, struttura_id ed esito. Ordina dalla più recente.",
+  "soluzione": "SELECT data, struttura_id, esito FROM visite WHERE tipo = 'emergenza' AND data >= '2026-01-01' ORDER BY data DESC;",
+  "righe_attese": 464,
+  "colonne_attese": [
+   "data",
+   "struttura_id",
+   "esito"
+  ],
+  "anteprima": [
+   [
+    "2026-08-30",
+    "27",
+    "riferito"
+   ],
+   [
+    "2026-08-29",
+    "26",
+    "abbandono"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-008",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Quali farmaci appartengono alla classe 'antibiotico'? Elenco senza duplicati.",
+  "soluzione": "SELECT DISTINCT farmaco FROM prescrizioni WHERE classe = 'antibiotico' ORDER BY farmaco;",
+  "righe_attese": 2,
+  "colonne_attese": [
+   "farmaco"
+  ],
+  "anteprima": [
+   [
+    "Amoxicillina"
+   ],
+   [
+    "Ceftriaxone"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-009",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Conta gli esami di laboratorio fuori range.",
+  "soluzione": "SELECT count(*) AS esami_fuori_range FROM esami_lab WHERE fuori_range = 1;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "esami_fuori_range"
+  ],
+  "anteprima": [
+   [
+    "486"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-010",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Elenca i progetti attivi con budget superiore a 1.000.000 EUR: nome, donatore, budget_eur.",
+  "soluzione": "SELECT nome, donatore, budget_eur FROM progetti WHERE stato = 'attivo' AND budget_eur > 1000000 ORDER BY budget_eur DESC;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "nome",
+   "donatore",
+   "budget_eur"
+  ],
+  "anteprima": [
+   [
+    "Wash Repubblica Democratica del Congo 2024",
+    "BHA/USAID",
+    "4289715.43"
+   ],
+   [
+    "Protezione Sud Sudan 2025",
+    "UNICEF",
+    "3912075.56"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-011",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Quali siti NON sono accessibili? Mostra nome, regione e popolazione_stimata.",
+  "soluzione": "SELECT nome, regione, popolazione_stimata FROM siti WHERE accessibile = 0 ORDER BY popolazione_stimata DESC;",
+  "righe_attese": 13,
+  "colonne_attese": [
+   "nome",
+   "regione",
+   "popolazione_stimata"
+  ],
+  "anteprima": [
+   [
+    "Insediamento Branciforte",
+    "Warrap",
+    "45697"
+   ],
+   [
+    "Sito Interminei",
+    "Sud Kivu",
+    "44973"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-012",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Elenca gli indicatori del settore nutrizione con la loro unità e direzione attesa.",
+  "soluzione": "SELECT codice, nome, unita, direzione FROM indicatori WHERE settore = 'nutrizione' ORDER BY codice;",
+  "righe_attese": 3,
+  "colonne_attese": [
+   "codice",
+   "nome",
+   "unita",
+   "direzione"
+  ],
+  "anteprima": [
+   [
+    "NUT-001",
+    "Prevalenza malnutrizione acuta globale",
+    "percentuale",
+    "diminuzione"
+   ],
+   [
+    "NUT-002",
+    "Tasso di guarigione programma nutrizionale",
+    "percentuale",
+    "aumento"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-013",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Calcola il valore totale distribuito in euro (quantita * costo_unitario_eur) per l'intero dataset. Arrotonda a 2 decimali.",
+  "soluzione": "SELECT round(sum(quantita * costo_unitario_eur), 2) AS valore_totale_eur FROM distribuzioni;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "valore_totale_eur"
+  ],
+  "anteprima": [
+   [
+    "6001747.54"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-014",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Quante valutazioni risultano NON completate?",
+  "soluzione": "SELECT count(*) AS non_completate FROM valutazioni WHERE completata = 0;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "non_completate"
+  ],
+  "anteprima": [
+   [
+    "40"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-015",
+  "tema": "qualita_dati",
+  "livello": 1,
+  "consegna": "Quante misurazioni hanno il valore mancante (NULL)?",
+  "soluzione": "SELECT count(*) AS valori_mancanti FROM misurazioni WHERE valore IS NULL;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "valori_mancanti"
+  ],
+  "anteprima": [
+   [
+    "72"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-016",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Elenca il personale internazionale (nazionale = 0) con ruolo e costo mensile, dal più costoso.",
+  "soluzione": "SELECT ruolo, costo_mensile_eur FROM personale WHERE nazionale = 0 ORDER BY costo_mensile_eur DESC;",
+  "righe_attese": 58,
+  "colonne_attese": [
+   "ruolo",
+   "costo_mensile_eur"
+  ],
+  "anteprima": [
+   [
+    "Medical Team Leader",
+    "6462.67"
+   ],
+   [
+    "Field Officer",
+    "6454.17"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-017",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Mostra le diagnosi croniche distinte con il loro codice ICD-10.",
+  "soluzione": "SELECT DISTINCT codice_icd10, descrizione FROM diagnosi WHERE cronica = 1 ORDER BY codice_icd10;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "codice_icd10",
+   "descrizione"
+  ],
+  "anteprima": [
+   [
+    "A15",
+    "Tubercolosi respiratoria"
+   ],
+   [
+    "B20",
+    "Malattia da HIV"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-018",
+  "tema": "sql_base",
+  "livello": 1,
+  "consegna": "Quante visite si sono concluse con esito 'decesso'?",
+  "soluzione": "SELECT count(*) AS decessi FROM visite WHERE esito = 'decesso';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "decessi"
+  ],
+  "anteprima": [
+   [
+    "148"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-019",
+  "tema": "sql_join",
+  "livello": 2,
+  "consegna": "Per ogni visita di tipo 'ricovero', mostra la data, il nome della struttura e il paese. Limita a 50 righe.",
+  "soluzione": "SELECT v.data, s.nome AS struttura, s.paese\nFROM visite v JOIN strutture s ON s.id = v.struttura_id\nWHERE v.tipo = 'ricovero' ORDER BY v.data DESC LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "data",
+   "struttura",
+   "paese"
+  ],
+  "anteprima": [
+   [
+    "2026-08-30",
+    "Posto Salute Borno 038",
+    "Nigeria"
+   ],
+   [
+    "2026-08-30",
+    "Centro Nutrizionale Sylhet 029",
+    "Bangladesh"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-020",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Conta le visite per paese, ordinando dal paese con più visite.",
+  "soluzione": "SELECT s.paese, count(*) AS visite\nFROM visite v JOIN strutture s ON s.id = v.struttura_id\nGROUP BY s.paese ORDER BY visite DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "Repubblica Democratica del Congo",
+    "1795"
+   ],
+   [
+    "Sud Sudan",
+    "1594"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-021",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Quali sono le 10 diagnosi più frequenti? Mostra codice, descrizione e numero di casi.",
+  "soluzione": "SELECT codice_icd10, descrizione, count(*) AS casi\nFROM diagnosi GROUP BY codice_icd10, descrizione ORDER BY casi DESC LIMIT 10;",
+  "righe_attese": 10,
+  "colonne_attese": [
+   "codice_icd10",
+   "descrizione",
+   "casi"
+  ],
+  "anteprima": [
+   [
+    "E11",
+    "Diabete mellito tipo 2",
+    "817"
+   ],
+   [
+    "B54",
+    "Malaria non specificata",
+    "804"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-022",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Calcola la durata media delle visite per tipo, arrotondata a 1 decimale, solo per i tipi con almeno 100 visite.",
+  "soluzione": "SELECT tipo, round(avg(durata_min), 1) AS durata_media, count(*) AS n\nFROM visite GROUP BY tipo HAVING count(*) >= 100 ORDER BY durata_media DESC;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "tipo",
+   "durata_media",
+   "n"
+  ],
+  "anteprima": [
+   [
+    "ricovero",
+    "47.2",
+    "875"
+   ],
+   [
+    "emergenza",
+    "47.1",
+    "980"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-023",
+  "tema": "sql_join",
+  "livello": 2,
+  "consegna": "Per ogni struttura attiva, conta i pazienti registrati. Includi anche le strutture con zero pazienti.",
+  "soluzione": "SELECT s.nome, s.tipo, count(p.id) AS pazienti\nFROM strutture s LEFT JOIN pazienti p ON p.struttura_registrazione_id = s.id\nWHERE s.attiva = 1 GROUP BY s.id, s.nome, s.tipo ORDER BY pazienti DESC;",
+  "righe_attese": 36,
+  "colonne_attese": [
+   "nome",
+   "tipo",
+   "pazienti"
+  ],
+  "anteprima": [
+   [
+    "Clinica Mobile Tanganyika 017",
+    "clinica mobile",
+    "84"
+   ],
+   [
+    "Clinica Mobile Nord Kivu 011",
+    "clinica mobile",
+    "82"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-024",
+  "tema": "epidemiologia",
+  "livello": 2,
+  "consegna": "Calcola il numero di visite per mese nel 2026 (formato AAAA-MM), ordinato cronologicamente.",
+  "soluzione": "SELECT strftime('%Y-%m', data) AS mese, count(*) AS visite\nFROM visite WHERE data >= '2026-01-01' GROUP BY mese ORDER BY mese;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "mese",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "2026-01",
+    "300"
+   ],
+   [
+    "2026-02",
+    "317"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-025",
+  "tema": "epidemiologia",
+  "livello": 2,
+  "consegna": "Calcola l'età in anni compiuti di ogni paziente alla data del 2026-09-01. Mostra codice, data_nascita ed eta. Limita a 30 righe.",
+  "soluzione": "SELECT codice, data_nascita,\n       CAST((julianday('2026-09-01') - julianday(data_nascita)) / 365.25 AS INTEGER) AS eta\nFROM pazienti ORDER BY eta DESC LIMIT 30;",
+  "righe_attese": 30,
+  "colonne_attese": [
+   "codice",
+   "data_nascita",
+   "eta"
+  ],
+  "anteprima": [
+   [
+    "PZ-000747",
+    "1934-07-14",
+    "92"
+   ],
+   [
+    "PZ-000979",
+    "1934-01-14",
+    "92"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-026",
+  "tema": "epidemiologia",
+  "livello": 2,
+  "consegna": "Distribuisci i pazienti nelle fasce d'età 0-4, 5-17, 18-49, 50+ al 2026-09-01 e contali per fascia.",
+  "soluzione": "SELECT CASE\n         WHEN (julianday('2026-09-01') - julianday(data_nascita))/365.25 < 5 THEN '0-4'\n         WHEN (julianday('2026-09-01') - julianday(data_nascita))/365.25 < 18 THEN '5-17'\n         WHEN (julianday('2026-09-01') - julianday(data_nascita))/365.25 < 50 THEN '18-49'\n         ELSE '50+' END AS fascia,\n       count(*) AS pazienti\nFROM pazienti GROUP BY fascia ORDER BY fascia;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "fascia",
+   "pazienti"
+  ],
+  "anteprima": [
+   [
+    "0-4",
+    "625"
+   ],
+   [
+    "18-49",
+    "801"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-027",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Per ogni esito di visita, calcola il numero e la percentuale sul totale, arrotondata a 2 decimali.",
+  "soluzione": "SELECT esito, count(*) AS n,\n       round(100.0 * count(*) / (SELECT count(*) FROM visite), 2) AS percentuale\nFROM visite GROUP BY esito ORDER BY n DESC;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "esito",
+   "n",
+   "percentuale"
+  ],
+  "anteprima": [
+   [
+    "dimesso",
+    "5069",
+    "70.24"
+   ],
+   [
+    "riferito",
+    "854",
+    "11.83"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-028",
+  "tema": "sql_join",
+  "livello": 2,
+  "consegna": "Elenca i 15 pazienti con più visite: codice paziente, regione e numero di visite.",
+  "soluzione": "SELECT p.codice, p.regione, count(v.id) AS visite\nFROM pazienti p JOIN visite v ON v.paziente_id = p.id\nGROUP BY p.id, p.codice, p.regione ORDER BY visite DESC, p.codice LIMIT 15;",
+  "righe_attese": 15,
+  "colonne_attese": [
+   "codice",
+   "regione",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "PZ-000012",
+    "Ituri",
+    "11"
+   ],
+   [
+    "PZ-000071",
+    "Upper Nile",
+    "11"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-029",
+  "tema": "meal",
+  "livello": 2,
+  "consegna": "Per ogni progetto, conta i siti e somma la popolazione stimata coperta.",
+  "soluzione": "SELECT pr.nome, pr.paese, count(si.id) AS siti, sum(si.popolazione_stimata) AS popolazione\nFROM progetti pr JOIN siti si ON si.progetto_id = pr.id\nGROUP BY pr.id, pr.nome, pr.paese ORDER BY popolazione DESC;",
+  "righe_attese": 22,
+  "colonne_attese": [
+   "nome",
+   "paese",
+   "siti",
+   "popolazione"
+  ],
+  "anteprima": [
+   [
+    "Salute Repubblica Democratica del Congo 2024",
+    "Repubblica Democratica del Congo",
+    "6",
+    "210333"
+   ],
+   [
+    "Sicurezza Alimentare Sud Sudan 2025",
+    "Sud Sudan",
+    "7",
+    "163644"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-030",
+  "tema": "meal",
+  "livello": 2,
+  "consegna": "Quante valutazioni sono state condotte per ciascuno strumento, e quanti intervistati in totale?",
+  "soluzione": "SELECT strumento, count(*) AS valutazioni, sum(intervistati) AS intervistati_totali\nFROM valutazioni GROUP BY strumento ORDER BY valutazioni DESC;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "strumento",
+   "valutazioni",
+   "intervistati_totali"
+  ],
+  "anteprima": [
+   [
+    "monitoraggio protezione",
+    "60",
+    "12631"
+   ],
+   [
+    "valutazione multisettoriale",
+    "59",
+    "12813"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-031",
+  "tema": "meal",
+  "livello": 2,
+  "consegna": "Per ogni indicatore, calcola il valore medio misurato (ignorando i NULL) e il numero di misurazioni valide.",
+  "soluzione": "SELECT i.codice, i.nome, round(avg(m.valore), 2) AS valore_medio, count(m.valore) AS misurazioni_valide\nFROM indicatori i JOIN misurazioni m ON m.indicatore_id = i.id\nGROUP BY i.id, i.codice, i.nome ORDER BY i.codice;",
+  "righe_attese": 14,
+  "colonne_attese": [
+   "codice",
+   "nome",
+   "valore_medio",
+   "misurazioni_valide"
+  ],
+  "anteprima": [
+   [
+    "ACC-001",
+    "Reclami ricevuti tramite meccanismo di feedback",
+    "55.36",
+    "67"
+   ],
+   [
+    "ACC-002",
+    "Reclami risolti entro 30 giorni",
+    "53.51",
+    "86"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-032",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Quali classi di farmaco sono prescritte più spesso? Mostra classe, numero di prescrizioni e giorni medi di terapia.",
+  "soluzione": "SELECT classe, count(*) AS prescrizioni, round(avg(giorni), 1) AS giorni_medi\nFROM prescrizioni GROUP BY classe ORDER BY prescrizioni DESC;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "classe",
+   "prescrizioni",
+   "giorni_medi"
+  ],
+  "anteprima": [
+   [
+    "integratore",
+    "1859",
+    "11.6"
+   ],
+   [
+    "antibiotico",
+    "1796",
+    "11.3"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-033",
+  "tema": "sql_join",
+  "livello": 2,
+  "consegna": "Per ogni paese, calcola quante diagnosi croniche sono state registrate.",
+  "soluzione": "SELECT s.paese, count(*) AS diagnosi_croniche\nFROM diagnosi d\nJOIN visite v ON v.id = d.visita_id\nJOIN strutture s ON s.id = v.struttura_id\nWHERE d.cronica = 1 GROUP BY s.paese ORDER BY diagnosi_croniche DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "diagnosi_croniche"
+  ],
+  "anteprima": [
+   [
+    "Repubblica Democratica del Congo",
+    "967"
+   ],
+   [
+    "Sud Sudan",
+    "886"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-034",
+  "tema": "qualita_dati",
+  "livello": 2,
+  "consegna": "Trova le misurazioni di bassa qualità: mostra codice indicatore, valore e la valutazione di origine. Limita a 40.",
+  "soluzione": "SELECT i.codice, m.valore, m.qualita, v.strumento, v.data\nFROM misurazioni m\nJOIN indicatori i ON i.id = m.indicatore_id\nJOIN valutazioni v ON v.id = m.valutazione_id\nWHERE m.qualita = 'bassa' ORDER BY v.data DESC LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "codice",
+   "valore",
+   "qualita",
+   "strumento",
+   "data"
+  ],
+  "anteprima": [
+   [
+    "ACC-002",
+    "81.88",
+    "bassa",
+    "valutazione multisettoriale",
+    "2026-08-28"
+   ],
+   [
+    "NUT-001",
+    "23.92",
+    "bassa",
+    "indagine SMART",
+    "2026-08-25"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-035",
+  "tema": "meal",
+  "livello": 2,
+  "consegna": "Calcola il costo totale del personale per progetto (costo mensile sommato), separando nazionale e internazionale.",
+  "soluzione": "SELECT pr.nome,\n       round(sum(CASE WHEN pe.nazionale = 1 THEN pe.costo_mensile_eur ELSE 0 END), 2) AS costo_nazionale,\n       round(sum(CASE WHEN pe.nazionale = 0 THEN pe.costo_mensile_eur ELSE 0 END), 2) AS costo_internazionale\nFROM progetti pr JOIN personale pe ON pe.progetto_id = pr.id\nGROUP BY pr.id, pr.nome ORDER BY costo_internazionale DESC;",
+  "righe_attese": 22,
+  "colonne_attese": [
+   "nome",
+   "costo_nazionale",
+   "costo_internazionale"
+  ],
+  "anteprima": [
+   [
+    "Salute Yemen 2023",
+    "12073.58",
+    "28245.79"
+   ],
+   [
+    "Salute Mentale Nigeria 2025",
+    "8716.33",
+    "21944.28"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-036",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Quante vaccinazioni sono state somministrate per tipo di vaccino, e qual è la dose media?",
+  "soluzione": "SELECT vaccino, count(*) AS dosi, round(avg(dose_num), 2) AS dose_media\nFROM vaccinazioni GROUP BY vaccino ORDER BY dosi DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "vaccino",
+   "dosi",
+   "dose_media"
+  ],
+  "anteprima": [
+   [
+    "Colera orale",
+    "252",
+    "2.15"
+   ],
+   [
+    "Pentavalente",
+    "236",
+    "2.02"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-037",
+  "tema": "epidemiologia",
+  "livello": 2,
+  "consegna": "Conta le visite per giorno della settimana (0=domenica). Ordina per numero di visite decrescente.",
+  "soluzione": "SELECT strftime('%w', data) AS giorno_settimana, count(*) AS visite\nFROM visite GROUP BY giorno_settimana ORDER BY visite DESC;",
+  "righe_attese": 7,
+  "colonne_attese": [
+   "giorno_settimana",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "4",
+    "1064"
+   ],
+   [
+    "5",
+    "1048"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-038",
+  "tema": "sql_join",
+  "livello": 2,
+  "consegna": "Elenca le strutture che non hanno mai registrato alcuna visita.",
+  "soluzione": "SELECT s.nome, s.tipo, s.paese FROM strutture s\nLEFT JOIN visite v ON v.struttura_id = s.id\nWHERE v.id IS NULL ORDER BY s.nome;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "nome",
+   "tipo",
+   "paese"
+  ],
+  "anteprima": [
+   [
+    "Centro Nutrizionale Artibonite 032",
+    "centro nutrizionale",
+    "Haiti"
+   ],
+   [
+    "Centro Nutrizionale Nord Kivu 009",
+    "centro nutrizionale",
+    "Repubblica Democratica del Congo"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-039",
+  "tema": "meal",
+  "livello": 2,
+  "consegna": "Per ogni articolo distribuito, calcola quantità totale, beneficiari totali e costo totale in euro.",
+  "soluzione": "SELECT articolo, sum(quantita) AS quantita, sum(beneficiari) AS beneficiari,\n       round(sum(quantita * costo_unitario_eur), 2) AS costo_eur\nFROM distribuzioni GROUP BY articolo ORDER BY costo_eur DESC;",
+  "righe_attese": 7,
+  "colonne_attese": [
+   "articolo",
+   "quantita",
+   "beneficiari",
+   "costo_eur"
+  ],
+  "anteprima": [
+   [
+    "kit cucina",
+    "53267",
+    "41855",
+    "1163008.41"
+   ],
+   [
+    "sapone",
+    "43656",
+    "34811",
+    "874623.63"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-040",
+  "tema": "sql_agg",
+  "livello": 2,
+  "consegna": "Calcola il tasso di esami fuori range per analita, in percentuale, con almeno 50 esami.",
+  "soluzione": "SELECT analita, count(*) AS esami,\n       round(100.0 * sum(fuori_range) / count(*), 2) AS pct_fuori_range\nFROM esami_lab GROUP BY analita HAVING count(*) >= 50 ORDER BY pct_fuori_range DESC;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "analita",
+   "esami",
+   "pct_fuori_range"
+  ],
+  "anteprima": [
+   [
+    "Emoglobina",
+    "586",
+    "27.99"
+   ],
+   [
+    "Glicemia",
+    "613",
+    "19.74"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-041",
+  "tema": "epidemiologia",
+  "livello": 2,
+  "consegna": "Calcola quanti giorni sono passati tra la registrazione del paziente e la sua prima visita. Mostra i 20 con attesa maggiore.",
+  "soluzione": "SELECT p.codice, p.data_registrazione, min(v.data) AS prima_visita,\n       CAST(julianday(min(v.data)) - julianday(p.data_registrazione) AS INTEGER) AS giorni_attesa\nFROM pazienti p JOIN visite v ON v.paziente_id = p.id\nGROUP BY p.id, p.codice, p.data_registrazione ORDER BY giorni_attesa DESC LIMIT 20;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "codice",
+   "data_registrazione",
+   "prima_visita",
+   "giorni_attesa"
+  ],
+  "anteprima": [
+   [
+    "PZ-001105",
+    "2023-02-09",
+    "2026-08-09",
+    "1277"
+   ],
+   [
+    "PZ-001824",
+    "2023-02-14",
+    "2026-08-05",
+    "1268"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-042",
+  "tema": "meal",
+  "livello": 2,
+  "consegna": "Per ogni donatore, somma il budget e conta i progetti. Mostra solo i donatori con più di un progetto.",
+  "soluzione": "SELECT donatore, count(*) AS progetti, round(sum(budget_eur), 2) AS budget_totale\nFROM progetti GROUP BY donatore HAVING count(*) > 1 ORDER BY budget_totale DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "donatore",
+   "progetti",
+   "budget_totale"
+  ],
+  "anteprima": [
+   [
+    "BHA/USAID",
+    "4",
+    "14013695.39"
+   ],
+   [
+    "SIDA",
+    "4",
+    "8730177.67"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-043",
+  "tema": "qualita_dati",
+  "livello": 2,
+  "consegna": "Verifica la coerenza referenziale: esistono visite che puntano a una struttura inesistente?",
+  "soluzione": "SELECT count(*) AS visite_orfane FROM visite v\nLEFT JOIN strutture s ON s.id = v.struttura_id WHERE s.id IS NULL;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "visite_orfane"
+  ],
+  "anteprima": [
+   [
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-044",
+  "tema": "qualita_dati",
+  "livello": 2,
+  "consegna": "Trova le distribuzioni in cui i beneficiari superano la quantità distribuita — anomalia logica da segnalare.",
+  "soluzione": "SELECT d.id, s.nome AS sito, d.articolo, d.quantita, d.beneficiari\nFROM distribuzioni d JOIN siti s ON s.id = d.sito_id\nWHERE d.beneficiari > d.quantita ORDER BY (d.beneficiari - d.quantita) DESC;",
+  "righe_attese": 73,
+  "colonne_attese": [
+   "id",
+   "sito",
+   "articolo",
+   "quantita",
+   "beneficiari"
+  ],
+  "anteprima": [
+   [
+    "5",
+    "Insediamento Ovadia",
+    "telo plastico",
+    "248",
+    "2262"
+   ],
+   [
+    "138",
+    "Insediamento Tosi",
+    "zanzariera",
+    "167",
+    "2159"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-045",
+  "tema": "sql_join",
+  "livello": 2,
+  "consegna": "Per ogni regione, conta pazienti sfollati e non sfollati in due colonne separate.",
+  "soluzione": "SELECT regione,\n       sum(CASE WHEN sfollato = 1 THEN 1 ELSE 0 END) AS sfollati,\n       sum(CASE WHEN sfollato = 0 THEN 1 ELSE 0 END) AS non_sfollati\nFROM pazienti GROUP BY regione ORDER BY sfollati DESC;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "regione",
+   "sfollati",
+   "non_sfollati"
+  ],
+  "anteprima": [
+   [
+    "Tanganyika",
+    "89",
+    "118"
+   ],
+   [
+    "Upper Nile",
+    "86",
+    "115"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-046",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Con una CTE, calcola il numero di visite per struttura e poi mostra solo le strutture sopra la media generale.",
+  "soluzione": "WITH per_struttura AS (\n  SELECT struttura_id, count(*) AS visite FROM visite GROUP BY struttura_id)\nSELECT s.nome, s.paese, ps.visite\nFROM per_struttura ps JOIN strutture s ON s.id = ps.struttura_id\nWHERE ps.visite > (SELECT avg(visite) FROM per_struttura)\nORDER BY ps.visite DESC;",
+  "righe_attese": 18,
+  "colonne_attese": [
+   "nome",
+   "paese",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "Posto Salute Borno 038",
+    "Nigeria",
+    "245"
+   ],
+   [
+    "Centro Nutrizionale Ituri 014",
+    "Repubblica Democratica del Congo",
+    "242"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-047",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Trova i pazienti con almeno una diagnosi cronica E almeno una prescrizione di antibiotico. Mostra codice e regione.",
+  "soluzione": "WITH cronici AS (\n  SELECT DISTINCT v.paziente_id FROM visite v\n  JOIN diagnosi d ON d.visita_id = v.id WHERE d.cronica = 1),\nantibiotici AS (\n  SELECT DISTINCT v.paziente_id FROM visite v\n  JOIN prescrizioni pr ON pr.visita_id = v.id WHERE pr.classe = 'antibiotico')\nSELECT p.codice, p.regione FROM pazienti p\nJOIN cronici c ON c.paziente_id = p.id\nJOIN antibiotici a ON a.paziente_id = p.id\nORDER BY p.codice LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "codice",
+   "regione"
+  ],
+  "anteprima": [
+   [
+    "PZ-000001",
+    "Jonglei"
+   ],
+   [
+    "PZ-000006",
+    "Ituri"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-048",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Usa INTERSECT per trovare le regioni che compaiono sia nella tabella pazienti sia nella tabella siti.",
+  "soluzione": "SELECT DISTINCT regione FROM pazienti INTERSECT SELECT DISTINCT regione FROM siti ORDER BY regione;",
+  "righe_attese": 19,
+  "colonne_attese": [
+   "regione"
+  ],
+  "anteprima": [
+   [
+    "Adamawa"
+   ],
+   [
+    "Aden"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-049",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Usa EXCEPT per trovare le regioni presenti nei siti umanitari ma senza alcun paziente registrato.",
+  "soluzione": "SELECT DISTINCT regione FROM siti EXCEPT SELECT DISTINCT regione FROM pazienti ORDER BY regione;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "regione"
+  ],
+  "anteprima": [
+   [
+    "Artibonite"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-050",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Con una subquery correlata, per ogni struttura mostra la data dell'ultima visita registrata.",
+  "soluzione": "SELECT s.nome, s.paese,\n       (SELECT max(v.data) FROM visite v WHERE v.struttura_id = s.id) AS ultima_visita\nFROM strutture s WHERE s.attiva = 1 ORDER BY ultima_visita DESC;",
+  "righe_attese": 36,
+  "colonne_attese": [
+   "nome",
+   "paese",
+   "ultima_visita"
+  ],
+  "anteprima": [
+   [
+    "Ospedale Jonglei 002",
+    "Sud Sudan",
+    "2026-08-30"
+   ],
+   [
+    "Clinica Mobile Warrap 008",
+    "Sud Sudan",
+    "2026-08-30"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-051",
+  "tema": "epidemiologia",
+  "livello": 3,
+  "consegna": "Identifica i pazienti con visite ripetute entro 7 giorni (possibile riammissione). Usa un self-join e mostra paziente, prima e seconda data.",
+  "soluzione": "SELECT p.codice, v1.data AS prima, v2.data AS seconda,\n       CAST(julianday(v2.data) - julianday(v1.data) AS INTEGER) AS giorni\nFROM visite v1\nJOIN visite v2 ON v2.paziente_id = v1.paziente_id AND v2.data > v1.data\nJOIN pazienti p ON p.id = v1.paziente_id\nWHERE julianday(v2.data) - julianday(v1.data) <= 7\nORDER BY giorni, p.codice LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "codice",
+   "prima",
+   "seconda",
+   "giorni"
+  ],
+  "anteprima": [
+   [
+    "PZ-000050",
+    "2026-08-29",
+    "2026-08-30",
+    "1"
+   ],
+   [
+    "PZ-000103",
+    "2026-08-08",
+    "2026-08-09",
+    "1"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-052",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Calcola, per paese, la percentuale di visite concluse con abbandono, usando una CTE per i totali.",
+  "soluzione": "WITH tot AS (\n  SELECT s.paese, count(*) AS visite,\n         sum(CASE WHEN v.esito = 'abbandono' THEN 1 ELSE 0 END) AS abbandoni\n  FROM visite v JOIN strutture s ON s.id = v.struttura_id GROUP BY s.paese)\nSELECT paese, visite, abbandoni, round(100.0 * abbandoni / visite, 2) AS pct_abbandono\nFROM tot ORDER BY pct_abbandono DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "visite",
+   "abbandoni",
+   "pct_abbandono"
+  ],
+  "anteprima": [
+   [
+    "Yemen",
+    "990",
+    "92",
+    "9.29"
+   ],
+   [
+    "Bangladesh",
+    "1433",
+    "123",
+    "8.58"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-053",
+  "tema": "meal",
+  "livello": 3,
+  "consegna": "Per ogni indicatore, calcola lo scostamento medio percentuale del valore rispetto al target, ignorando i NULL.",
+  "soluzione": "WITH s AS (\n  SELECT indicatore_id, valore, target FROM misurazioni\n  WHERE valore IS NOT NULL AND target IS NOT NULL AND target <> 0)\nSELECT i.codice, i.nome, round(avg(100.0 * (s.valore - s.target) / s.target), 2) AS scostamento_pct\nFROM s JOIN indicatori i ON i.id = s.indicatore_id\nGROUP BY i.id, i.codice, i.nome ORDER BY scostamento_pct;",
+  "righe_attese": 14,
+  "colonne_attese": [
+   "codice",
+   "nome",
+   "scostamento_pct"
+  ],
+  "anteprima": [
+   [
+    "NUT-002",
+    "Tasso di guarigione programma nutrizionale",
+    "-18.64"
+   ],
+   [
+    "SAL-001",
+    "Consultazioni ambulatoriali totali",
+    "-18.48"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-054",
+  "tema": "qualita_dati",
+  "livello": 3,
+  "consegna": "Costruisci un profilo di completezza della tabella misurazioni: righe totali, valori non nulli, percentuale di completezza per indicatore.",
+  "soluzione": "SELECT i.codice, count(*) AS righe, count(m.valore) AS non_nulli,\n       round(100.0 * count(m.valore) / count(*), 2) AS completezza_pct\nFROM misurazioni m JOIN indicatori i ON i.id = m.indicatore_id\nGROUP BY i.id, i.codice ORDER BY completezza_pct;",
+  "righe_attese": 14,
+  "colonne_attese": [
+   "codice",
+   "righe",
+   "non_nulli",
+   "completezza_pct"
+  ],
+  "anteprima": [
+   [
+    "NUT-002",
+    "90",
+    "78",
+    "86.67"
+   ],
+   [
+    "WAS-001",
+    "68",
+    "62",
+    "91.18"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-055",
+  "tema": "qualita_dati",
+  "livello": 3,
+  "consegna": "Trova le valutazioni marcate come completate ma che non hanno alcuna misurazione associata — incoerenza da correggere.",
+  "soluzione": "SELECT v.id, v.data, v.strumento, v.responsabile\nFROM valutazioni v LEFT JOIN misurazioni m ON m.valutazione_id = v.id\nWHERE v.completata = 1 AND m.id IS NULL ORDER BY v.data DESC;",
+  "righe_attese": 9,
+  "colonne_attese": [
+   "id",
+   "data",
+   "strumento",
+   "responsabile"
+  ],
+  "anteprima": [
+   [
+    "215",
+    "2026-06-23",
+    "indagine SMART",
+    "MEAL-08"
+   ],
+   [
+    "127",
+    "2026-06-19",
+    "RNA",
+    "MEAL-11"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-056",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Elenca le 5 diagnosi più frequenti per ciascun paese, usando una CTE con conteggio.",
+  "soluzione": "WITH conteggi AS (\n  SELECT s.paese, d.codice_icd10, d.descrizione, count(*) AS casi\n  FROM diagnosi d JOIN visite v ON v.id = d.visita_id\n  JOIN strutture s ON s.id = v.struttura_id\n  GROUP BY s.paese, d.codice_icd10, d.descrizione)\nSELECT paese, codice_icd10, descrizione, casi FROM (\n  SELECT *, row_number() OVER (PARTITION BY paese ORDER BY casi DESC) AS rn FROM conteggi)\nWHERE rn <= 5 ORDER BY paese, casi DESC;",
+  "righe_attese": 30,
+  "colonne_attese": [
+   "paese",
+   "codice_icd10",
+   "descrizione",
+   "casi"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "I10",
+    "Ipertensione essenziale",
+    "170"
+   ],
+   [
+    "Bangladesh",
+    "J18",
+    "Polmonite",
+    "170"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-057",
+  "tema": "meal",
+  "livello": 3,
+  "consegna": "Calcola il costo per beneficiario di ogni distribuzione e mostra le 20 meno efficienti.",
+  "soluzione": "SELECT d.id, s.nome AS sito, d.articolo,\n       round(d.quantita * d.costo_unitario_eur / NULLIF(d.beneficiari, 0), 2) AS costo_per_beneficiario\nFROM distribuzioni d JOIN siti s ON s.id = d.sito_id\nWHERE d.beneficiari > 0\nORDER BY costo_per_beneficiario DESC LIMIT 20;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "id",
+   "sito",
+   "articolo",
+   "costo_per_beneficiario"
+  ],
+  "anteprima": [
+   [
+    "176",
+    "Sito Pisaroni",
+    "sapone",
+    "1380.18"
+   ],
+   [
+    "7",
+    "Campo Benigni",
+    "coperta",
+    "770.95"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-058",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Con EXISTS, elenca i progetti che hanno almeno un sito non accessibile.",
+  "soluzione": "SELECT pr.nome, pr.paese, pr.stato FROM progetti pr\nWHERE EXISTS (SELECT 1 FROM siti s WHERE s.progetto_id = pr.id AND s.accessibile = 0)\nORDER BY pr.nome;",
+  "righe_attese": 10,
+  "colonne_attese": [
+   "nome",
+   "paese",
+   "stato"
+  ],
+  "anteprima": [
+   [
+    "Nutrizione Haiti 2024",
+    "Haiti",
+    "attivo"
+   ],
+   [
+    "Nutrizione Repubblica Democratica del Congo 2024",
+    "Repubblica Democratica del Congo",
+    "chiuso"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-059",
+  "tema": "sql_cte",
+  "livello": 3,
+  "consegna": "Con NOT EXISTS, elenca i pazienti registrati che non hanno mai avuto una visita.",
+  "soluzione": "SELECT p.codice, p.regione, p.data_registrazione FROM pazienti p\nWHERE NOT EXISTS (SELECT 1 FROM visite v WHERE v.paziente_id = p.id)\nORDER BY p.data_registrazione DESC LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "codice",
+   "regione",
+   "data_registrazione"
+  ],
+  "anteprima": [
+   [
+    "PZ-001522",
+    "Nord Kivu",
+    "2026-06-19"
+   ],
+   [
+    "PZ-000620",
+    "Cox's Bazar",
+    "2026-06-18"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-060",
+  "tema": "epidemiologia",
+  "livello": 3,
+  "consegna": "Calcola il numero di casi di malaria (B54) per mese e per paese nel 2026.",
+  "soluzione": "SELECT s.paese, strftime('%Y-%m', v.data) AS mese, count(*) AS casi\nFROM diagnosi d JOIN visite v ON v.id = d.visita_id\nJOIN strutture s ON s.id = v.struttura_id\nWHERE d.codice_icd10 = 'B54' AND v.data >= '2026-01-01'\nGROUP BY s.paese, mese ORDER BY s.paese, mese;",
+  "righe_attese": 48,
+  "colonne_attese": [
+   "paese",
+   "mese",
+   "casi"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "2026-01",
+    "5"
+   ],
+   [
+    "Bangladesh",
+    "2026-02",
+    "10"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-061",
+  "tema": "modellazione",
+  "livello": 3,
+  "consegna": "Costruisci una dimensione data degenerata: per ogni visita del 2026 estrai anno, mese, settimana ISO e trimestre.",
+  "soluzione": "SELECT v.id AS visita_id, v.data,\n       strftime('%Y', v.data) AS anno,\n       CAST(strftime('%m', v.data) AS INTEGER) AS mese,\n       CAST(strftime('%W', v.data) AS INTEGER) AS settimana,\n       (CAST(strftime('%m', v.data) AS INTEGER) + 2) / 3 AS trimestre\nFROM visite v WHERE v.data >= '2026-01-01' ORDER BY v.data LIMIT 100;",
+  "righe_attese": 100,
+  "colonne_attese": [
+   "visita_id",
+   "data",
+   "anno",
+   "mese",
+   "settimana",
+   "trimestre"
+  ],
+  "anteprima": [
+   [
+    "122",
+    "2026-01-01",
+    "2026",
+    "1",
+    "0",
+    "1"
+   ],
+   [
+    "205",
+    "2026-01-01",
+    "2026",
+    "1",
+    "0",
+    "1"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-062",
+  "tema": "modellazione",
+  "livello": 3,
+  "consegna": "Costruisci una fact table aggregata a grana 'struttura-mese': visite, pazienti distinti, decessi.",
+  "soluzione": "SELECT v.struttura_id, strftime('%Y-%m', v.data) AS mese,\n       count(*) AS visite, count(DISTINCT v.paziente_id) AS pazienti_distinti,\n       sum(CASE WHEN v.esito = 'decesso' THEN 1 ELSE 0 END) AS decessi\nFROM visite v GROUP BY v.struttura_id, mese ORDER BY mese DESC, visite DESC LIMIT 100;",
+  "righe_attese": 100,
+  "colonne_attese": [
+   "struttura_id",
+   "mese",
+   "visite",
+   "pazienti_distinti",
+   "decessi"
+  ],
+  "anteprima": [
+   [
+    "14",
+    "2026-08",
+    "26",
+    "21",
+    "1"
+   ],
+   [
+    "11",
+    "2026-08",
+    "23",
+    "16",
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-063",
+  "tema": "qualita_dati",
+  "livello": 3,
+  "consegna": "Rileva potenziali duplicati: pazienti con stessa data di nascita, stesso sesso e stessa regione.",
+  "soluzione": "SELECT data_nascita, sesso, regione, count(*) AS n, group_concat(codice) AS codici\nFROM pazienti GROUP BY data_nascita, sesso, regione HAVING count(*) > 1\nORDER BY n DESC LIMIT 40;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "data_nascita",
+   "sesso",
+   "regione",
+   "n",
+   "codici"
+  ],
+  "anteprima": [
+   [
+    "2009-11-09",
+    "F",
+    "Upper Nile",
+    "2",
+    "PZ-001922,PZ-002319"
+   ],
+   [
+    "2021-08-20",
+    "F",
+    "Tanganyika",
+    "2",
+    "PZ-000650,PZ-001477"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-064",
+  "tema": "meal",
+  "livello": 3,
+  "consegna": "Per ogni progetto attivo, calcola il budget mensile implicito (budget diviso durata in mesi).",
+  "soluzione": "SELECT nome, budget_eur,\n       CAST((julianday(data_fine) - julianday(data_inizio)) / 30.44 AS INTEGER) AS mesi,\n       round(budget_eur / NULLIF((julianday(data_fine) - julianday(data_inizio)) / 30.44, 0), 2) AS budget_mensile\nFROM progetti WHERE stato = 'attivo' ORDER BY budget_mensile DESC;",
+  "righe_attese": 9,
+  "colonne_attese": [
+   "nome",
+   "budget_eur",
+   "mesi",
+   "budget_mensile"
+  ],
+  "anteprima": [
+   [
+    "Sicurezza Alimentare Sud Sudan 2025",
+    "3591596.66",
+    "11",
+    "303689.45"
+   ],
+   [
+    "Protezione Sud Sudan 2025",
+    "3912075.56",
+    "17",
+    "220525.15"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-065",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Classifica le strutture per numero di visite all'interno di ciascun paese usando RANK().",
+  "soluzione": "WITH c AS (\n  SELECT s.paese, s.nome, count(*) AS visite\n  FROM visite v JOIN strutture s ON s.id = v.struttura_id\n  GROUP BY s.paese, s.nome)\nSELECT paese, nome, visite, RANK() OVER (PARTITION BY paese ORDER BY visite DESC) AS posizione\nFROM c ORDER BY paese, posizione;",
+  "righe_attese": 36,
+  "colonne_attese": [
+   "paese",
+   "nome",
+   "visite",
+   "posizione"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "Posto Salute Cox's Bazar 025",
+    "235",
+    "1"
+   ],
+   [
+    "Bangladesh",
+    "Centro Nutrizionale Sylhet 029",
+    "226",
+    "2"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-066",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola il totale cumulativo di visite per mese nel 2026 usando SUM() OVER.",
+  "soluzione": "WITH m AS (\n  SELECT strftime('%Y-%m', data) AS mese, count(*) AS visite\n  FROM visite WHERE data >= '2026-01-01' GROUP BY mese)\nSELECT mese, visite, sum(visite) OVER (ORDER BY mese ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS cumulato\nFROM m ORDER BY mese;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "mese",
+   "visite",
+   "cumulato"
+  ],
+  "anteprima": [
+   [
+    "2026-01",
+    "300",
+    "300"
+   ],
+   [
+    "2026-02",
+    "317",
+    "617"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-067",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola la media mobile a 3 mesi delle visite mensili del 2026.",
+  "soluzione": "WITH m AS (\n  SELECT strftime('%Y-%m', data) AS mese, count(*) AS visite\n  FROM visite WHERE data >= '2026-01-01' GROUP BY mese)\nSELECT mese, visite,\n       round(avg(visite) OVER (ORDER BY mese ROWS BETWEEN 2 PRECEDING AND CURRENT ROW), 1) AS media_mobile_3m\nFROM m ORDER BY mese;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "mese",
+   "visite",
+   "media_mobile_3m"
+  ],
+  "anteprima": [
+   [
+    "2026-01",
+    "300",
+    "300.0"
+   ],
+   [
+    "2026-02",
+    "317",
+    "308.5"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-068",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Per ogni paziente con più di una visita, calcola l'intervallo in giorni rispetto alla visita precedente usando LAG().",
+  "soluzione": "SELECT p.codice, v.data,\n       LAG(v.data) OVER (PARTITION BY v.paziente_id ORDER BY v.data) AS visita_precedente,\n       CAST(julianday(v.data) - julianday(LAG(v.data) OVER (PARTITION BY v.paziente_id ORDER BY v.data)) AS INTEGER) AS giorni\nFROM visite v JOIN pazienti p ON p.id = v.paziente_id\nORDER BY p.codice, v.data LIMIT 60;",
+  "righe_attese": 60,
+  "colonne_attese": [
+   "codice",
+   "data",
+   "visita_precedente",
+   "giorni"
+  ],
+  "anteprima": [
+   [
+    "PZ-000001",
+    "2025-07-08",
+    "None",
+    "None"
+   ],
+   [
+    "PZ-000001",
+    "2025-09-26",
+    "2025-07-08",
+    "80"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-069",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Per ogni struttura, mostra la prima e l'ultima visita registrata usando FIRST_VALUE e LAST_VALUE.",
+  "soluzione": "SELECT DISTINCT s.nome,\n       FIRST_VALUE(v.data) OVER (PARTITION BY s.id ORDER BY v.data\n                                 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS prima,\n       LAST_VALUE(v.data) OVER (PARTITION BY s.id ORDER BY v.data\n                                ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS ultima\nFROM visite v JOIN strutture s ON s.id = v.struttura_id ORDER BY s.nome;",
+  "righe_attese": 36,
+  "colonne_attese": [
+   "nome",
+   "prima",
+   "ultima"
+  ],
+  "anteprima": [
+   [
+    "Centro Nutrizionale Aden 021",
+    "2023-06-12",
+    "2026-08-30"
+   ],
+   [
+    "Centro Nutrizionale Aden 022",
+    "2023-04-04",
+    "2026-08-30"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-070",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Dividi le strutture in quartili per numero di visite usando NTILE(4).",
+  "soluzione": "WITH c AS (\n  SELECT s.nome, count(*) AS visite FROM visite v\n  JOIN strutture s ON s.id = v.struttura_id GROUP BY s.id, s.nome)\nSELECT nome, visite, NTILE(4) OVER (ORDER BY visite) AS quartile FROM c ORDER BY visite DESC;",
+  "righe_attese": 36,
+  "colonne_attese": [
+   "nome",
+   "visite",
+   "quartile"
+  ],
+  "anteprima": [
+   [
+    "Posto Salute Borno 038",
+    "245",
+    "4"
+   ],
+   [
+    "Centro Nutrizionale Ituri 014",
+    "242",
+    "4"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-071",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola la quota percentuale di ciascuna diagnosi sul totale del proprio paese, usando una window function.",
+  "soluzione": "WITH c AS (\n  SELECT s.paese, d.codice_icd10, count(*) AS casi\n  FROM diagnosi d JOIN visite v ON v.id = d.visita_id\n  JOIN strutture s ON s.id = v.struttura_id\n  GROUP BY s.paese, d.codice_icd10)\nSELECT paese, codice_icd10, casi,\n       round(100.0 * casi / sum(casi) OVER (PARTITION BY paese), 2) AS quota_pct\nFROM c ORDER BY paese, quota_pct DESC;",
+  "righe_attese": 84,
+  "colonne_attese": [
+   "paese",
+   "codice_icd10",
+   "casi",
+   "quota_pct"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "I10",
+    "170",
+    "7.9"
+   ],
+   [
+    "Bangladesh",
+    "J18",
+    "170",
+    "7.9"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-072",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Per ogni indicatore, individua la misurazione più recente usando ROW_NUMBER() su data della valutazione.",
+  "soluzione": "WITH r AS (\n  SELECT i.codice, m.valore, v.data,\n         row_number() OVER (PARTITION BY i.id ORDER BY v.data DESC, m.id DESC) AS rn\n  FROM misurazioni m JOIN indicatori i ON i.id = m.indicatore_id\n  JOIN valutazioni v ON v.id = m.valutazione_id)\nSELECT codice, valore, data FROM r WHERE rn = 1 ORDER BY codice;",
+  "righe_attese": 14,
+  "colonne_attese": [
+   "codice",
+   "valore",
+   "data"
+  ],
+  "anteprima": [
+   [
+    "ACC-001",
+    "31.52",
+    "2026-08-25"
+   ],
+   [
+    "ACC-002",
+    "81.88",
+    "2026-08-28"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-073",
+  "tema": "epidemiologia",
+  "livello": 4,
+  "consegna": "Costruisci una analisi di coorte: per ogni mese di registrazione del 2026, quanti pazienti hanno avuto almeno una visita nei 30 giorni successivi.",
+  "soluzione": "WITH coorte AS (\n  SELECT p.id, strftime('%Y-%m', p.data_registrazione) AS mese_coorte, p.data_registrazione\n  FROM pazienti p WHERE p.data_registrazione >= '2026-01-01'),\nattivi AS (\n  SELECT c.mese_coorte, c.id,\n         max(CASE WHEN julianday(v.data) - julianday(c.data_registrazione) BETWEEN 0 AND 30 THEN 1 ELSE 0 END) AS attivo\n  FROM coorte c LEFT JOIN visite v ON v.paziente_id = c.id\n  GROUP BY c.mese_coorte, c.id)\nSELECT mese_coorte, count(*) AS coorte, sum(attivo) AS attivi_30gg,\n       round(100.0 * sum(attivo) / count(*), 2) AS retention_pct\nFROM attivi GROUP BY mese_coorte ORDER BY mese_coorte;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "mese_coorte",
+   "coorte",
+   "attivi_30gg",
+   "retention_pct"
+  ],
+  "anteprima": [
+   [
+    "2026-01",
+    "57",
+    "18",
+    "31.58"
+   ],
+   [
+    "2026-02",
+    "47",
+    "18",
+    "38.3"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-074",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola la variazione mese su mese (assoluta e percentuale) delle visite nel 2026.",
+  "soluzione": "WITH m AS (\n  SELECT strftime('%Y-%m', data) AS mese, count(*) AS visite\n  FROM visite WHERE data >= '2026-01-01' GROUP BY mese)\nSELECT mese, visite,\n       visite - LAG(visite) OVER (ORDER BY mese) AS delta,\n       round(100.0 * (visite - LAG(visite) OVER (ORDER BY mese)) / LAG(visite) OVER (ORDER BY mese), 2) AS delta_pct\nFROM m ORDER BY mese;",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "mese",
+   "visite",
+   "delta",
+   "delta_pct"
+  ],
+  "anteprima": [
+   [
+    "2026-01",
+    "300",
+    "None",
+    "None"
+   ],
+   [
+    "2026-02",
+    "317",
+    "17",
+    "5.67"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-075",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Per ogni paziente, numera cronologicamente le sue visite e mostra solo la terza visita di ciascuno.",
+  "soluzione": "WITH n AS (\n  SELECT v.paziente_id, v.data, v.tipo,\n         row_number() OVER (PARTITION BY v.paziente_id ORDER BY v.data, v.id) AS num\n  FROM visite v)\nSELECT p.codice, n.data, n.tipo FROM n JOIN pazienti p ON p.id = n.paziente_id\nWHERE n.num = 3 ORDER BY n.data LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "codice",
+   "data",
+   "tipo"
+  ],
+  "anteprima": [
+   [
+    "PZ-001431",
+    "2023-07-09",
+    "follow-up"
+   ],
+   [
+    "PZ-000376",
+    "2023-08-25",
+    "ambulatoriale"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-076",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Usa PERCENT_RANK() per posizionare i progetti in base al budget.",
+  "soluzione": "SELECT nome, donatore, budget_eur,\n       round(PERCENT_RANK() OVER (ORDER BY budget_eur), 3) AS percentile\nFROM progetti ORDER BY budget_eur DESC;",
+  "righe_attese": 22,
+  "colonne_attese": [
+   "nome",
+   "donatore",
+   "budget_eur",
+   "percentile"
+  ],
+  "anteprima": [
+   [
+    "Wash Repubblica Democratica del Congo 2024",
+    "BHA/USAID",
+    "4289715.43",
+    "1.0"
+   ],
+   [
+    "Protezione Sud Sudan 2025",
+    "UNICEF",
+    "3912075.56",
+    "0.952"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-077",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola la mediana approssimata della durata delle visite per tipo, usando NTILE o row_number.",
+  "soluzione": "WITH ordinate AS (\n  SELECT tipo, durata_min,\n         row_number() OVER (PARTITION BY tipo ORDER BY durata_min) AS rn,\n         count(*) OVER (PARTITION BY tipo) AS n\n  FROM visite WHERE durata_min IS NOT NULL)\nSELECT tipo, round(avg(durata_min), 1) AS mediana\nFROM ordinate WHERE rn IN ((n + 1) / 2, (n + 2) / 2)\nGROUP BY tipo ORDER BY tipo;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "tipo",
+   "mediana"
+  ],
+  "anteprima": [
+   [
+    "ambulatoriale",
+    "46.0"
+   ],
+   [
+    "emergenza",
+    "48.0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-078",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Costruisci un pivot: visite per tipo (colonne) e per paese (righe), usando aggregazione condizionale.",
+  "soluzione": "SELECT s.paese,\n       sum(CASE WHEN v.tipo = 'ambulatoriale' THEN 1 ELSE 0 END) AS ambulatoriale,\n       sum(CASE WHEN v.tipo = 'ricovero' THEN 1 ELSE 0 END) AS ricovero,\n       sum(CASE WHEN v.tipo = 'emergenza' THEN 1 ELSE 0 END) AS emergenza,\n       sum(CASE WHEN v.tipo = 'follow-up' THEN 1 ELSE 0 END) AS follow_up,\n       sum(CASE WHEN v.tipo = 'nutrizionale' THEN 1 ELSE 0 END) AS nutrizionale\nFROM visite v JOIN strutture s ON s.id = v.struttura_id\nGROUP BY s.paese ORDER BY s.paese;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "ambulatoriale",
+   "ricovero",
+   "emergenza",
+   "follow_up",
+   "nutrizionale"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "675",
+    "173",
+    "190",
+    "267",
+    "128"
+   ],
+   [
+    "Haiti",
+    "256",
+    "63",
+    "78",
+    "122",
+    "53"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-079",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Con una CTE ricorsiva, genera il calendario di tutti i mesi del 2026 e affiancagli il numero di visite (zero dove non ce ne sono).",
+  "soluzione": "WITH RECURSIVE mesi(m) AS (\n  SELECT '2026-01' UNION ALL\n  SELECT strftime('%Y-%m', date(m || '-01', '+1 month')) FROM mesi WHERE m < '2026-12')\nSELECT mesi.m AS mese, COALESCE(v.visite, 0) AS visite\nFROM mesi LEFT JOIN (\n  SELECT strftime('%Y-%m', data) AS mese, count(*) AS visite\n  FROM visite GROUP BY mese) v ON v.mese = mesi.m\nORDER BY mesi.m;",
+  "righe_attese": 12,
+  "colonne_attese": [
+   "mese",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "2026-01",
+    "300"
+   ],
+   [
+    "2026-02",
+    "317"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-080",
+  "tema": "meal",
+  "livello": 4,
+  "consegna": "Per ogni progetto calcola il burn rate implicito: costo mensile del personale diviso budget mensile, in percentuale.",
+  "soluzione": "WITH costi AS (\n  SELECT progetto_id, sum(costo_mensile_eur) AS costo_personale\n  FROM personale GROUP BY progetto_id),\nbudget AS (\n  SELECT id, budget_eur / NULLIF((julianday(data_fine) - julianday(data_inizio)) / 30.44, 0) AS budget_mensile\n  FROM progetti)\nSELECT pr.nome, round(c.costo_personale, 2) AS costo_personale,\n       round(b.budget_mensile, 2) AS budget_mensile,\n       round(100.0 * c.costo_personale / NULLIF(b.budget_mensile, 0), 1) AS quota_personale_pct\nFROM progetti pr JOIN costi c ON c.progetto_id = pr.id JOIN budget b ON b.id = pr.id\nORDER BY quota_personale_pct DESC;",
+  "righe_attese": 22,
+  "colonne_attese": [
+   "nome",
+   "costo_personale",
+   "budget_mensile",
+   "quota_personale_pct"
+  ],
+  "anteprima": [
+   [
+    "Wash Repubblica Democratica del Congo 2024",
+    "33111.26",
+    "20879.37",
+    "158.6"
+   ],
+   [
+    "Wash Sud Sudan 2024",
+    "29504.25",
+    "31498.71",
+    "93.7"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-081",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Costruisci un cruscotto di qualità dei dati: per ogni tabella chiave, righe totali e una metrica di anomalia in un'unica risultante (usa UNION ALL).",
+  "soluzione": "SELECT 'misurazioni' AS tabella, count(*) AS righe,\n       sum(CASE WHEN valore IS NULL THEN 1 ELSE 0 END) AS anomalie FROM misurazioni\nUNION ALL\nSELECT 'visite', count(*), sum(CASE WHEN durata_min IS NULL OR durata_min <= 0 THEN 1 ELSE 0 END) FROM visite\nUNION ALL\nSELECT 'distribuzioni', count(*), sum(CASE WHEN beneficiari > quantita THEN 1 ELSE 0 END) FROM distribuzioni\nUNION ALL\nSELECT 'valutazioni', count(*), sum(CASE WHEN completata = 0 THEN 1 ELSE 0 END) FROM valutazioni\nORDER BY anomalie DESC;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "tabella",
+   "righe",
+   "anomalie"
+  ],
+  "anteprima": [
+   [
+    "distribuzioni",
+    "198",
+    "73"
+   ],
+   [
+    "misurazioni",
+    "1078",
+    "72"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-082",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Individua le strutture il cui numero di visite è calato per due mesi consecutivi nel 2026.",
+  "soluzione": "WITH m AS (\n  SELECT struttura_id, strftime('%Y-%m', data) AS mese, count(*) AS visite\n  FROM visite WHERE data >= '2026-01-01' GROUP BY struttura_id, mese),\nd AS (\n  SELECT struttura_id, mese, visite,\n         LAG(visite, 1) OVER (PARTITION BY struttura_id ORDER BY mese) AS m1,\n         LAG(visite, 2) OVER (PARTITION BY struttura_id ORDER BY mese) AS m2\n  FROM m)\nSELECT s.nome, d.mese, d.m2 AS due_mesi_fa, d.m1 AS mese_scorso, d.visite AS corrente\nFROM d JOIN strutture s ON s.id = d.struttura_id\nWHERE d.m1 IS NOT NULL AND d.m2 IS NOT NULL AND d.visite < d.m1 AND d.m1 < d.m2\nORDER BY d.mese DESC, s.nome LIMIT 40;",
+  "righe_attese": 7,
+  "colonne_attese": [
+   "nome",
+   "mese",
+   "due_mesi_fa",
+   "mese_scorso",
+   "corrente"
+  ],
+  "anteprima": [
+   [
+    "Posto Salute Upper Nile 005",
+    "2026-08",
+    "16",
+    "13",
+    "9"
+   ],
+   [
+    "Centro Salute Ouest 034",
+    "2026-06",
+    "15",
+    "12",
+    "10"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-083",
+  "tema": "epidemiologia",
+  "livello": 4,
+  "consegna": "Calcola il tasso di letalità (case fatality rate) per diagnosi: decessi sul totale delle visite con quella diagnosi, solo per diagnosi con almeno 200 casi.",
+  "soluzione": "SELECT d.codice_icd10, d.descrizione, count(*) AS casi,\n       sum(CASE WHEN v.esito = 'decesso' THEN 1 ELSE 0 END) AS decessi,\n       round(100.0 * sum(CASE WHEN v.esito = 'decesso' THEN 1 ELSE 0 END) / count(*), 2) AS cfr_pct\nFROM diagnosi d JOIN visite v ON v.id = d.visita_id\nGROUP BY d.codice_icd10, d.descrizione HAVING count(*) >= 200\nORDER BY cfr_pct DESC;",
+  "righe_attese": 14,
+  "colonne_attese": [
+   "codice_icd10",
+   "descrizione",
+   "casi",
+   "decessi",
+   "cfr_pct"
+  ],
+  "anteprima": [
+   [
+    "J18",
+    "Polmonite",
+    "758",
+    "22",
+    "2.9"
+   ],
+   [
+    "L03",
+    "Cellulite",
+    "758",
+    "22",
+    "2.9"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-084",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Simula una slowly changing dimension di tipo 2 sul personale: per ogni progetto e ruolo, mostra l'intervallo di validità e se il record è corrente.",
+  "soluzione": "SELECT pr.nome AS progetto, pe.ruolo, pe.data_inizio,\n       COALESCE(pe.data_fine, '9999-12-31') AS data_fine_effettiva,\n       CASE WHEN pe.data_fine IS NULL THEN 1 ELSE 0 END AS corrente\nFROM personale pe JOIN progetti pr ON pr.id = pe.progetto_id\nORDER BY pr.nome, pe.ruolo, pe.data_inizio LIMIT 60;",
+  "righe_attese": 60,
+  "colonne_attese": [
+   "progetto",
+   "ruolo",
+   "data_inizio",
+   "data_fine_effettiva",
+   "corrente"
+  ],
+  "anteprima": [
+   [
+    "Nutrizione Haiti 2024",
+    "Data Analyst",
+    "2027-04-18",
+    "9999-12-31",
+    "1"
+   ],
+   [
+    "Nutrizione Haiti 2024",
+    "Epidemiologo",
+    "2026-11-11",
+    "9999-12-31",
+    "1"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-085",
+  "tema": "meal",
+  "livello": 4,
+  "consegna": "Per ogni settore, calcola la percentuale di indicatori che hanno raggiunto o superato il target nella misurazione più recente.",
+  "soluzione": "WITH ultime AS (\n  SELECT m.indicatore_id, m.valore, m.target,\n         row_number() OVER (PARTITION BY m.indicatore_id ORDER BY v.data DESC, m.id DESC) AS rn\n  FROM misurazioni m JOIN valutazioni v ON v.id = m.valutazione_id\n  WHERE m.valore IS NOT NULL AND m.target IS NOT NULL)\nSELECT i.settore, count(*) AS indicatori,\n       sum(CASE WHEN u.valore >= u.target THEN 1 ELSE 0 END) AS raggiunti,\n       round(100.0 * sum(CASE WHEN u.valore >= u.target THEN 1 ELSE 0 END) / count(*), 1) AS pct_raggiunti\nFROM ultime u JOIN indicatori i ON i.id = u.indicatore_id\nWHERE u.rn = 1 GROUP BY i.settore ORDER BY pct_raggiunti DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "settore",
+   "indicatori",
+   "raggiunti",
+   "pct_raggiunti"
+  ],
+  "anteprima": [
+   [
+    "sicurezza alimentare",
+    "1",
+    "1",
+    "100.0"
+   ],
+   [
+    "salute mentale",
+    "1",
+    "0",
+    "0.0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-086",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Mostra il piano di esecuzione della ricerca delle visite di un singolo paziente. Che cosa usa il motore?",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT * FROM visite WHERE paziente_id = 42;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SEARCH visite USING INDEX idx_visite_paziente (paziente_id=?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-087",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Confronta il piano di una ricerca su colonna indicizzata (visite.data) con quello su colonna non indicizzata (visite.operatore).",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT * FROM visite WHERE operatore = 'OP-007';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "2",
+    "0",
+    "0",
+    "SCAN visite"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-088",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Crea un indice su visite(operatore) e verifica che il piano cambi da scansione completa a ricerca su indice.",
+  "preparazione": "CREATE INDEX idx_visite_operatore ON visite(operatore);",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT * FROM visite WHERE operatore = 'OP-007';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SEARCH visite USING INDEX idx_visite_operatore (operatore=?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-089",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Crea un indice composito su visite(struttura_id, data) e mostra il piano di una query che filtra su entrambe le colonne.",
+  "preparazione": "CREATE INDEX idx_visite_str_data ON visite(struttura_id, data);",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT count(*) FROM visite WHERE struttura_id = 5 AND data >= '2026-01-01';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SEARCH visite USING COVERING INDEX idx_visite_str_data (struttura_id=? AND data>?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-090",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Dimostra che l'ordine delle colonne in un indice composito conta: crea un indice su (data, struttura_id) e osserva il piano di una query che filtra SOLO su struttura_id.",
+  "preparazione": "CREATE INDEX idx_visite_data_str ON visite(data, struttura_id);",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT count(*) FROM visite WHERE struttura_id = 5;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SCAN visite USING COVERING INDEX idx_visite_data_str"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-091",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Crea un indice coprente che permetta di rispondere alla query senza leggere la tabella, e verificalo nel piano (cerca 'COVERING INDEX').",
+  "preparazione": "CREATE INDEX idx_cop ON visite(struttura_id, esito, paziente_id);",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT struttura_id, esito, count(DISTINCT paziente_id) FROM visite GROUP BY struttura_id, esito;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "6",
+    "0",
+    "0",
+    "SCAN visite USING COVERING INDEX idx_cop"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-092",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Mostra come una funzione applicata alla colonna filtrata impedisce l'uso dell'indice: confronta il piano di strftime('%Y', data) = '2026'.",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT count(*) FROM visite WHERE strftime('%Y', data) = '2026';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SCAN visite USING COVERING INDEX idx_visite_data"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-093",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Riscrivi la query precedente in forma sargable (intervallo di date) e mostra che il piano ora usa l'indice su data.",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT count(*) FROM visite WHERE data >= '2026-01-01' AND data < '2027-01-01';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SEARCH visite USING COVERING INDEX idx_visite_data (data>? AND data<?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-094",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Elenca tutti gli indici presenti nel database con la tabella a cui appartengono.",
+  "soluzione": "SELECT name, tbl_name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%' ORDER BY tbl_name, name;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "name",
+   "tbl_name"
+  ],
+  "anteprima": [
+   [
+    "idx_diagnosi_visita",
+    "diagnosi"
+   ],
+   [
+    "idx_misurazioni_val",
+    "misurazioni"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-095",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Usa PRAGMA per ispezionare le colonne della tabella visite con tipo, obbligatorietà e chiave primaria.",
+  "soluzione": "PRAGMA table_info(visite);",
+  "righe_attese": 8,
+  "colonne_attese": [
+   "cid",
+   "name",
+   "type",
+   "notnull",
+   "dflt_value",
+   "pk"
+  ],
+  "anteprima": [
+   [
+    "0",
+    "id",
+    "INTEGER",
+    "0",
+    "None",
+    "1"
+   ],
+   [
+    "1",
+    "paziente_id",
+    "INTEGER",
+    "1",
+    "None",
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-096",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Usa PRAGMA per elencare le chiavi esterne dichiarate sulla tabella misurazioni.",
+  "soluzione": "PRAGMA foreign_key_list(misurazioni);",
+  "righe_attese": 2,
+  "colonne_attese": [
+   "id",
+   "seq",
+   "table",
+   "from",
+   "to",
+   "on_update",
+   "on_delete",
+   "match"
+  ],
+  "anteprima": [
+   [
+    "0",
+    "0",
+    "indicatori",
+    "indicatore_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ],
+   [
+    "1",
+    "0",
+    "valutazioni",
+    "valutazione_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-097",
+  "tema": "ottimizzazione",
+  "livello": 3,
+  "consegna": "Usa PRAGMA per elencare gli indici definiti sulla tabella visite.",
+  "soluzione": "PRAGMA index_list(visite);",
+  "righe_attese": 2,
+  "colonne_attese": [
+   "seq",
+   "name",
+   "unique",
+   "origin",
+   "partial"
+  ],
+  "anteprima": [
+   [
+    "0",
+    "idx_visite_data",
+    "0",
+    "c",
+    "0"
+   ],
+   [
+    "1",
+    "idx_visite_paziente",
+    "0",
+    "c",
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-098",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Mostra il piano di un join a tre tabelle e identifica quale tabella viene scansionata per prima.",
+  "soluzione": "EXPLAIN QUERY PLAN\nSELECT s.paese, count(*) FROM diagnosi d\nJOIN visite v ON v.id = d.visita_id\nJOIN strutture s ON s.id = v.struttura_id\nWHERE d.cronica = 1 GROUP BY s.paese;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "8",
+    "0",
+    "0",
+    "SCAN d"
+   ],
+   [
+    "12",
+    "0",
+    "0",
+    "SEARCH v USING INTEGER PRIMARY KEY (rowid=?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-099",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Confronta il piano di una subquery correlata con quello della stessa logica espressa come join aggregato.",
+  "soluzione": "EXPLAIN QUERY PLAN\nSELECT s.nome, (SELECT count(*) FROM visite v WHERE v.struttura_id = s.id) AS n FROM strutture s;",
+  "righe_attese": 3,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "2",
+    "0",
+    "0",
+    "SCAN s"
+   ],
+   [
+    "6",
+    "0",
+    "0",
+    "CORRELATED SCALAR SUBQUERY 1"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-100",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Mostra il piano della versione con join e GROUP BY della query precedente e confronta il numero di passaggi.",
+  "soluzione": "EXPLAIN QUERY PLAN\nSELECT s.nome, count(v.id) AS n FROM strutture s\nLEFT JOIN visite v ON v.struttura_id = s.id GROUP BY s.id, s.nome;",
+  "righe_attese": 3,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "7",
+    "0",
+    "0",
+    "SCAN s"
+   ],
+   [
+    "11",
+    "0",
+    "0",
+    "BLOOM FILTER ON v (struttura_id=?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-101",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Crea un indice parziale solo sulle visite con esito 'decesso' e mostra il piano di una query filtrata su quell'esito.",
+  "preparazione": "CREATE INDEX idx_decessi ON visite(data) WHERE esito = 'decesso';",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT data FROM visite WHERE esito = 'decesso' ORDER BY data;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "0",
+    "0",
+    "SCAN visite USING COVERING INDEX idx_decessi"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-102",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Crea un indice su espressione che calcoli l'anno della visita e verifica che venga usato.",
+  "preparazione": "CREATE INDEX idx_anno ON visite(strftime('%Y', data));",
+  "soluzione": "EXPLAIN QUERY PLAN SELECT count(*) FROM visite WHERE strftime('%Y', data) = '2026';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "id",
+   "parent",
+   "notused",
+   "detail"
+  ],
+  "anteprima": [
+   [
+    "4",
+    "0",
+    "0",
+    "SEARCH visite USING INDEX idx_anno (<expr>=?)"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-103",
+  "tema": "ottimizzazione",
+  "livello": 4,
+  "consegna": "Misura la selettività di una colonna: per visite.esito calcola valori distinti, righe totali e rapporto. Una selettività bassa rende l'indice poco utile.",
+  "soluzione": "SELECT count(DISTINCT esito) AS distinti, count(*) AS righe,\n       round(1.0 * count(DISTINCT esito) / count(*), 6) AS selettivita FROM visite;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "distinti",
+   "righe",
+   "selettivita"
+  ],
+  "anteprima": [
+   [
+    "5",
+    "7217",
+    "0.000693"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-104",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Con una CTE ricorsiva genera la serie dei numeri da 1 a 100.",
+  "soluzione": "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < 100) SELECT x FROM n;",
+  "righe_attese": 100,
+  "colonne_attese": [
+   "x"
+  ],
+  "anteprima": [
+   [
+    "1"
+   ],
+   [
+    "2"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-105",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Genera il calendario giornaliero completo di gennaio 2026 e affianca il numero di visite per giorno, zero incluso.",
+  "soluzione": "WITH RECURSIVE g(d) AS (\n  SELECT '2026-01-01' UNION ALL SELECT date(d, '+1 day') FROM g WHERE d < '2026-01-31')\nSELECT g.d AS giorno, COALESCE(v.n, 0) AS visite\nFROM g LEFT JOIN (SELECT data, count(*) AS n FROM visite GROUP BY data) v ON v.data = g.d\nORDER BY g.d;",
+  "righe_attese": 31,
+  "colonne_attese": [
+   "giorno",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "2026-01-01",
+    "11"
+   ],
+   [
+    "2026-01-02",
+    "11"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-106",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Trova i giorni del 2026 in cui NON è stata registrata alcuna visita, usando un calendario ricorsivo e un anti-join.",
+  "soluzione": "WITH RECURSIVE g(d) AS (\n  SELECT '2026-01-01' UNION ALL SELECT date(d, '+1 day') FROM g WHERE d < '2026-08-31')\nSELECT g.d AS giorno_senza_visite FROM g\nWHERE NOT EXISTS (SELECT 1 FROM visite v WHERE v.data = g.d) ORDER BY g.d;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "giorno_senza_visite"
+  ],
+  "anteprima": [
+   [
+    "2026-08-31"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-107",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Con una CTE ricorsiva, espandi ogni prescrizione nei singoli giorni di terapia, limitando a 200 righe.",
+  "soluzione": "WITH RECURSIVE exp(id, farmaco, giorno, totale) AS (\n  SELECT id, farmaco, 1, giorni FROM prescrizioni WHERE giorni <= 7\n  UNION ALL\n  SELECT id, farmaco, giorno + 1, totale FROM exp WHERE giorno < totale)\nSELECT id, farmaco, giorno, totale FROM exp ORDER BY id, giorno LIMIT 200;",
+  "righe_attese": 200,
+  "colonne_attese": [
+   "id",
+   "farmaco",
+   "giorno",
+   "totale"
+  ],
+  "anteprima": [
+   [
+    "1",
+    "Ceftriaxone",
+    "1",
+    "7"
+   ],
+   [
+    "1",
+    "Ceftriaxone",
+    "2",
+    "7"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-108",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Genera la serie dei mesi tra la data di inizio e di fine di ogni progetto attivo, limitando a 150 righe.",
+  "soluzione": "WITH RECURSIVE m(progetto_id, mese, fine) AS (\n  SELECT id, strftime('%Y-%m', data_inizio), strftime('%Y-%m', data_fine)\n  FROM progetti WHERE stato = 'attivo'\n  UNION ALL\n  SELECT progetto_id, strftime('%Y-%m', date(mese || '-01', '+1 month')), fine\n  FROM m WHERE mese < fine)\nSELECT progetto_id, mese FROM m ORDER BY progetto_id, mese LIMIT 150;",
+  "righe_attese": 150,
+  "colonne_attese": [
+   "progetto_id",
+   "mese"
+  ],
+  "anteprima": [
+   [
+    "3",
+    "2024-06"
+   ],
+   [
+    "3",
+    "2024-07"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-109",
+  "tema": "sql_cte",
+  "livello": 4,
+  "consegna": "Usa una CTE ricorsiva per costruire una scala di soglie (0, 10, 20 ... 100) e classifica gli indicatori per valore medio in quelle fasce.",
+  "soluzione": "WITH RECURSIVE soglie(s) AS (\n  SELECT 0 UNION ALL SELECT s + 10 FROM soglie WHERE s < 90),\nmedie AS (\n  SELECT indicatore_id, avg(valore) AS media FROM misurazioni\n  WHERE valore IS NOT NULL GROUP BY indicatore_id)\nSELECT soglie.s AS soglia, count(medie.indicatore_id) AS indicatori\nFROM soglie LEFT JOIN medie ON medie.media >= soglie.s AND medie.media < soglie.s + 10\nGROUP BY soglie.s ORDER BY soglie.s;",
+  "righe_attese": 10,
+  "colonne_attese": [
+   "soglia",
+   "indicatori"
+  ],
+  "anteprima": [
+   [
+    "0",
+    "0"
+   ],
+   [
+    "10",
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-110",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola per ogni struttura la somma mobile delle visite sulle ultime 3 righe mensili, con RANGE invece di ROWS, e osserva la differenza.",
+  "soluzione": "WITH m AS (\n  SELECT struttura_id, strftime('%Y-%m', data) AS mese, count(*) AS n\n  FROM visite WHERE data >= '2026-01-01' GROUP BY struttura_id, mese)\nSELECT struttura_id, mese, n,\n       sum(n) OVER (PARTITION BY struttura_id ORDER BY mese ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS mobile\nFROM m ORDER BY struttura_id, mese LIMIT 60;",
+  "righe_attese": 60,
+  "colonne_attese": [
+   "struttura_id",
+   "mese",
+   "n",
+   "mobile"
+  ],
+  "anteprima": [
+   [
+    "1",
+    "2026-01",
+    "3",
+    "3"
+   ],
+   [
+    "1",
+    "2026-02",
+    "5",
+    "8"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-111",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Usa una window function con FILTER per contare, nella stessa passata, visite totali e soli decessi per paese.",
+  "soluzione": "SELECT DISTINCT s.paese,\n       count(*) OVER (PARTITION BY s.paese) AS visite,\n       count(*) FILTER (WHERE v.esito = 'decesso') OVER (PARTITION BY s.paese) AS decessi\nFROM visite v JOIN strutture s ON s.id = v.struttura_id ORDER BY s.paese;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "visite",
+   "decessi"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "1433",
+    "27"
+   ],
+   [
+    "Haiti",
+    "572",
+    "11"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-112",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola la differenza tra il valore di ciascuna misurazione e la media del proprio indicatore, usando una window function.",
+  "soluzione": "SELECT i.codice, m.valore,\n       round(avg(m.valore) OVER (PARTITION BY m.indicatore_id), 2) AS media_indicatore,\n       round(m.valore - avg(m.valore) OVER (PARTITION BY m.indicatore_id), 2) AS scarto\nFROM misurazioni m JOIN indicatori i ON i.id = m.indicatore_id\nWHERE m.valore IS NOT NULL ORDER BY abs(m.valore - avg(m.valore) OVER (PARTITION BY m.indicatore_id)) DESC LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "codice",
+   "valore",
+   "media_indicatore",
+   "scarto"
+  ],
+  "anteprima": [
+   [
+    "SAL-003",
+    "134.07",
+    "46.76",
+    "87.31"
+   ],
+   [
+    "PRO-002",
+    "138.62",
+    "55.61",
+    "83.01"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-113",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Individua i valori anomali: misurazioni che si discostano di oltre due deviazioni standard dalla media del proprio indicatore. Calcola la deviazione manualmente.",
+  "soluzione": "WITH s AS (\n  SELECT indicatore_id, avg(valore) AS mu,\n         sqrt(avg(valore * valore) - avg(valore) * avg(valore)) AS sigma\n  FROM misurazioni WHERE valore IS NOT NULL GROUP BY indicatore_id)\nSELECT i.codice, m.valore, round(s.mu, 2) AS media, round(s.sigma, 2) AS dev_std\nFROM misurazioni m JOIN s ON s.indicatore_id = m.indicatore_id\nJOIN indicatori i ON i.id = m.indicatore_id\nWHERE m.valore IS NOT NULL AND s.sigma > 0 AND abs(m.valore - s.mu) > 2 * s.sigma\nORDER BY abs(m.valore - s.mu) DESC LIMIT 40;",
+  "righe_attese": 29,
+  "colonne_attese": [
+   "codice",
+   "valore",
+   "media",
+   "dev_std"
+  ],
+  "anteprima": [
+   [
+    "SAL-003",
+    "134.07",
+    "46.76",
+    "32.31"
+   ],
+   [
+    "PRO-002",
+    "138.62",
+    "55.61",
+    "33.28"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-114",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Usa LEAD per calcolare, per ogni visita di un paziente, quanti giorni mancano alla successiva.",
+  "soluzione": "SELECT p.codice, v.data,\n       LEAD(v.data) OVER (PARTITION BY v.paziente_id ORDER BY v.data) AS prossima,\n       CAST(julianday(LEAD(v.data) OVER (PARTITION BY v.paziente_id ORDER BY v.data)) - julianday(v.data) AS INTEGER) AS giorni\nFROM visite v JOIN pazienti p ON p.id = v.paziente_id ORDER BY p.codice, v.data LIMIT 60;",
+  "righe_attese": 60,
+  "colonne_attese": [
+   "codice",
+   "data",
+   "prossima",
+   "giorni"
+  ],
+  "anteprima": [
+   [
+    "PZ-000001",
+    "2025-07-08",
+    "2025-09-26",
+    "80"
+   ],
+   [
+    "PZ-000001",
+    "2025-09-26",
+    "None",
+    "None"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-115",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Costruisci una classifica densa (DENSE_RANK) dei farmaci per numero di prescrizioni e confrontala con RANK: dove differiscono?",
+  "soluzione": "WITH c AS (SELECT farmaco, count(*) AS n FROM prescrizioni GROUP BY farmaco)\nSELECT farmaco, n, RANK() OVER (ORDER BY n DESC) AS rango,\n       DENSE_RANK() OVER (ORDER BY n DESC) AS rango_denso FROM c ORDER BY n DESC;",
+  "righe_attese": 10,
+  "colonne_attese": [
+   "farmaco",
+   "n",
+   "rango",
+   "rango_denso"
+  ],
+  "anteprima": [
+   [
+    "Ferro-folato",
+    "930",
+    "1",
+    "1"
+   ],
+   [
+    "Zinco",
+    "929",
+    "2",
+    "2"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-116",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola il contributo cumulativo percentuale dei farmaci al totale delle prescrizioni: un'analisi di Pareto.",
+  "soluzione": "WITH c AS (SELECT farmaco, count(*) AS n FROM prescrizioni GROUP BY farmaco)\nSELECT farmaco, n,\n       round(100.0 * sum(n) OVER (ORDER BY n DESC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\n             / sum(n) OVER (), 2) AS cumulato_pct\nFROM c ORDER BY n DESC;",
+  "righe_attese": 10,
+  "colonne_attese": [
+   "farmaco",
+   "n",
+   "cumulato_pct"
+  ],
+  "anteprima": [
+   [
+    "Ferro-folato",
+    "930",
+    "10.35"
+   ],
+   [
+    "Zinco",
+    "929",
+    "20.68"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-117",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Per ogni paese, individua il mese del 2026 con il numero massimo di visite usando una window function.",
+  "soluzione": "WITH m AS (\n  SELECT s.paese, strftime('%Y-%m', v.data) AS mese, count(*) AS n\n  FROM visite v JOIN strutture s ON s.id = v.struttura_id\n  WHERE v.data >= '2026-01-01' GROUP BY s.paese, mese),\nr AS (SELECT *, row_number() OVER (PARTITION BY paese ORDER BY n DESC) AS rn FROM m)\nSELECT paese, mese, n FROM r WHERE rn = 1 ORDER BY n DESC;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "mese",
+   "n"
+  ],
+  "anteprima": [
+   [
+    "Repubblica Democratica del Congo",
+    "2026-07",
+    "147"
+   ],
+   [
+    "Sud Sudan",
+    "2026-07",
+    "117"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-118",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Calcola la percentuale di completamento cumulativo delle valutazioni nel tempo, per strumento.",
+  "soluzione": "WITH v AS (\n  SELECT strumento, data, count(*) AS n FROM valutazioni GROUP BY strumento, data)\nSELECT strumento, data, n,\n       sum(n) OVER (PARTITION BY strumento ORDER BY data ROWS UNBOUNDED PRECEDING) AS cumulato,\n       round(100.0 * sum(n) OVER (PARTITION BY strumento ORDER BY data ROWS UNBOUNDED PRECEDING)\n             / sum(n) OVER (PARTITION BY strumento), 1) AS pct\nFROM v ORDER BY strumento, data LIMIT 80;",
+  "righe_attese": 80,
+  "colonne_attese": [
+   "strumento",
+   "data",
+   "n",
+   "cumulato",
+   "pct"
+  ],
+  "anteprima": [
+   [
+    "RNA",
+    "2023-07-27",
+    "1",
+    "1",
+    "2.0"
+   ],
+   [
+    "RNA",
+    "2023-12-04",
+    "1",
+    "2",
+    "3.9"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-119",
+  "tema": "sql_window",
+  "livello": 4,
+  "consegna": "Identifica sequenze consecutive: per ogni paziente, raggruppa le visite ravvicinate (entro 14 giorni) in episodi di cura usando la tecnica gaps-and-islands.",
+  "soluzione": "WITH ord AS (\n  SELECT paziente_id, data,\n         CASE WHEN julianday(data) - julianday(LAG(data) OVER (PARTITION BY paziente_id ORDER BY data)) <= 14\n              THEN 0 ELSE 1 END AS nuovo_episodio\n  FROM visite),\ngrp AS (\n  SELECT paziente_id, data,\n         sum(nuovo_episodio) OVER (PARTITION BY paziente_id ORDER BY data ROWS UNBOUNDED PRECEDING) AS episodio\n  FROM ord)\nSELECT paziente_id, episodio, count(*) AS visite, min(data) AS inizio, max(data) AS fine\nFROM grp GROUP BY paziente_id, episodio HAVING count(*) > 2\nORDER BY visite DESC LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "paziente_id",
+   "episodio",
+   "visite",
+   "inizio",
+   "fine"
+  ],
+  "anteprima": [
+   [
+    "819",
+    "2",
+    "8",
+    "2026-06-29",
+    "2026-08-25"
+   ],
+   [
+    "2118",
+    "1",
+    "8",
+    "2026-06-29",
+    "2026-08-18"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-120",
+  "tema": "sql_base",
+  "livello": 2,
+  "consegna": "Estrai il prefisso numerico dal codice paziente (formato PZ-000001) e mostralo come intero.",
+  "soluzione": "SELECT codice, CAST(substr(codice, 4) AS INTEGER) AS numero FROM pazienti ORDER BY numero LIMIT 20;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "codice",
+   "numero"
+  ],
+  "anteprima": [
+   [
+    "PZ-000001",
+    "1"
+   ],
+   [
+    "PZ-000002",
+    "2"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-121",
+  "tema": "sql_base",
+  "livello": 2,
+  "consegna": "Normalizza il nome delle strutture rimuovendo spazi iniziali e finali e convertendo in maiuscolo.",
+  "soluzione": "SELECT DISTINCT upper(trim(tipo)) AS tipo_normalizzato FROM strutture ORDER BY tipo_normalizzato;",
+  "righe_attese": 5,
+  "colonne_attese": [
+   "tipo_normalizzato"
+  ],
+  "anteprima": [
+   [
+    "CENTRO NUTRIZIONALE"
+   ],
+   [
+    "CENTRO SALUTE"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-122",
+  "tema": "sql_base",
+  "livello": 2,
+  "consegna": "Conta quante strutture contengono la parola 'Centro' nel nome, senza distinzione di maiuscole.",
+  "soluzione": "SELECT count(*) AS n FROM strutture WHERE lower(nome) LIKE '%centro%';",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "n"
+  ],
+  "anteprima": [
+   [
+    "17"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-123",
+  "tema": "sql_base",
+  "livello": 3,
+  "consegna": "Costruisci un'etichetta leggibile per ogni visita nel formato 'Paese — Tipo — AAAA-MM' usando la concatenazione.",
+  "soluzione": "SELECT DISTINCT s.paese || ' — ' || v.tipo || ' — ' || strftime('%Y-%m', v.data) AS etichetta\nFROM visite v JOIN strutture s ON s.id = v.struttura_id ORDER BY etichetta LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "etichetta"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh — ambulatoriale — 2023-03"
+   ],
+   [
+    "Bangladesh — ambulatoriale — 2023-04"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-124",
+  "tema": "sql_base",
+  "livello": 3,
+  "consegna": "Calcola la data di fine terapia di ogni prescrizione sommando i giorni alla data della visita.",
+  "soluzione": "SELECT pr.id, pr.farmaco, v.data AS inizio,\n       date(v.data, '+' || pr.giorni || ' days') AS fine\nFROM prescrizioni pr JOIN visite v ON v.id = pr.visita_id ORDER BY pr.id LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "id",
+   "farmaco",
+   "inizio",
+   "fine"
+  ],
+  "anteprima": [
+   [
+    "1",
+    "Ceftriaxone",
+    "2025-07-08",
+    "2025-07-15"
+   ],
+   [
+    "2",
+    "Metformina",
+    "2025-07-08",
+    "2025-08-07"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-125",
+  "tema": "sql_base",
+  "livello": 3,
+  "consegna": "Trova le visite avvenute nell'ultimo giorno del mese.",
+  "soluzione": "SELECT data, tipo, esito FROM visite WHERE data = date(data, 'start of month', '+1 month', '-1 day') ORDER BY data DESC LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "data",
+   "tipo",
+   "esito"
+  ],
+  "anteprima": [
+   [
+    "2026-07-31",
+    "ambulatoriale",
+    "dimesso"
+   ],
+   [
+    "2026-07-31",
+    "emergenza",
+    "abbandono"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-126",
+  "tema": "sql_base",
+  "livello": 3,
+  "consegna": "Calcola quanti giorni di età aveva ciascun paziente al momento della sua prima vaccinazione.",
+  "soluzione": "SELECT p.codice, va.vaccino, va.data,\n       CAST(julianday(va.data) - julianday(p.data_nascita) AS INTEGER) AS giorni_eta\nFROM vaccinazioni va JOIN pazienti p ON p.id = va.paziente_id\nWHERE va.dose_num = 1 ORDER BY giorni_eta LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "codice",
+   "vaccino",
+   "data",
+   "giorni_eta"
+  ],
+  "anteprima": [
+   [
+    "PZ-000892",
+    "Tetano",
+    "2021-02-21",
+    "0"
+   ],
+   [
+    "PZ-001141",
+    "Tetano",
+    "2025-04-21",
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-127",
+  "tema": "sql_base",
+  "livello": 3,
+  "consegna": "Raggruppa le visite per trimestre solare del 2026 usando l'aritmetica sui mesi.",
+  "soluzione": "SELECT 'T' || ((CAST(strftime('%m', data) AS INTEGER) + 2) / 3) AS trimestre, count(*) AS visite\nFROM visite WHERE data >= '2026-01-01' AND data < '2027-01-01' GROUP BY trimestre ORDER BY trimestre;",
+  "righe_attese": 3,
+  "colonne_attese": [
+   "trimestre",
+   "visite"
+  ],
+  "anteprima": [
+   [
+    "T1",
+    "951"
+   ],
+   [
+    "T2",
+    "1313"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-128",
+  "tema": "sql_base",
+  "livello": 4,
+  "consegna": "Costruisci per ogni paziente un oggetto JSON con codice, sesso e regione.",
+  "soluzione": "SELECT json_object('codice', codice, 'sesso', sesso, 'regione', regione) AS doc FROM pazienti LIMIT 20;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "doc"
+  ],
+  "anteprima": [
+   [
+    "{\"codice\":\"PZ-000001\",\"sesso\":\"M\",\"regione\":\"Jonglei\"}"
+   ],
+   [
+    "{\"codice\":\"PZ-000002\",\"sesso\":\"F\",\"regione\":\"Borno\"}"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-129",
+  "tema": "sql_base",
+  "livello": 4,
+  "consegna": "Per ogni visita, raggruppa i codici diagnosi in un array JSON.",
+  "soluzione": "SELECT v.id, json_group_array(d.codice_icd10) AS diagnosi\nFROM visite v JOIN diagnosi d ON d.visita_id = v.id\nGROUP BY v.id ORDER BY v.id LIMIT 30;",
+  "righe_attese": 30,
+  "colonne_attese": [
+   "id",
+   "diagnosi"
+  ],
+  "anteprima": [
+   [
+    "1",
+    "[\"B20\"]"
+   ],
+   [
+    "2",
+    "[\"A09\"]"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-130",
+  "tema": "sql_base",
+  "livello": 4,
+  "consegna": "Costruisci un documento JSON annidato per struttura, con i suoi contatori di visite per esito.",
+  "soluzione": "SELECT s.nome, json_group_object(v.esito, v.n) AS esiti\nFROM strutture s JOIN (\n  SELECT struttura_id, esito, count(*) AS n FROM visite GROUP BY struttura_id, esito) v\nON v.struttura_id = s.id GROUP BY s.id, s.nome LIMIT 20;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "nome",
+   "esiti"
+  ],
+  "anteprima": [
+   [
+    "Ospedale Jonglei 001",
+    "{\"abbandono\":12,\"decesso\":6,\"dimesso\":123,\"in cura\":12,\"riferito\":21}"
+   ],
+   [
+    "Ospedale Jonglei 002",
+    "{\"abbandono\":15,\"decesso\":4,\"dimesso\":132,\"in cura\":14,\"riferito\":25}"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-131",
+  "tema": "sql_base",
+  "livello": 4,
+  "consegna": "Estrai un campo da un JSON costruito al volo, per verificare json_extract.",
+  "soluzione": "SELECT json_extract(json_object('codice', codice, 'regione', regione), '$.regione') AS regione_estratta\nFROM pazienti LIMIT 20;",
+  "righe_attese": 20,
+  "colonne_attese": [
+   "regione_estratta"
+  ],
+  "anteprima": [
+   [
+    "Jonglei"
+   ],
+   [
+    "Borno"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-132",
+  "tema": "sql_base",
+  "livello": 4,
+  "consegna": "Usa json_each per espandere un array JSON di codici in righe separate.",
+  "soluzione": "SELECT value AS codice FROM json_each('[\"A09\",\"B54\",\"J18\",\"E43\"]');",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "codice"
+  ],
+  "anteprima": [
+   [
+    "A09"
+   ],
+   [
+    "B54"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-133",
+  "tema": "sql_join",
+  "livello": 3,
+  "consegna": "Trova i pazienti che hanno ricevuto una prescrizione ma non hanno mai avuto un esame di laboratorio.",
+  "soluzione": "SELECT DISTINCT p.codice FROM pazienti p\nJOIN visite v ON v.paziente_id = p.id\nJOIN prescrizioni pr ON pr.visita_id = v.id\nWHERE NOT EXISTS (\n  SELECT 1 FROM visite v2 JOIN esami_lab e ON e.visita_id = v2.id WHERE v2.paziente_id = p.id)\nORDER BY p.codice LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "codice"
+  ],
+  "anteprima": [
+   [
+    "PZ-000002"
+   ],
+   [
+    "PZ-000004"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-134",
+  "tema": "sql_join",
+  "livello": 3,
+  "consegna": "Elenca i siti che non hanno mai ricevuto alcuna distribuzione, con progetto e popolazione stimata.",
+  "soluzione": "SELECT si.nome, pr.nome AS progetto, si.popolazione_stimata\nFROM siti si JOIN progetti pr ON pr.id = si.progetto_id\nWHERE NOT EXISTS (SELECT 1 FROM distribuzioni d WHERE d.sito_id = si.id)\nORDER BY si.popolazione_stimata DESC;",
+  "righe_attese": 15,
+  "colonne_attese": [
+   "nome",
+   "progetto",
+   "popolazione_stimata"
+  ],
+  "anteprima": [
+   [
+    "Campo Fantoni",
+    "Salute Mentale Nigeria 2025",
+    "42125"
+   ],
+   [
+    "Insediamento Cesaroni",
+    "Salute Mentale Sud Sudan 2023",
+    "39588"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-135",
+  "tema": "sql_join",
+  "livello": 4,
+  "consegna": "Usa un FULL OUTER JOIN per confrontare i paesi presenti nelle strutture con quelli presenti nei progetti.",
+  "soluzione": "SELECT COALESCE(a.paese, b.paese) AS paese,\n       CASE WHEN a.paese IS NULL THEN 'solo progetti'\n            WHEN b.paese IS NULL THEN 'solo strutture' ELSE 'entrambi' END AS presenza\nFROM (SELECT DISTINCT paese FROM strutture) a\nFULL OUTER JOIN (SELECT DISTINCT paese FROM progetti) b ON a.paese = b.paese\nORDER BY paese;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "paese",
+   "presenza"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "entrambi"
+   ],
+   [
+    "Haiti",
+    "entrambi"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-136",
+  "tema": "sql_join",
+  "livello": 3,
+  "consegna": "Per ogni settore presente negli indicatori, conta quanti progetti lo coprono: i settori con zero progetti sono lacune di copertura.",
+  "soluzione": "SELECT i.settore, count(DISTINCT pr.id) AS progetti,\n       CASE WHEN count(pr.id) = 0 THEN 'lacuna' ELSE 'coperto' END AS stato\nFROM indicatori i LEFT JOIN progetti pr ON pr.settore = i.settore\nGROUP BY i.settore ORDER BY progetti, i.settore;",
+  "righe_attese": 6,
+  "colonne_attese": [
+   "settore",
+   "progetti",
+   "stato"
+  ],
+  "anteprima": [
+   [
+    "protezione",
+    "2",
+    "coperto"
+   ],
+   [
+    "sicurezza alimentare",
+    "3",
+    "coperto"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-137",
+  "tema": "sql_join",
+  "livello": 4,
+  "consegna": "Costruisci una matrice di copertura: per ogni coppia paese-settore indica se esiste almeno un progetto, usando un prodotto cartesiano controllato.",
+  "soluzione": "WITH paesi AS (SELECT DISTINCT paese FROM progetti),\nsettori AS (SELECT DISTINCT settore FROM progetti)\nSELECT p.paese, s.settore,\n       CASE WHEN EXISTS (SELECT 1 FROM progetti pr WHERE pr.paese = p.paese AND pr.settore = s.settore)\n            THEN 1 ELSE 0 END AS coperto\nFROM paesi p CROSS JOIN settori s ORDER BY p.paese, s.settore;",
+  "righe_attese": 36,
+  "colonne_attese": [
+   "paese",
+   "settore",
+   "coperto"
+  ],
+  "anteprima": [
+   [
+    "Bangladesh",
+    "WASH",
+    "0"
+   ],
+   [
+    "Bangladesh",
+    "nutrizione",
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-138",
+  "tema": "sql_join",
+  "livello": 4,
+  "consegna": "Trova le coppie di strutture nello stesso paese con lo stesso tipo, evitando di elencare due volte la stessa coppia.",
+  "soluzione": "SELECT a.nome AS struttura_a, b.nome AS struttura_b, a.paese, a.tipo\nFROM strutture a JOIN strutture b\n  ON a.paese = b.paese AND a.tipo = b.tipo AND a.id < b.id\nORDER BY a.paese, a.tipo LIMIT 50;",
+  "righe_attese": 22,
+  "colonne_attese": [
+   "struttura_a",
+   "struttura_b",
+   "paese",
+   "tipo"
+  ],
+  "anteprima": [
+   [
+    "Centro Nutrizionale Chittagong 027",
+    "Centro Nutrizionale Sylhet 029",
+    "Bangladesh",
+    "centro nutrizionale"
+   ],
+   [
+    "Centro Salute Sylhet 028",
+    "Centro Salute Sylhet 030",
+    "Bangladesh",
+    "centro salute"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-139",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Verifica la coerenza temporale: esistono vaccinazioni con data anteriore alla nascita del paziente?",
+  "soluzione": "SELECT count(*) AS incoerenze FROM vaccinazioni va\nJOIN pazienti p ON p.id = va.paziente_id WHERE va.data < p.data_nascita;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "incoerenze"
+  ],
+  "anteprima": [
+   [
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-140",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Verifica se esistono visite registrate prima della data di registrazione del paziente.",
+  "soluzione": "SELECT count(*) AS visite_precedenti_registrazione FROM visite v\nJOIN pazienti p ON p.id = v.paziente_id WHERE v.data < p.data_registrazione;",
+  "righe_attese": 1,
+  "colonne_attese": [
+   "visite_precedenti_registrazione"
+  ],
+  "anteprima": [
+   [
+    "0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-141",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Costruisci un profilo di cardinalità per la tabella visite: per ogni colonna categoriale, numero di valori distinti.",
+  "soluzione": "SELECT 'tipo' AS colonna, count(DISTINCT tipo) AS distinti FROM visite\nUNION ALL SELECT 'esito', count(DISTINCT esito) FROM visite\nUNION ALL SELECT 'operatore', count(DISTINCT operatore) FROM visite\nUNION ALL SELECT 'struttura_id', count(DISTINCT struttura_id) FROM visite\nORDER BY distinti DESC;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "colonna",
+   "distinti"
+  ],
+  "anteprima": [
+   [
+    "operatore",
+    "60"
+   ],
+   [
+    "struttura_id",
+    "36"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-142",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Calcola la freschezza dei dati: per ogni tabella con una data, giorni trascorsi dall'ultimo record rispetto al 2026-09-01.",
+  "soluzione": "SELECT 'visite' AS tabella, max(data) AS ultimo,\n       CAST(julianday('2026-09-01') - julianday(max(data)) AS INTEGER) AS giorni FROM visite\nUNION ALL SELECT 'valutazioni', max(data), CAST(julianday('2026-09-01') - julianday(max(data)) AS INTEGER) FROM valutazioni\nUNION ALL SELECT 'distribuzioni', max(data), CAST(julianday('2026-09-01') - julianday(max(data)) AS INTEGER) FROM distribuzioni\nUNION ALL SELECT 'vaccinazioni', max(data), CAST(julianday('2026-09-01') - julianday(max(data)) AS INTEGER) FROM vaccinazioni\nORDER BY giorni DESC;",
+  "righe_attese": 4,
+  "colonne_attese": [
+   "tabella",
+   "ultimo",
+   "giorni"
+  ],
+  "anteprima": [
+   [
+    "distribuzioni",
+    "2026-08-25",
+    "7"
+   ],
+   [
+    "valutazioni",
+    "2026-08-28",
+    "4"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-143",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Rileva valori sospetti: misurazioni con valore negativo o superiore a 1000 su indicatori espressi in percentuale.",
+  "soluzione": "SELECT i.codice, i.unita, m.valore FROM misurazioni m\nJOIN indicatori i ON i.id = m.indicatore_id\nWHERE i.unita = 'percentuale' AND m.valore IS NOT NULL AND (m.valore < 0 OR m.valore > 100)\nORDER BY m.valore DESC LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "codice",
+   "unita",
+   "valore"
+  ],
+  "anteprima": [
+   [
+    "NUT-003",
+    "percentuale",
+    "137.07"
+   ],
+   [
+    "ACC-002",
+    "percentuale",
+    "135.4"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-144",
+  "tema": "qualita_dati",
+  "livello": 4,
+  "consegna": "Costruisci un punteggio di qualità per valutazione: percentuale di misurazioni di qualità alta sul totale.",
+  "soluzione": "SELECT v.id, v.strumento, v.data, count(*) AS misurazioni,\n       round(100.0 * sum(CASE WHEN m.qualita = 'alta' THEN 1 ELSE 0 END) / count(*), 1) AS punteggio_qualita\nFROM valutazioni v JOIN misurazioni m ON m.valutazione_id = v.id\nGROUP BY v.id, v.strumento, v.data ORDER BY punteggio_qualita LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "id",
+   "strumento",
+   "data",
+   "misurazioni",
+   "punteggio_qualita"
+  ],
+  "anteprima": [
+   [
+    "16",
+    "indagine SMART",
+    "2024-07-16",
+    "3",
+    "0.0"
+   ],
+   [
+    "41",
+    "monitoraggio protezione",
+    "2025-08-01",
+    "2",
+    "0.0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-145",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Costruisci uno snapshot periodico mensile: per ogni struttura e mese, pazienti attivi e visite, anche dove il valore è zero.",
+  "soluzione": "WITH RECURSIVE mesi(m) AS (\n  SELECT '2026-01' UNION ALL SELECT strftime('%Y-%m', date(m || '-01', '+1 month')) FROM mesi WHERE m < '2026-08'),\natt AS (SELECT id FROM strutture WHERE attiva = 1)\nSELECT att.id AS struttura_id, mesi.m AS mese,\n       COALESCE(v.visite, 0) AS visite, COALESCE(v.pazienti, 0) AS pazienti\nFROM att CROSS JOIN mesi\nLEFT JOIN (\n  SELECT struttura_id, strftime('%Y-%m', data) AS mese, count(*) AS visite,\n         count(DISTINCT paziente_id) AS pazienti\n  FROM visite GROUP BY struttura_id, mese) v\nON v.struttura_id = att.id AND v.mese = mesi.m\nORDER BY att.id, mesi.m LIMIT 120;",
+  "righe_attese": 120,
+  "colonne_attese": [
+   "struttura_id",
+   "mese",
+   "visite",
+   "pazienti"
+  ],
+  "anteprima": [
+   [
+    "1",
+    "2026-01",
+    "3",
+    "3"
+   ],
+   [
+    "1",
+    "2026-02",
+    "5",
+    "5"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-146",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Costruisci uno snapshot cumulativo del percorso paziente: prima visita, prima diagnosi cronica, ultima visita, con i rispettivi intervalli.",
+  "soluzione": "SELECT p.codice, min(v.data) AS prima_visita,\n       min(CASE WHEN d.cronica = 1 THEN v.data END) AS prima_cronica,\n       max(v.data) AS ultima_visita,\n       CAST(julianday(max(v.data)) - julianday(min(v.data)) AS INTEGER) AS giorni_in_cura\nFROM pazienti p JOIN visite v ON v.paziente_id = p.id\nLEFT JOIN diagnosi d ON d.visita_id = v.id\nGROUP BY p.id, p.codice HAVING count(v.id) > 3 ORDER BY giorni_in_cura DESC LIMIT 40;",
+  "righe_attese": 40,
+  "colonne_attese": [
+   "codice",
+   "prima_visita",
+   "prima_cronica",
+   "ultima_visita",
+   "giorni_in_cura"
+  ],
+  "anteprima": [
+   [
+    "PZ-001306",
+    "2023-02-07",
+    "2024-07-31",
+    "2026-07-04",
+    "1243"
+   ],
+   [
+    "PZ-000298",
+    "2023-04-13",
+    "2023-04-13",
+    "2026-08-24",
+    "1229"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-147",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Simula una bridge table: per ogni visita con più diagnosi, assegna un peso uguale a 1/numero di diagnosi per evitare il doppio conteggio.",
+  "soluzione": "WITH n AS (SELECT visita_id, count(*) AS k FROM diagnosi GROUP BY visita_id)\nSELECT d.visita_id, d.codice_icd10, n.k AS diagnosi_nella_visita,\n       round(1.0 / n.k, 3) AS peso\nFROM diagnosi d JOIN n ON n.visita_id = d.visita_id\nWHERE n.k > 1 ORDER BY d.visita_id LIMIT 50;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "visita_id",
+   "codice_icd10",
+   "diagnosi_nella_visita",
+   "peso"
+  ],
+  "anteprima": [
+   [
+    "6",
+    "H10",
+    "2",
+    "0.5"
+   ],
+   [
+    "6",
+    "E44",
+    "2",
+    "0.5"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-148",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Applica la ponderazione della bridge table: conta i casi per codice ICD-10 in modo che ogni visita contribuisca per 1 in totale.",
+  "soluzione": "WITH n AS (SELECT visita_id, count(*) AS k FROM diagnosi GROUP BY visita_id)\nSELECT d.codice_icd10, count(*) AS conteggio_grezzo,\n       round(sum(1.0 / n.k), 2) AS conteggio_ponderato\nFROM diagnosi d JOIN n ON n.visita_id = d.visita_id\nGROUP BY d.codice_icd10 ORDER BY conteggio_ponderato DESC;",
+  "righe_attese": 14,
+  "colonne_attese": [
+   "codice_icd10",
+   "conteggio_grezzo",
+   "conteggio_ponderato"
+  ],
+  "anteprima": [
+   [
+    "B20",
+    "799",
+    "553.5"
+   ],
+   [
+    "E11",
+    "817",
+    "551.0"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-149",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Costruisci una junk dimension: tutte le combinazioni effettivamente osservate di tipo, esito e presenza di prescrizione.",
+  "soluzione": "SELECT v.tipo, v.esito,\n       CASE WHEN EXISTS (SELECT 1 FROM prescrizioni pr WHERE pr.visita_id = v.id) THEN 1 ELSE 0 END AS con_prescrizione,\n       count(*) AS occorrenze\nFROM visite v GROUP BY v.tipo, v.esito, con_prescrizione ORDER BY occorrenze DESC;",
+  "righe_attese": 50,
+  "colonne_attese": [
+   "tipo",
+   "esito",
+   "con_prescrizione",
+   "occorrenze"
+  ],
+  "anteprima": [
+   [
+    "ambulatoriale",
+    "dimesso",
+    "1",
+    "1850"
+   ],
+   [
+    "follow-up",
+    "dimesso",
+    "1",
+    "755"
+   ]
+  ]
+ },
+ {
+  "id": "SQL-150",
+  "tema": "modellazione",
+  "livello": 4,
+  "consegna": "Crea una vista materializzata come tabella e verifica che contenga i dati aggregati per struttura e mese.",
+  "preparazione": "CREATE TABLE agg_struttura_mese AS\nSELECT struttura_id, strftime('%Y-%m', data) AS mese, count(*) AS visite,\n       count(DISTINCT paziente_id) AS pazienti,\n       sum(CASE WHEN esito = 'decesso' THEN 1 ELSE 0 END) AS decessi\nFROM visite GROUP BY struttura_id, mese;",
+  "soluzione": "SELECT * FROM agg_struttura_mese ORDER BY visite DESC LIMIT 30;",
+  "righe_attese": 30,
+  "colonne_attese": [
+   "struttura_id",
+   "mese",
+   "visite",
+   "pazienti",
+   "decessi"
+  ],
+  "anteprima": [
+   [
+    "14",
+    "2026-08",
+    "26",
+    "21",
+    "1"
+   ],
+   [
+    "39",
+    "2026-07",
+    "25",
+    "17",
+    "1"
+   ]
+  ]
+ }
+]

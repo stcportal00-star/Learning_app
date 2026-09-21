@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "target": "ES2022", "module": "commonjs", "strict": true,
+    "esModuleInterop": true, "skipLibCheck": true, "outDir": "build_test",
+    "lib": ["ES2022", "DOM"], "types": []
+  },
+  "include": ["lib/hlc.ts", "lib/verifica.ts", "lib/sync/pacchetto.ts", "lib/sync/fusione.ts",
+              "test/nucleo.test.ts", "test/sync.test.ts", "test/catena.test.ts", "test/due-dispositivi.test.ts", "test/sessioni.test.ts", "lib/sessioni.ts", "lib/sync/trasporto.ts", "lib/sync/accoppiamento.ts", "lib/sync/auto.ts"]
+}

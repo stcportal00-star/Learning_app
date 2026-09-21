@@ -1,0 +1,273 @@
+# Il PC che non c'è.
+#
+# 1. compila l'APK firmato con una chiave persistente
+# 2. lo installa su un emulatore Android e lo avvia
+# 3. cattura logcat e una schermata: un crash nativo diventa leggibile senza adb
+# 4. pubblica l'APK SOLO se il test di fumo passa: un build che si chiude
+#    all'avvio non deve mai arrivare sul telefono
+# 5. scrive il rapporto in un issue, che Claude Code legge con i suoi strumenti
+name: apk
+
+on:
+  workflow_dispatch:
+  # Qualunque ramo: le sessioni cloud di Claude Code pubblicano su un ramo
+  # nuovo, non su main. Filtrare per main significherebbe non compilare mai.
+  push:
+    paths:
+      - "app/**"
+      - "lib/**"
+      - "components/**"
+      - "assets/**"
+      - "plugins/**"
+      - "package.json"
+      - "package-lock.json"
+      - "app.json"
+      - "metro.config.js"
+      - ".github/workflows/apk.yml"
+      - ".github/fumo.sh"
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  PACCHETTO: org.alessiomirra.percorso
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    outputs:
+      impronta: ${{ steps.firma.outputs.impronta }}
+      modo: ${{ steps.firma.outputs.modo }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - run: npm ci
+      - run: npm run verifica
+
+      - name: Chiave di firma persistente
+        id: firma
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PASSPHRASE: ${{ secrets.PASSPHRASE_FIRMA }}
+        run: |
+          # La chiave vive nella release privata "firma", come archivio con
+          # keystore e password. Due modalità:
+          #   automatica — nessun secret: archivio protetto dalla riservatezza del repository
+          #   cifrata    — secret PASSPHRASE_FIRMA presente: archivio cifrato AES-256
+          # Aggiungere il secret in seguito CIFRA LA CHIAVE ESISTENTE: non se ne
+          # genera mai una nuova, o gli aggiornamenti smetterebbero di installarsi.
+          set -euo pipefail
+          dir="${RUNNER_TEMP}/firma"
+          mkdir -p "$dir"
+          cd "$dir"
+          scarica() { gh release download firma --repo "$GITHUB_REPOSITORY" --pattern "$1" --dir . 2>/dev/null; }
+          cifra()   { openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in firma.tar -out firma.tar.enc -pass env:PASSPHRASE; }
+
+          if scarica firma.tar.enc; then
+            if [ -z "${PASSPHRASE}" ]; then
+              echo "::error::La chiave è cifrata ma il secret PASSPHRASE_FIRMA non è più disponibile."
+              exit 1
+            fi
+            openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in firma.tar.enc -out firma.tar -pass env:PASSPHRASE
+            modo="cifrata"
+          elif scarica firma.tar; then
+            modo="automatica"
+            if [ -n "${PASSPHRASE}" ]; then
+              cifra
+              gh release upload firma firma.tar.enc --repo "$GITHUB_REPOSITORY" --clobber
+              gh release delete-asset firma firma.tar --repo "$GITHUB_REPOSITORY" --yes
+              modo="cifrata (migrata ora, stessa chiave)"
+            fi
+          else
+            echo "Prima esecuzione: genero la chiave di firma."
+            password=$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | head -c 40)
+            echo "::add-mask::$password"
+            keytool -genkeypair -keystore chiave.jks -alias percorso \
+              -keyalg RSA -keysize 4096 -validity 10000 \
+              -storepass "$password" -keypass "$password" \
+              -dname "CN=Percorso, O=Personale, C=IT"
+            printf '%s' "$password" > chiave.pass
+            tar -cf firma.tar chiave.jks chiave.pass
+            note="Chiave di firma degli APK. NON eliminare questa release: senza la stessa chiave gli aggiornamenti non si installano sopra la versione precedente, e disinstallare cancella i dati locali."
+            if [ -n "${PASSPHRASE}" ]; then
+              cifra
+              gh release create firma firma.tar.enc --repo "$GITHUB_REPOSITORY" --prerelease --title "Chiave di firma" --notes "$note"
+              modo="cifrata"
+            else
+              gh release create firma firma.tar --repo "$GITHUB_REPOSITORY" --prerelease --title "Chiave di firma" --notes "$note"
+              modo="automatica"
+            fi
+          fi
+
+          tar -xf firma.tar
+          password=$(cat chiave.pass)
+          echo "::add-mask::$password"
+          impronta=$(keytool -list -keystore chiave.jks -storepass "$password" -alias percorso \
+            | grep -oE '([0-9A-F]{2}:){31}[0-9A-F]{2}' | head -1)
+          {
+            echo "impronta=$impronta"
+            echo "modo=$modo"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "PERCORSO_KEYSTORE=$dir/chiave.jks"
+            echo "PERCORSO_KEYSTORE_PASSWORD=$password"
+            echo "PERCORSO_KEY_ALIAS=percorso"
+            echo "PERCORSO_KEY_PASSWORD=$password"
+          } >> "$GITHUB_ENV"
+          echo "Firma in modalità $modo, impronta $impronta"
+
+      - name: Progetto nativo (prebuild)
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Compilazione release
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Verifica della firma
+        env:
+          ATTESA: ${{ steps.firma.outputs.impronta }}
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          apksigner=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          effettiva=$("$apksigner" verify --print-certs "$apk" | grep -i "SHA-256 digest" | head -1 | awk '{print toupper($NF)}' | sed 's/../&:/g; s/:$//')
+          echo "attesa:   $ATTESA"
+          echo "effettiva: $effettiva"
+          if [ "$effettiva" != "$ATTESA" ]; then
+            echo "::error::L'APK non è firmato con la chiave persistente: non sarebbe aggiornabile."
+            exit 1
+          fi
+          cp "$apk" percorso.apk
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: percorso.apk
+          retention-days: 14
+
+  fumo:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: apk
+
+      - name: Abilita KVM per l'emulatore
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Test di fumo su emulatore
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash .github/fumo.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: fumo
+          path: fumo/
+          retention-days: 14
+
+  pubblica:
+    needs: [build, fumo]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: apk
+      - uses: actions/download-artifact@v8
+        with:
+          name: fumo
+          path: fumo
+      - name: Release con l'APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMPRONTA: ${{ needs.build.outputs.impronta }}
+        run: |
+          set -euo pipefail
+          tag="apk-${GITHUB_RUN_NUMBER}"
+          mv percorso.apk "percorso-${GITHUB_RUN_NUMBER}.apk"
+          gh release create "$tag" "percorso-${GITHUB_RUN_NUMBER}.apk" fumo/*.png \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+            --title "Percorso — build ${GITHUB_RUN_NUMBER}" \
+            --notes "Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}. Installa l'APK sopra la versione precedente: i dati restano."
+
+  rapporto:
+    needs: [build, fumo, pubblica]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: fumo
+          path: fumo
+      - name: Rapporto nell'issue dei build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD: ${{ needs.build.result }}
+          FUMO: ${{ needs.fumo.result }}
+          PUBBLICA: ${{ needs.pubblica.result }}
+          MODO: ${{ needs.build.outputs.modo }}
+        run: |
+          set -uo pipefail
+          titolo="Rapporti di build"
+          numero=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$titolo\" in:title" --json number --jq '.[0].number')
+          if [ -z "$numero" ]; then
+            numero=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$titolo" \
+              --body "Un commento per ogni build: esito, test di fumo, estratto di logcat. Claude Code legge questo issue." \
+              | grep -oE '[0-9]+$')
+          fi
+          esito="riuscito"
+          [ "$BUILD" != "success" ] && esito="build fallito"
+          [ "$BUILD" = "success" ] && [ "$FUMO" != "success" ] && esito="build riuscito, test di fumo FALLITO: APK non pubblicato"
+          estratto="(nessun estratto: il test di fumo non è arrivato a produrlo)"
+          [ -f fumo/estratto.txt ] && estratto=$(tail -n 80 fumo/estratto.txt)
+          {
+            echo "### Build ${GITHUB_RUN_NUMBER} — ${esito}"
+            echo ""
+            echo "| Fase | Esito |"
+            echo "|---|---|"
+            echo "| build + firma | ${BUILD} |"
+            echo "| test di fumo | ${FUMO} |"
+            echo "| pubblicazione | ${PUBBLICA} |"
+            echo "| firma | ${MODO:-non determinata} |"
+            echo ""
+            echo "Commit \`${GITHUB_SHA::7}\` · [esecuzione](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"
+            echo ""
+            echo "<details><summary>Estratto di logcat</summary>"
+            echo ""
+            echo '```'
+            echo "$estratto"
+            echo '```'
+            echo "</details>"
+          } > commento.md
+          gh issue comment "$numero" --repo "$GITHUB_REPOSITORY" --body-file commento.md

@@ -1,0 +1,8 @@
+node_modules/
+build_test/
+.expo/
+android/
+ios/
+out/
+__pycache__/
+*.log
