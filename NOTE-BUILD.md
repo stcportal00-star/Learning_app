@@ -1,8 +1,8 @@
 # NOTE-BUILD — prima sessione, 21 settembre 2026
 
-Estrazione del progetto, primo APK firmato, test di fumo superato su emulatore
-Android 14. Cinque build: ogni fallimento aveva una causa diversa dal
-precedente, e nessuna si è ripetuta.
+Estrazione del progetto, APK firmato, test di fumo superato su emulatore
+Android 14. Otto build. Fino al quinto ogni fallimento aveva una causa diversa
+dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
 
 | Build | Esito | Causa del fallimento |
 |---|---|---|
@@ -10,13 +10,20 @@ precedente, e nessuna si è ripetuta.
 | 2 | fumo fallito | Android uccideva l'app in primo piano |
 | 3 | fumo fallito | il lettore restava in attesa, senza errore |
 | 4 | fumo fallito | il lettore andava in errore aprendo il documento |
-| 5 | **riuscito** | — |
+| 5 | **riuscito** | — release `apk-5` pubblicata |
+| 6 | fumo superato | `HTTP 403` creando la release |
+| 7 | **annullato** | l'ho cancellato io: vedi sotto |
+| 8 | fumo superato | `HTTP 403` creando la release, cinque volte |
 
-Stato finale del test di fumo: schermata Oggi in **6 secondi**, tutte e cinque
-le rotte percorse, lettore PDF che apre il documento di prova e ne conta le
-pagine in **2 secondi**, riavvio a freddo superato. Firma in modalità
+Stato del test di fumo al build 8: schermata Oggi in **6 secondi**, tutte e
+cinque le rotte percorse, lettore PDF che apre il documento di prova e ne conta
+le **2 pagine in 4 secondi**, riavvio a freddo superato. Firma in modalità
 **automatica**, impronta SHA-256
 `CF:5C:B0:6D:24:F6:DE:44:AF:FC:4B:76:AD:09:17:41:A1:26:B3:29:20:6F:18:1E:27:B3:69:78:57:1C:C9:09`.
+
+L'APK del build 8 non è in una release ma fra gli artefatti della corsa:
+<https://github.com/stcportal00-star/Learning_app/actions/runs/35638783313>
+— 27,9 MB, scade il 5 ottobre 2026.
 
 ---
 
@@ -112,25 +119,95 @@ con `PERCORSO_CONTATTO`.
 
 ## Aperto
 
-### Due fonti della rassegna rispondono ancora male
+### La pubblicazione dell'APK è respinta con `HTTP 403` — **fermato qui**
 
-`arxiv` con `HTTP 406` e corpo vuoto, `zenodo` con `HTTP 400 — "A validation
-error occurred."`. Il rapporto quotidiano ora riporta il corpo della risposta
-d'errore, e il campo specifico precede quello generico: la prossima corsa
-dovrebbe nominare il campo che Zenodo rifiuta. Finché non lo nomina, non si
-tocca: le due ipotesi già tentate erano sbagliate.
+`POST /repos/.../releases` risponde `403 Resource not accessible by
+integration`. Cinque tentativi con attese crescenti fra 18:54 e 19:01, tutti
+respinti. Prima ancora: il build 6 e il suo riavvio. Sette tentativi in tutto
+sulla stessa causa, quindi mi sono fermato — è la regola della sessione.
 
-Le altre sette fonti funzionano: 59 chiamate riuscite su 77, 905 voci in
-catalogo al momento della consegna.
+Ciò che è accertato, non ipotizzato:
 
-### La biblioteca aperta contiene 13 PDF, non 52
+- il build 5 ha creato `apk-5` alle 16:39 **con lo stesso workflow, mai
+  modificato in quel passo prima del fallimento**;
+- il blocco `GITHUB_TOKEN Permissions` di "Set up job" è **identico** fra il
+  build 5 (riuscito) e il build 6 (respinto): `Contents: write · Issues:
+  write · Metadata: read`;
+- alle **18:51:40**, tre minuti prima del primo 403, il workflow `biblioteca`
+  ha **creato** la release `biblioteca-20260921` nello stesso repository con
+  lo stesso tipo di token. Creare release funziona; da `apk.yml` no;
+- il repository è privato su piano gratuito, quindi i *ruleset* non esistono:
+  `GET /rulesets` risponde "Upgrade to GitHub Pro". Nessuna protezione dei tag
+  può essere la causa;
+- nella stessa corsa il job `rapporto` (`issues: write`) scrive senza problemi.
 
-`biblioteca-20260921` è pubblicata, ma dei 52 testi del catalogo solo 13 sono
-PDF scaricabili. Sei link sono rotti — Sphere Handbook risponde 403, ALNAP
-404, EUR-Lex e *Elements of Statistical Learning* servono HTML e non PDF — e
-31 voci sono libri web da stampare a mano dal browser. È il comportamento
-previsto dallo script, non un guasto, ma l'archivio non è la biblioteca
-intera. I link rotti sono elencati in `rapporto.txt` dentro la release.
+Le due chiamate differiscono per due sole opzioni: `apk.yml` usa `--latest`
+(più `--repo` e `--target`), `biblioteca.yml` usa `--prerelease`. È l'unica
+differenza rimasta fra un'operazione che riesce e una che fallisce, ed è
+l'esperimento da fare per primo — una variabile sola. **Non l'ho fatto**: la
+regola dice di fermarsi e riportare, e l'APK è comunque scaricabile.
+
+Da controllare, nell'ordine: Impostazioni → Actions → General → Workflow
+permissions ("Read and write"); poi se esiste un limite di spesa o una
+restrizione sul repository.
+
+### La biblioteca aperta non conteneva un solo PDF vero
+
+Il conto "13 scaricati su 19" era falso. Lo scaricatore leggeva il
+`Content-Type` e poi non lo guardava: l'unico controllo era `dimensione >
+1024`, quindi una pagina di presentazione salvata con estensione `.pdf`
+passava per un libro, entrava nel manifesto col suo sha256 e l'app la
+importava. *Causal Inference: What If* erano 2,6 MB di HTML.
+
+Col controllo sui primi cinque byte il conto vero è uscito: **0 su 19**.
+
+Ricostruita con `strumenti/trova_pdf.py`, che chiede l'indirizzo alla pagina
+che lo presenta invece di indovinarlo. Undici proposte verificate, otto
+accettate dopo il confronto col titolo, tre respinte (una traduzione uzbeca, il
+piano strategico OWASP al posto della Top 10, la CSF 1.1 al posto della 2.0).
+Cinque voci senza alcun PDF pubblico sono passate a formato `html`, che è la
+verità: si aprono nel browser e si stampano.
+
+Conto onesto adesso: quattordici voci `pdf`, di cui **undici con indirizzo
+verificato byte per byte**, tre ancora da risolvere; trentasei `html`, due
+`hub`.
+
+### arXiv risponde `406` e la causa non è nella richiesta — **fermato qui**
+
+Otto varianti mandate da `strumenti/rassegna/diagnosi_arxiv.py`, una dimensione
+per volta: `Accept` in quattro forme, User-Agent da browser, `Accept-Encoding:
+gzip`, query minima, `max_results 2`, http invece di https. **Tutte e otto
+respinte con 406**, corpo vuoto, nessun `Content-Type`, catena
+`Via: 1.1 varnish` con tre nodi Fastly.
+
+Quando cambiare qualunque dimensione della richiesta non cambia niente, la
+richiesta non è la variabile. Resta la sola dimensione non verificabile da qui:
+da dove si chiede. `fonti_aperte.arxiv` non si tocca — non c'è niente di
+sbagliato da correggere, e OpenAlex indicizza comunque i preprint di arXiv.
+
+Le altre fonti funzionano: **76 chiamate riuscite su 77** nella corsa delle
+18:14, Zenodo compresa.
+
+### Unpaywall era spenta in produzione
+
+`unpaywall()` comincia con `if not CONTATTO: raise`, e `PERCORSO_CONTATTO` non
+era impostato in nessun punto del workflow: in ogni corsa, su ogni voce con
+DOI, la fonte principale non veniva interrogata. Il riepilogo mostrava
+diciannove "senza via di accesso" su diciannove, che sembravano un esito.
+
+Il workflow ora passa il recapito da un segreto, e l'assenza è dichiarata in
+tre punti invece di tacere. **Per riaccenderla**: Impostazioni → Secrets and
+variables → Actions → nuovo segreto `PERCORSO_CONTATTO`, un indirizzo di posta
+raggiungibile. Serve a loro per avvisare chi interroga troppo.
+
+### Ho cancellato io il build 7
+
+Avevo trattenuto apposta il commit della biblioteca perché tocca `assets/**`.
+Poi ho spinto il commit successivo e il push si è portato dietro anche quello:
+`apk` è scattato e `cancel-in-progress` ha ucciso il build 7 dentro il passo di
+pubblicazione. Ventisei minuti di runner persi, niente di irreversibile. Chi
+lavora su questo repository tenga presente che un push di più commit fa
+scattare i filtri `paths` sull'unione dei file di tutti i commit.
 
 ### pdf.js gira sul thread principale
 
@@ -162,7 +239,9 @@ una rigenerazione perda il riempitivo di `Promise.withResolvers`, riassegni
 `workerSrc` o smetta di importare il worker sul thread principale. I due
 conteggi dichiarati in `CLAUDE.md` sono stati aggiornati di conseguenza.
 
-`strumenti/rassegna/verifica_rassegna.py`: 171 test, nessuna rete.
+`strumenti/rassegna/verifica_rassegna.py`: 199 test, nessuna rete.
+`strumenti/verifica_biblioteca.py`: 216 test, nessuna rete, eseguito da
+`verifica.yml` a ogni push e da `biblioteca.yml` prima di scaricare.
 
 Mai modificati: `fumo.sh`, `test-firma.sh`, il passo della chiave di firma,
 la release `firma`.
