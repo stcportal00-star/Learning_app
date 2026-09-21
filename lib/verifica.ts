@@ -76,7 +76,21 @@ export async function verifica(
   let ottenuto: { colonne: string[]; righe: Riga[] };
 
   if (opzioni.preparazione) {
-    await esegui(opzioni.preparazione);
+    // Senza questa protezione un errore qui usciva da verifica() e faceva
+    // cadere la schermata: è l'unica chiamata a esegui() che non era in un
+    // try. Il ramo non è usato da app/esercizi.tsx, che passa invece un
+    // esecutore già legato alla preparazione — ma resta esportato, e una via
+    // che nessuno percorre oggi è una via che qualcuno percorre domani.
+    try {
+      await esegui(opzioni.preparazione);
+    } catch (e) {
+      return {
+        corretto: false,
+        motivo: "errore_sql",
+        dettaglio: "La preparazione dell'esercizio non viene eseguita.",
+        errore: String(e),
+      };
+    }
   }
 
   try {
