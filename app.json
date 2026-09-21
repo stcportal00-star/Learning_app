@@ -27,7 +27,8 @@
       "expo-router",
       "expo-sqlite",
       "expo-document-picker",
-      "./plugins/firma-release"
+      "./plugins/firma-release",
+      "./plugins/senza-gms"
     ],
     "experiments": {
       "typedRoutes": true
