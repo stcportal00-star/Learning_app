@@ -99,6 +99,7 @@ if (!process.env.MOTORE_SQL_IN_CORSO) {
 let passati = 0;
 const falliti = [];
 const difettiInchiodati = [];
+const correzioniSorvegliate = [];
 
 function ok(nome, condizione, extra = "") {
   if (condizione) passati++;
@@ -117,6 +118,22 @@ function difetto(codice, nome, condizione, extra = "") {
   } else {
     falliti.push(
       `${codice}: ${nome} — il comportamento e' CAMBIATO (difetto corretto?): aggiornare la prova${extra ? " — " + extra : ""}`
+    );
+  }
+}
+
+/**
+ * Il contraltare di difetto(): passa quando vale il comportamento CORRETTO.
+ * Gli scenari non si cancellano quando un difetto viene corretto — cambiano
+ * mestiere. Da prova che il difetto c'e' a guardia che non torni.
+ */
+function corretto(codice, nome, condizione, extra = "") {
+  if (condizione) {
+    passati++;
+    correzioniSorvegliate.push(`${codice}: ${nome}`);
+  } else {
+    falliti.push(
+      `${codice}: ${nome} — LA CORREZIONE E' REGREDITA${extra ? " — " + extra : ""}`
     );
   }
 }
@@ -630,10 +647,12 @@ const esitoRamoMorto = await V.verifica(
   "EXPLAIN QUERY PLAN SELECT * FROM visite WHERE operatore = 'OP-007'",
   "EXPLAIN QUERY PLAN SELECT * FROM visite WHERE operatore = 'OP-007'",
   { preparazione: "CREATE INDEX idx_d ON visite(esito);" });
-ok("F16 PRE-06 il ramo opzioni.preparazione non rompe nulla", esitoRamoMorto.corretto === true,
-  JSON.stringify(esitoRamoMorto));
-difetto("PRE-06", "il ramo opzioni.preparazione con eseguiConPreparazione gira su una copia usa-e-getta: effetto nullo e nessun errore",
-  esitoRamoMorto.corretto === true && nomiTmp(cartellaSqlite).length === 0);
+ok("F16 PRE-06 il ramo opzioni.preparazione non fa piu' cadere la schermata",
+  esitoRamoMorto.motivo === "errore_sql", JSON.stringify(esitoRamoMorto));
+corretto("PRE-06", "il ramo opzioni.preparazione riporta l'errore invece di lasciarlo uscire da verifica()",
+  esitoRamoMorto.motivo === "errore_sql" &&
+    esitoRamoMorto.dettaglio.includes("preparazione") &&
+    nomiTmp(cartellaSqlite).length === 0, JSON.stringify(esitoRamoMorto));
 
 // VER-04, la conseguenza misurabile: un indice che cambia il PIANO cambia anche
 // l'ORDINE del risultato di SQL-128, che ha LIMIT senza ORDER BY.
@@ -747,8 +766,8 @@ difetto("QRY-16", "una query che non termina blocca il motore per sempre: nessun
 // chiede la sola lettura.
 
 const sorgentePalestra = readFileSync(join(RADICE_PROGETTO, "lib/palestra.ts"), "utf8");
-difetto("RO-01a", "apriPalestra() chiama openDatabaseAsync(\"palestra.db\") senza nessuna opzione di sola lettura",
-  /openDatabaseAsync\("palestra\.db"\)/.test(sorgentePalestra));
+corretto("RO-01a", "apriPalestra() impone PRAGMA query_only subito dopo l'apertura",
+  /PRAGMA query_only = ON/.test(sorgentePalestra));
 
 const md5Prima = md5Di(fileCopiato);
 const visitePrima = (await palestra.esegui("SELECT count(*) AS n FROM visite")).righe[0][0];
@@ -764,47 +783,47 @@ ok("H1 QRY-19b la seconda istruzione di 'SELECT 1; DELETE FROM visite' non viene
 // RO-01: una query di SCRITTURA nel campo risposta.
 const hUpdate = await tenta(() => palestra.esegui("UPDATE strutture SET nome = 'RUBATA' WHERE id = 1"));
 const nomeDopo = (await palestra.esegui("SELECT nome FROM strutture WHERE id = 1")).righe[0][0];
-difetto("RO-01", "un UPDATE scritto nel campo risposta viene ESEGUITO sulla palestra",
-  hUpdate.riuscito === true && nomeDopo === "RUBATA", JSON.stringify({ hUpdate, nomeDopo }));
+corretto("RO-01", "un UPDATE scritto nel campo risposta viene RESPINTO da SQLite",
+  hUpdate.riuscito === false && nomeDopo !== "RUBATA" &&
+    String(hUpdate.errore).includes("readonly"), JSON.stringify({ hUpdate, nomeDopo }));
 
 const hDelete = await tenta(() => palestra.esegui("DELETE FROM visite WHERE id <= 100"));
 const visiteDopo = (await palestra.esegui("SELECT count(*) AS n FROM visite")).righe[0][0];
-difetto("RO-01b", `un DELETE viene eseguito: le visite passano da ${visitePrima} a ${visiteDopo}`,
-  hDelete.riuscito === true && visiteDopo === visitePrima - 100, JSON.stringify(hDelete));
+corretto("RO-01b", `un DELETE viene respinto: le visite restano ${visitePrima}`,
+  hDelete.riuscito === false && visiteDopo === visitePrima, JSON.stringify(hDelete));
 
 // Il danno e' sul FILE, non nella testa del processo.
-difetto("RO-01c", "il danno e' permanente: il file palestra.db sul disco e' cambiato",
-  md5Di(fileCopiato) !== md5Prima);
+corretto("RO-01c", "il file palestra.db sul disco e' identico byte per byte",
+  md5Di(fileCopiato) === md5Prima);
 const altraConnessione = openDatabaseSync("palestra.db", { useNewConnection: true }, cartellaSqlite);
 const visteDaFuori = await altraConnessione.getFirstAsync("SELECT count(*) AS n FROM visite");
-difetto("RO-01d", "una seconda connessione allo stesso file vede la palestra rovinata",
-  Number(visteDaFuori.n) === visiteDopo && visiteDopo !== visitePrima);
+corretto("RO-01d", "una seconda connessione allo stesso file vede la palestra intatta",
+  Number(visteDaFuori.n) === visitePrima);
 await altraConnessione.closeAsync();
 
 // La conseguenza per gli esercizi: le soluzioni di riferimento cambiano risultato.
 const rifDopo = await palestra.esegui(
   "SELECT esito, count(*) AS n FROM visite GROUP BY esito ORDER BY esito");
-difetto("RO-01e", "dopo la scrittura le soluzioni di riferimento danno un risultato diverso: tutti gli esercizi successivi diventano incoerenti",
-  JSON.stringify(rifPrima.righe) !== JSON.stringify(rifDopo.righe));
+corretto("RO-01e", "le soluzioni di riferimento danno lo stesso risultato di prima: gli esercizi successivi restano coerenti",
+  JSON.stringify(rifPrima.righe) === JSON.stringify(rifDopo.righe));
 
 // RO-02: DDL nel campo risposta.
 const hCreate = await tenta(() => palestra.esegui("CREATE TABLE zzz_intrusa (x INTEGER)"));
 const intrusa = await palestra.esegui(
   "SELECT count(*) AS n FROM sqlite_master WHERE name = 'zzz_intrusa'");
-difetto("RO-02", "CREATE TABLE scritto nel campo risposta viene eseguito",
-  hCreate.riuscito === true && intrusa.righe[0][0] === 1, JSON.stringify(hCreate));
+corretto("RO-02", "CREATE TABLE scritto nel campo risposta viene respinto",
+  hCreate.riuscito === false && intrusa.righe[0][0] === 0, JSON.stringify(hCreate));
 
 const hDrop = await tenta(() => palestra.esegui("DROP TABLE valutazioni"));
 const rimasta = await palestra.esegui(
   "SELECT count(*) AS n FROM sqlite_master WHERE name = 'valutazioni'");
-difetto("RO-02b", "DROP TABLE viene eseguito: lo schema della palestra e' modificabile dall'utente",
-  hDrop.riuscito === true && rimasta.righe[0][0] === 0, JSON.stringify(hDrop));
+corretto("RO-02b", "DROP TABLE viene respinto: lo schema della palestra non e' modificabile dall'utente",
+  hDrop.riuscito === false && rimasta.righe[0][0] === 1, JSON.stringify(hDrop));
 
 const esitoDopoDrop = await V.verifica(palestra.esegui,
   "SELECT count(*) AS n FROM valutazioni", "SELECT count(*) AS n FROM valutazioni");
-difetto("RO-02c", "dopo il DROP ogni esercizio su quella tabella accusa il CONTENUTO: 'La soluzione di riferimento non è eseguibile su questo dispositivo'",
-  esitoDopoDrop.motivo === "errore_sql" && esitoDopoDrop.dettaglio.includes("soluzione di riferimento"),
-  JSON.stringify(esitoDopoDrop));
+corretto("RO-02c", "la tabella e' ancora li': l'esercizio su di essa funziona invece di accusare il contenuto",
+  esitoDopoDrop.motivo !== "errore_sql", JSON.stringify(esitoDopoDrop));
 
 // RO-03: ATTACH di un altro database dalla risposta.
 const altroFile = join(cartellaSqlite, "segreti.db");
@@ -820,9 +839,8 @@ difetto("RO-03", "ATTACH DATABASE dalla risposta riesce: la connessione della pa
 const hScritturaAltrui = await tenta(() =>
   palestra.esegui("INSERT INTO altro.segreti VALUES ('aggiunta dalla palestra')"));
 const contaAltrui = await tenta(() => palestra.esegui("SELECT count(*) AS n FROM altro.segreti"));
-difetto("RO-03b", "...e ci si puo' anche SCRIVERE: e' la via per toccare una tabella fuori da registra()",
-  hScritturaAltrui.riuscito === true && contaAltrui.riuscito === true &&
-    contaAltrui.valore.righe[0][0] === 2,
+corretto("RO-03b", "...ma NON ci si puo' scrivere: query_only vale su ogni database della connessione, anche attaccato",
+  hScritturaAltrui.riuscito === false && contaAltrui.valore.righe[0][0] === 1,
   JSON.stringify(hScritturaAltrui));
 const elencoAttaccati = await palestra.esegui("PRAGMA database_list");
 difetto("RO-03c", "l'ATTACH resta attivo sulla connessione memorizzata, per tutte le verifiche successive",
@@ -831,18 +849,22 @@ difetto("RO-03c", "l'ATTACH resta attivo sulla connessione memorizzata, per tutt
 // RO-04: PRAGMA che cambiano stato.
 const hPragma = await tenta(() => palestra.esegui("PRAGMA user_version = 99"));
 const versioneUtente = await palestra.esegui("PRAGMA user_version");
-difetto("RO-04", "un PRAGMA di scrittura (user_version = 99) viene eseguito e persiste sulla connessione",
-  hPragma.riuscito === true && versioneUtente.righe[0][0] === 99,
+corretto("RO-04", "un PRAGMA di scrittura (user_version = 99) viene respinto",
+  hPragma.riuscito === false && versioneUtente.righe[0][0] !== 99,
   JSON.stringify({ hPragma, righe: versioneUtente.righe }));
 const controlloFile = openDatabaseSync("palestra.db", { useNewConnection: true }, cartellaSqlite);
 const versioneSulFile = await controlloFile.getFirstAsync("PRAGMA user_version");
-difetto("RO-04b", "...e finisce nel FILE: sopravvive alla chiusura dell'app",
-  Number(versioneSulFile.user_version) === 99);
+corretto("RO-04b", "...e il FILE non ne porta traccia",
+  Number(versioneSulFile.user_version) !== 99);
 await controlloFile.closeAsync();
 
 // ==================================================================== ESITO
 console.log(`\nsimulazione: motore-sql — lib/palestra.ts + lib/verifica.ts, SQLite ${palestra.versioneMotore()}`);
 console.log(`radice di prova: ${radice}`);
+if (correzioniSorvegliate.length) {
+  console.log(`\ncorrezioni sorvegliate (erano difetti, ora sono guardie): ${correzioniSorvegliate.length}`);
+  for (const c of correzioniSorvegliate) console.log(`  - ${c}`);
+}
 if (difettiInchiodati.length) {
   console.log(
     `\nDIFETTI DELL'APP INCHIODATI da questa prova (${difettiInchiodati.length} scenari). Sono VERDI perche' il`
