@@ -52,11 +52,15 @@ jobs:
           node-version: 22
           cache: npm
 
+      # Senza cache Gradle: android/ è generato dal prebuild, sette passi più in
+      # basso, quindi qui non esiste ancora alcun file Gradle su cui costruire la
+      # chiave di cache. setup-java tratta quell'assenza come errore fatale e il
+      # build non parte mai. Il costo è il riscaricamento delle dipendenze Gradle
+      # a ogni build; la correttezza dell'APK non cambia.
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - run: npm ci
       - run: npm run verifica
