@@ -56,22 +56,30 @@
  * in fondo, separato dal conteggio.
  *
  * FALSIFICAZIONE (fatta e misurata, non immaginata). Una prova che non puo
- * diventare rossa non dimostra niente. Tre indebolimenti, tutti applicati DA
- * FUORI riscrivendo il sorgente in una COPIA del progetto (mai l'originale):
+ * diventare rossa non dimostra niente. Cinque indebolimenti, tutti applicati
+ * su una COPIA del progetto (mai sull'originale, mai su test/banco/), tutti
+ * eseguiti davvero. Fra parentesi le verifiche diventate rosse su 408:
  *
- *   1) togliere `await N.cancelAllScheduledNotificationsAsync();` dalla riga 73
- *      di lib/notifiche.ts  -> 19 verifiche rosse (idempotenza, cambio d'ora,
- *      cambio di tipo, spegnimento, ampiezza della cancellazione);
- *   2) cambiare `if (!chiediSeManca || !attuale.canAskAgain) return false;`
- *      in `if (!chiediSeManca) return false;` (riga 46) -> 3 verifiche rosse:
- *      l'app torna a insistere su un permesso negato per sempre;
- *   3) cambiare `if (q.getTime() <= adesso.getTime())` in `<` (riga 95 di
- *      lib/promemoria.ts) -> 3 verifiche rosse: all'ora esatta si programma un
- *      avviso gia trascorso.
+ *   1) via la cancellazione preventiva — si cancella `await
+ *      N.cancelAllScheduledNotificationsAsync();` (riga 73 di
+ *      lib/notifiche.ts): 37 rosse. E l'indebolimento che conta di piu,
+ *      perche e proprio cio che rende applica() idempotente.
+ *   2) insistere su un permesso negato per sempre — `if (!chiediSeManca ||
+ *      !attuale.canAskAgain)` diventa `if (!chiediSeManca)` (riga 46): 2 rosse,
+ *      entrambe sul conteggio delle richieste sprecate.
+ *   3) programmare un avviso gia trascorso — `<=` diventa `<` (riga 95 di
+ *      lib/promemoria.ts): 2 rosse, all'ora esatta e a mezzanotte in punto.
+ *   4) programmare senza controllare il permesso — si cancella `if (!(await
+ *      permessoConcesso(false))) return false;` (riga 76): 7 rosse.
+ *   5) fidarsi della preferenza salvata — in deserializza le due guardie
+ *      `oraValida(ora, minuto) ? ... : PREDEFINITO...` (righe 77-78 di
+ *      lib/promemoria.ts) diventano `ora,` e `minuto,`: 4 rosse.
  *
- * La ricetta per rifare la falsificazione:
- *   cp -r /home/user/learning_app /tmp/falsifica && cd /tmp/falsifica
- *   sed -i '73d' lib/notifiche.ts
+ * La ricetta per rifare la falsificazione, dalla radice del progetto:
+ *   tar --exclude=node_modules --exclude=.git -cf - . \
+ *     | (mkdir -p /tmp/falsifica && cd /tmp/falsifica && tar -xf -)
+ *   ln -s "$PWD/node_modules" /tmp/falsifica/node_modules
+ *   cd /tmp/falsifica && sed -i '73d' lib/notifiche.ts
  *   node test/simulazione/promemoria-notifiche.mjs
  *
  * LIMITI DI QUESTA PROVA — cosa un verde qui NON dimostra:
@@ -313,7 +321,7 @@ const difettiRiprodotti = [];
 function ok(nome, condizione, extra = "") {
   if (condizione) {
     passati++;
-    if (nome.startsWith("DIFETTO RIPRODOTTO")) difettiRiprodotti.push(nome);
+    if (nome.includes("DIFETTO RIPRODOTTO")) difettiRiprodotti.push(nome);
   } else {
     falliti.push(`${nome}${extra ? " — " + extra : ""}`);
   }
@@ -708,13 +716,21 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
 
   // Il viaggio: la stessa preferenza vista da due fusi da due istanti locali
   // diversi. L'avviso resta alle 07:00 del posto, come promette il commento.
-  const aRoma = await conFuso("Europe/Rome", () =>
-    prossimaOccorrenza(acceso(7, 0), locale(2026, 11, 3, 6, 0)));
-  const aCittaDelMessico = await conFuso("America/Mexico_City", () =>
-    prossimaOccorrenza(acceso(7, 0), locale(2026, 11, 3, 6, 0)));
+  // getHours() va letta DENTRO il fuso: fuori restituirebbe l'ora di Roma.
+  const aRoma = await conFuso("Europe/Rome", () => {
+    const q = prossimaOccorrenza(acceso(7, 0), locale(2026, 11, 3, 6, 0));
+    return { ora: q.getHours(), istante: q.getTime() };
+  });
+  const aCittaDelMessico = await conFuso("America/Mexico_City", () => {
+    const q = prossimaOccorrenza(acceso(7, 0), locale(2026, 11, 3, 6, 0));
+    return { ora: q.getHours(), istante: q.getTime() };
+  });
   ok("D/in viaggio l'avviso resta alle 07:00 locali, non alle 07:00 di casa",
-     aRoma.getHours() === 7 && aCittaDelMessico.getHours() === 7
-     && aRoma.getTime() !== aCittaDelMessico.getTime());
+     aRoma.ora === 7 && aCittaDelMessico.ora === 7,
+     `roma ${aRoma.ora} messico ${aCittaDelMessico.ora}`);
+  ok("D/...e i due istanti assoluti differiscono delle 7 ore di fuso",
+     aCittaDelMessico.istante - aRoma.istante === 7 * 3600_000,
+     String((aCittaDelMessico.istante - aRoma.istante) / 3600_000));
 
   // La data passata non viene modificata: e un oggetto del chiamante.
   const riferimento = locale(2026, 10, 5, 8, 0);
@@ -1581,3 +1597,371 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
        sc.schermoVuoto() === false && sc.stato.fattoOggi === false
        && !sc.rigaStato().includes("gia registrato"), sc.rigaStato());
   }
+
+  // ------------------------- L5: accensione dell'interruttore, permesso dato
+  pulisci();
+  await svuotaSessioni();
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    await sc.commutaInterruttore(true);
+    ok("L/accensione: la preferenza salvata dice acceso",
+       JSON.parse(Kv.leggiGrezzo("promemoria")).attivo === true);
+    ok("L/accensione: nessun dialogo di sistema, il permesso c'era gia",
+       Banco.conteggioRichiestePermesso() === 0);
+    ok("L/accensione: nessun avviso applicativo", sc.avvisi.length === 0);
+    ok("L/accensione: una notifica programmata", (await inCoda()) === 1);
+    ok("L/accensione: il contatore a schermo dice 1", sc.stato.inCoda === 1);
+    ok("L/accensione: nessun banner rosso", sc.bannerRosso() === false);
+    ok("L/accensione: la riga di stato annuncia il prossimo avviso",
+       /^Prossimo avviso: .+\. In coda nel sistema: 1\.$/.test(sc.rigaStato()), sc.rigaStato());
+    ok("L/accensione: il prossimo avviso ha giorno della settimana e ora in it-IT",
+       /^Prossimo avviso: [a-zà-ù]+,? ?\d{2}[:.]\d{2}\./u.test(sc.rigaStato()), sc.rigaStato());
+  }
+
+  // ------------------- L6: accensione con permesso da chiedere, utente concede
+  pulisci();
+  Banco.programmaPermesso({ status: "undetermined", canAskAgain: true });
+  Banco.programmaRispostaRichiesta({ status: "granted" });
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    ok("L/prima dell'accensione il permesso manca ma non c'e banner (promemoria spento)",
+       sc.stato.permesso === false && sc.bannerRosso() === false);
+    await sc.commutaInterruttore(true);
+    ok("L/accensione: il dialogo di sistema compare UNA volta sola",
+       Banco.conteggioRichiestePermesso() === 1);
+    ok("L/accensione: concesso, nessun avviso applicativo", sc.avvisi.length === 0);
+    ok("L/accensione: la notifica viene programmata", (await inCoda()) === 1);
+    ok("L/accensione: il banner rosso non compare", sc.bannerRosso() === false);
+    ok("L/accensione: lo stato del permesso a schermo e aggiornato", sc.stato.permesso === true);
+  }
+
+  // --------------------------- L7: accensione con permesso negato per sempre
+  // Scenario concreto: l'utente aveva i promemoria accesi, ha tolto il
+  // permesso dalle impostazioni di Android, riapre la schermata e riaccende.
+  pulisci();
+  await svuotaSessioni();
+  await notifiche.applica(acceso(7, 0));           // notifica gia in coda da prima
+  await notifiche.salvaPromemoria(spento(7, 0));   // ma la preferenza e spenta
+  Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    ok("L/preparazione: all'apertura risulta 1 notifica in coda", sc.stato.inCoda === 1);
+    await sc.commutaInterruttore(true);
+    uguali("L/permesso negato: compare l'avviso con Annulla e Impostazioni",
+           sc.avvisi.map((a) => a.titolo), ["Permesso negato"]);
+    ok("L/permesso negato: i due bottoni sono quelli attesi",
+       JSON.stringify(sc.avvisi[0].bottoni) === JSON.stringify(["Annulla", "Impostazioni"]));
+    ok("L/permesso negato: il dialogo di sistema NON viene riproposto",
+       Banco.conteggioRichiestePermesso() === 0);
+    ok("L/permesso negato: compare il banner rosso", sc.bannerRosso() === true);
+    ok("L/permesso negato: la preferenza e stata comunque salvata come ACCESA",
+       JSON.parse(Kv.leggiGrezzo("promemoria")).attivo === true);
+    ok("L/DIFETTO RIPRODOTTO: si esce prima di applica(), quindi la vecchia notifica NON viene cancellata",
+       (await inCoda()) === 1, String(await inCoda()));
+    ok("L/DIFETTO RIPRODOTTO: 'In coda nel sistema' resta il valore stantio letto all'apertura",
+       sc.stato.inCoda === 1);
+    ok("L/DIFETTO RIPRODOTTO: lo schermo dice 'Prossimo avviso' pur non avendo programmato niente in questo giro",
+       sc.rigaStato().startsWith("Prossimo avviso: "), sc.rigaStato());
+    sc.avvisi[0].apriImpostazioni();
+    ok("L/permesso negato: il bottone Impostazioni apre le impostazioni di sistema",
+       sc.impostazioniAperte() === 1);
+  }
+
+  // ------------------------------------------------ L8: il banner rosso
+  pulisci();
+  {
+    // acceso + permesso -> niente banner
+    Banco.programmaPermesso({ status: "granted" });
+    await notifiche.salvaPromemoria(acceso());
+    const a = creaSchermata();
+    await a.montaggio();
+    ok("L/banner: acceso con permesso -> nessun banner", a.bannerRosso() === false);
+
+    // spento + niente permesso -> niente banner (non ci sarebbe niente da dire)
+    pulisci();
+    Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+    await notifiche.salvaPromemoria(spento());
+    const b = creaSchermata();
+    await b.montaggio();
+    ok("L/banner: spento senza permesso -> nessun banner", b.bannerRosso() === false);
+
+    // acceso + niente permesso -> banner
+    pulisci();
+    Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+    await notifiche.salvaPromemoria(acceso());
+    const c = creaSchermata();
+    await c.montaggio();
+    ok("L/banner: acceso senza permesso -> banner rosso", c.bannerRosso() === true);
+    ok("L/banner: con il banner la riga dice comunque 'Prossimo avviso', che non arrivera",
+       c.rigaStato().startsWith("Prossimo avviso: "), c.rigaStato());
+  }
+
+  // ------------------------------------------------ L9: spegnimento
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(7, 0));
+  await notifiche.applica(acceso(7, 0));
+  Banco.programmaPermesso({ status: "denied", canAskAgain: false });
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    await sc.commutaInterruttore(false);
+    ok("L/spegnimento: nessun dialogo di sistema, anche senza permesso",
+       Banco.conteggioRichiestePermesso() === 0);
+    ok("L/spegnimento: nessun avviso applicativo", sc.avvisi.length === 0);
+    ok("L/spegnimento: la coda torna a 0", (await inCoda()) === 0);
+    ok("L/spegnimento: il contatore a schermo torna a 0", sc.stato.inCoda === 0);
+    ok("L/spegnimento: la preferenza salvata dice spento",
+       JSON.parse(Kv.leggiGrezzo("promemoria")).attivo === false);
+    ok("L/spegnimento: il banner rosso sparisce", sc.bannerRosso() === false);
+    ok("L/spegnimento: riga di stato senza avviso",
+       sc.rigaStato() === "Nessun avviso programmato. In coda nel sistema: 0.", sc.rigaStato());
+  }
+
+  // ------------------------------------------ L10: conferma di un'ora valida
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(7, 0));
+  await notifiche.applica(acceso(7, 0));
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    sc.scriviOra("8:30");
+    await sc.confermaOra();
+    uguali("L/conferma: la preferenza salvata ha la nuova ora",
+           JSON.parse(Kv.leggiGrezzo("promemoria")),
+           { attivo: true, ora: 8, minuto: 30, tipo: "mattina" });
+    uguali("L/conferma: una sola notifica, alla nuova ora",
+           (await Doppio.getAllScheduledNotificationsAsync())
+             .map((v) => `${v.trigger.hour}:${v.trigger.minute}`), ["8:30"]);
+    ok("L/conferma: nessun avviso", sc.avvisi.length === 0);
+    ok("L/conferma: il contatore resta 1", sc.stato.inCoda === 1);
+
+    // Mezzanotte scritta come 0000: accettata.
+    sc.scriviOra("0000");
+    await sc.confermaOra();
+    uguali("L/conferma: '0000' e mezzanotte, non un valore vuoto",
+           (await Doppio.getAllScheduledNotificationsAsync())
+             .map((v) => `${v.trigger.hour}:${v.trigger.minute}`), ["0:0"]);
+    // Confermare lo stesso valore riprogramma comunque: resta una sola.
+    await sc.confermaOra();
+    ok("L/conferma dello stesso valore: riprogramma ma resta una sola notifica", (await inCoda()) === 1);
+  }
+
+  // -------------------------------------- L11: conferma di un'ora non valida
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(7, 0));
+  await notifiche.applica(acceso(7, 0));
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    const depositoPrima = Kv.leggiGrezzo("promemoria");
+    const giornalePrima = Banco.giornale.length;
+    for (const scritto of ["25:00", "7:3", "mattina", "", "   ", "07:30:00"]) {
+      sc.scriviOra(scritto);
+      await sc.confermaOra();
+      ok(`L/ora non valida ${JSON.stringify(scritto)}: il campo torna al valore precedente`,
+         sc.stato.testoOra === "07:00", sc.stato.testoOra);
+    }
+    uguali("L/ora non valida: compare l'avviso, uno per tentativo",
+           sc.avvisi.map((a) => a.titolo),
+           ["Ora non valida", "Ora non valida", "Ora non valida", "Ora non valida", "Ora non valida", "Ora non valida"]);
+    ok("L/ora non valida: il messaggio insegna la forma giusta",
+       sc.avvisi[0].messaggio === "Scrivila come 07:30.");
+    ok("L/ora non valida: NESSUNA scrittura nel deposito",
+       Kv.leggiGrezzo("promemoria") === depositoPrima);
+    ok("L/ora non valida: NESSUNA riprogrammazione, la notifica buona resta",
+       Banco.giornale.length === giornalePrima && (await inCoda()) === 1);
+    uguali("L/ora non valida: la notifica in coda e ancora quella delle 07:00",
+           (await Doppio.getAllScheduledNotificationsAsync())
+             .map((v) => `${v.trigger.hour}:${v.trigger.minute}`), ["7:0"]);
+  }
+
+  // ------------------- L12: doppia conferma (onBlur + onSubmitEditing insieme)
+  // Il campo ha ENTRAMBI i gestori sulla stessa TextInput: premere Invio
+  // toglie il fuoco, quindi partono tutti e due con lo STESSO `p` del render.
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(7, 0));
+  await notifiche.applica(acceso(7, 0));
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    sc.scriviOra("08:30");
+    const pDelRender = sc.stato.p;
+    const scrittePrima = Kv.giornale.filter((v) => v.azione === "scrive").length;
+    await Promise.all([sc.confermaOra(pDelRender), sc.confermaOra(pDelRender)]);
+    ok("L/DIFETTO RIPRODOTTO: onBlur e onSubmitEditing insieme lasciano DUE notifiche quotidiane",
+       (await inCoda()) === 2, String(await inCoda()));
+    ok("L/doppia conferma: il contatore a schermo lo mostra", sc.stato.inCoda === 2);
+    ok("L/doppia conferma: la riga di stato rivela la doppia programmazione",
+       sc.rigaStato().endsWith("In coda nel sistema: 2."), sc.rigaStato());
+    ok("L/doppia conferma: due salvataggi della stessa preferenza",
+       Kv.giornale.filter((v) => v.azione === "scrive").length - scrittePrima === 2,
+       String(Kv.giornale.filter((v) => v.azione === "scrive").length - scrittePrima));
+  }
+
+  // ------------------------- L13: conferma dell'ora con promemoria SPENTO
+  pulisci();
+  await notifiche.salvaPromemoria(spento(7, 0));
+  Banco.programmaPermesso({ status: "undetermined", canAskAgain: true });
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    sc.scriviOra("21:45");
+    await sc.confermaOra();
+    uguali("L/ora cambiata a promemoria spento: si salva comunque",
+           JSON.parse(Kv.leggiGrezzo("promemoria")),
+           { attivo: false, ora: 21, minuto: 45, tipo: "mattina" });
+    ok("L/ora cambiata a promemoria spento: nessun dialogo di permesso",
+       Banco.conteggioRichiestePermesso() === 0);
+    ok("L/ora cambiata a promemoria spento: applica viene chiamata e cancella soltanto",
+       azioni().filter((a) => a === "cancella-tutte").length >= 1
+       && azioni().filter((a) => a === "programma").length === 0, azioni().join(","));
+    ok("L/ora cambiata a promemoria spento: in coda 0", sc.stato.inCoda === 0);
+    ok("L/ora cambiata a promemoria spento: riga senza avviso",
+       sc.rigaStato() === "Nessun avviso programmato. In coda nel sistema: 0.");
+
+    // E accendendo dopo, suona all'ora salvata da spento.
+    Banco.programmaRispostaRichiesta({ status: "granted" });
+    await sc.commutaInterruttore(true);
+    uguali("L/accendendo dopo, suona all'ora salvata da spento",
+           (await Doppio.getAllScheduledNotificationsAsync())
+             .map((v) => `${v.trigger.hour}:${v.trigger.minute}`), ["21:45"]);
+  }
+
+  // ----------------------------------------------- L14: i cinque chip del tipo
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(7, 0, "mattina"));
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    let tuttiCoerenti = true;
+    for (const t of ["artefatto", "lettura", "paper", "ripasso", "mattina"]) {
+      await sc.scegliTipo(t);
+      const v = await Doppio.getAllScheduledNotificationsAsync();
+      const atteso = testoNotifica({ ...sc.stato.p, tipo: t });
+      if (v.length !== 1 || v[0].content.title !== atteso.titolo || v[0].content.body !== atteso.corpo
+          || sc.stato.p.tipo !== t || JSON.parse(Kv.leggiGrezzo("promemoria")).tipo !== t) {
+        tuttiCoerenti = false;
+      }
+      if (JSON.stringify(sc.anteprima()) !== JSON.stringify(atteso)) tuttiCoerenti = false;
+    }
+    ok("L/i cinque chip: preferenza, anteprima e notifica restano coerenti", tuttiCoerenti);
+    ok("L/i cinque chip: l'ora non cambia mai", sc.stato.p.ora === 7 && sc.stato.p.minuto === 0);
+    ok("L/i cinque chip: sempre una sola notifica in coda", (await inCoda()) === 1);
+
+    // Toccare il chip gia selezionato riprogramma comunque.
+    const prima = azioni().length;
+    await sc.scegliTipo(sc.stato.p.tipo);
+    ok("L/il chip gia selezionato riprogramma comunque (cancella + programma inutili)",
+       azioni().length > prima && (await inCoda()) === 1);
+  }
+
+  // ------------------------- L15: la riga di stato e calcolata al render
+  pulisci();
+  await notifiche.salvaPromemoria(acceso(7, 0));
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    const primaDelle7 = sc.rigaStato(locale(2026, 10, 5, 6, 0));
+    const dopoLe7 = sc.rigaStato(locale(2026, 10, 5, 8, 0));
+    ok("L/la riga di stato dipende dall'istante del render",
+       primaDelle7 !== dopoLe7, `${primaDelle7} || ${dopoLe7}`);
+    // Nessun campo di stato cambia col passare del tempo: React non ha
+    // motivo di rifare il render, quindi la frase resta quella di prima.
+    const statoPrima = JSON.stringify(sc.stato);
+    await new Promise((r) => setTimeout(r, 5));
+    ok("L/DIFETTO RIPRODOTTO: nulla nello stato cambia col tempo, quindi 'Prossimo avviso' non si aggiorna da solo",
+       JSON.stringify(sc.stato) === statoPrima);
+  }
+
+  // ------------------------------ L16: ritorno al Profilo, coerenza del testo
+  pulisci();
+  await notifiche.salvaPromemoria(spento());
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    await sc.commutaInterruttore(true);
+    sc.scriviOra("06:15");
+    await sc.confermaOra();
+    await sc.scegliTipo("paper");
+    ok("L/ritorno: si torna al Profilo", sc.tornaIndietro() === "profilo");
+    // Profilo rilegge la preferenza al proprio montaggio.
+    const letto = await notifiche.leggiPromemoria();
+    ok("L/ritorno: il Profilo rilegge e mostra il testo coerente",
+       rigaProfilo(letto) === "Blocco paper alle 06:15, ogni giorno.", rigaProfilo(letto));
+    await sc.commutaInterruttore(false);
+    ok("L/ritorno dopo lo spegnimento: il Profilo dice che non c'e avviso",
+       rigaProfilo(await notifiche.leggiPromemoria())
+         === "Nessun avviso. Notifica locale, funziona anche in aereo.");
+  }
+}
+
+// ==========================================================================
+// PARTE M — offline: l'invariante di progetto, verificata e non dichiarata
+// ==========================================================================
+{
+  // Le trappole sono installate in cima a questo file, prima di qualunque
+  // import dinamico del codice dell'app. Se una sola riga della superficie
+  // avesse provato ad aprire un socket, a risolvere un nome o a chiamare
+  // fetch, sarebbe finita in `retiTentate`.
+  ok("M/nessuna chiamata di rete in tutta la superficie promemoria/notifiche",
+     retiTentate.length === 0, JSON.stringify(retiTentate.slice(0, 5)));
+  ok("M/la trappola su fetch e davvero installata", typeof globalThis.fetch === "function");
+  // Controprova della trappola: se non intercettasse nulla, il verde di sopra
+  // non significherebbe niente.
+  await globalThis.fetch("https://esempio.invalido/prova").catch(() => {});
+  ok("M/controprova: la trappola registra davvero i tentativi",
+     retiTentate.length === 1 && retiTentate[0].via === "fetch", JSON.stringify(retiTentate));
+  retiTentate.length = 0;
+
+  // Le notifiche dell'app sono LOCALI: nessun token remoto. Il doppio
+  // rifiuta di inventarne uno, e nessuna funzione della superficie lo chiede.
+  await lancia("M/un token remoto non esiste in questa app",
+               () => Banco.getExpoPushTokenAsync(), "notifiche locali");
+  ok("M/la superficie non ha mai chiesto un token",
+     !Banco.giornale.some((v) => v.azione === "token"));
+
+  // Un giro completo in modalita aereo: accendere, cambiare ora, cambiare
+  // tipo, spegnere. Tutto deve funzionare, e nessuna rete deve essere tentata.
+  pulisci();
+  retiTentate.length = 0;
+  await notifiche.salvaPromemoria(spento());
+  await notifiche.applica(acceso(7, 0));
+  await notifiche.applica(acceso(8, 0, "paper"));
+  await notifiche.ripristina();
+  await notifiche.programmate();
+  await notifiche.leggiPromemoria();
+  await notifiche.applica(spento());
+  ok("M/giro completo in aereo: nessun tentativo di rete", retiTentate.length === 0,
+     JSON.stringify(retiTentate));
+  ok("M/giro completo in aereo: lo stato finale e quello chiesto", (await inCoda()) === 0);
+}
+
+// ================================================================== ESITO
+console.log("\nsimulazione: promemoria e notifiche — lib/promemoria.ts, lib/notifiche.ts");
+console.log("e la logica di app/promemoria.tsx, sopra il banco");
+console.log(`cartella di prova: ${cartella}`);
+console.log(`fuso di partenza : ${process.env.TZ}`);
+
+if (difettiRiprodotti.length) {
+  console.log(`\nDifetti dell'app riprodotti e NON corretti (${difettiRiprodotti.length}),`);
+  console.log("bloccati da una verifica che diventera rossa quando verranno corretti:");
+  for (const d of difettiRiprodotti) console.log(`  · ${d.replace(/^.*DIFETTO RIPRODOTTO: /, "")}`);
+}
+
+if (falliti.length) {
+  console.log("");
+  for (const f of falliti) console.log(`  FALLITO: ${f}`);
+}
+
+console.log(`\npassati ${passati} su ${passati + falliti.length}`);
+
+// Come le prove del banco: la cartella temporanea si cancella solo se e
+// andato tutto bene, perche dopo un fallimento il .db serve per capire.
+if (falliti.length) {
+  console.log(`cartella conservata per l'analisi: ${cartella}`);
+  process.exit(1);
+}
+rmSync(cartella, { recursive: true, force: true });
