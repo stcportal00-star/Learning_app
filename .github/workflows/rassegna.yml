@@ -1,0 +1,128 @@
+# Rassegna quotidiana delle nuove pubblicazioni, catalogate per specializzazione.
+#
+# Gira ogni mattina, interroga gli archivi aperti sulla finestra dell'ultimo
+# giorno, assegna a ogni voce i temi del piano di studio e cerca una copia
+# legalmente accessibile di ciò che non ha già il testo pieno.
+#
+# Lo stato (catalogo e voci già viste) vive negli asset della release "rassegna",
+# non in un commit: una rassegna al giorno per un anno sono trecentosessantacinque
+# commit di rumore su un repository che deve restare leggibile. È lo stesso
+# meccanismo con cui apk.yml conserva la chiave di firma.
+#
+# Il tag è fisso: il collegamento alla release non cambia mai, e dal telefono
+# resta un segnalibro solo.
+name: rassegna
+
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      giorni:
+        description: "Ampiezza della finestra in giorni"
+        default: "1"
+      temi:
+        description: "tema_slug separati da spazio, vuoto = tutti"
+        default: ""
+  # Sul push si esegue solo quando cambia la rassegna stessa: è la prova dal
+  # vivo degli adattatori, che dal contenitore di sviluppo non si può fare.
+  push:
+    paths:
+      - "strumenti/rassegna/**"
+      - ".github/workflows/rassegna.yml"
+
+concurrency:
+  group: rassegna
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  rassegna:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Verifica della logica (nessuna rete)
+        run: python3 strumenti/rassegna/verifica_rassegna.py
+
+      - name: Stato precedente
+        id: stato
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p rassegna
+          if gh release download rassegna --repo "$GITHUB_REPOSITORY" \
+               --pattern "stato.tar" --dir . 2>/dev/null; then
+            tar -xf stato.tar
+            echo "Ripreso: $(python3 -c "import json;print(len(json.load(open('rassegna/catalogo.json'))))" 2>/dev/null || echo 0) voci in catalogo"
+            echo "primo=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nessuno stato precedente: prima rassegna."
+            echo "primo=si" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Catalogo delle nuove uscite
+        env:
+          # Alla prima corsa la finestra di un giorno darebbe un catalogo quasi
+          # vuoto: si parte da una settimana per avere qualcosa da leggere subito.
+          GIORNI: ${{ github.event.inputs.giorni || '1' }}
+          PRIMO: ${{ steps.stato.outputs.primo }}
+          TEMI: ${{ github.event.inputs.temi }}
+        run: |
+          set -euo pipefail
+          giorni="$GIORNI"
+          [ "$PRIMO" = "si" ] && giorni=7
+          # shellcheck disable=SC2086
+          python3 strumenti/rassegna/catalogo.py \
+            --cartella rassegna --giorni "$giorni" ${TEMI:+--temi $TEMI}
+
+      - name: Ricerca delle copie accessibili
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Solo le voci senza testo pieno già noto, e non più di quaranta per
+          # corsa: il ricercatore interroga fino a sei archivi per voce, e una
+          # rassegna quotidiana non deve diventare una scansione di massa.
+          python3 strumenti/rassegna/ricercatore.py \
+            --catalogo rassegna/catalogo.json \
+            --solo-senza-testo --massimo 40 \
+            --uscita rassegna/trovati.json
+
+      - name: Riepilogo
+        run: |
+          set -euo pipefail
+          {
+            echo "## Rassegna"
+            echo ""
+            echo '```'
+            head -n 24 rassegna/rapporto.txt
+            echo '```'
+            echo ""
+            head -n 60 rassegna/catalogo.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Pubblicazione
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tar -cf stato.tar rassegna/catalogo.json rassegna/visti.json
+          zip -q -r rassegna.zip rassegna -x "rassegna/visti.json"
+
+          note=$(printf '%s\n\n---\n\n%s\n' \
+            "Catalogo aggiornato al $(date -u '+%d/%m/%Y %H:%M') UTC. Scarica rassegna.zip: contiene catalogo.md da leggere, catalogo.json completo, manifesto.json importabile da Libreria > Importa biblioteca, e trovati.json con le vie di accesso trovate." \
+            "$(head -n 40 rassegna/rapporto.txt)")
+
+          if gh release view rassegna --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit rassegna --repo "$GITHUB_REPOSITORY" --notes "$note"
+          else
+            gh release create rassegna --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "Rassegna — nuove pubblicazioni" --notes "$note"
+          fi
+          gh release upload rassegna rassegna.zip stato.tar \
+            rassegna/catalogo.md rassegna/rapporto.txt \
+            --repo "$GITHUB_REPOSITORY" --clobber

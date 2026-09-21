@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Verifica della rassegna. Nessuna rete: solo la logica pura.
+
+    python3 verifica_rassegna.py
+
+Si controlla ciò che resta vero a prescindere dagli archivi interrogati: la
+tassonomia allineata alla biblioteca, la classificazione, la deduplicazione,
+i filtri, la forma del manifesto. Le fonti cambiano risposta ogni giorno e non
+si possono verificare qui senza rendere il risultato dipendente dalla rete —
+per quelle c'è `catalogo.py --prova`, che gira su dati finti, e il rapporto
+quotidiano, che elenca quali hanno risposto.
+"""
+import json
+import os
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import catalogo
+import fonti_aperte as fonti
+from specializzazioni import (SPECIALIZZAZIONI, classifica, e_pubblicazione, e_rumore,
+                              normalizza, punteggi, termini_di_ricerca, trimestre_di)
+
+RADICE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+ok, ko = 0, []
+
+
+def verifica(nome, condizione):
+    global ok
+    if condizione:
+        ok += 1
+    else:
+        ko.append(nome)
+
+
+# ---------------------------------------------------------------- tassonomia
+biblioteca = json.load(open(os.path.join(RADICE, "assets", "contenuti", "biblioteca.json"),
+                            encoding="utf-8"))
+temi_biblioteca = {v["tema_slug"] for v in biblioteca}
+
+verifica("ogni tema della biblioteca esiste nella tassonomia",
+         temi_biblioteca <= set(SPECIALIZZAZIONI))
+verifica("nessun tema inventato fuori dalla biblioteca",
+         set(SPECIALIZZAZIONI) <= temi_biblioteca)
+
+trimestri_biblioteca = {}
+for v in biblioteca:
+    trimestri_biblioteca.setdefault(v["tema_slug"], {}).setdefault(v["trimestre"], 0)
+    trimestri_biblioteca[v["tema_slug"]][v["trimestre"]] += 1
+for tema, conteggi in trimestri_biblioteca.items():
+    dominante = max(sorted(conteggi), key=lambda t: conteggi[t])
+    verifica(f"trimestre di {tema} coerente con la biblioteca ({dominante})",
+             trimestre_di(tema) == dominante)
+
+for tema, (nome, trim, forti, deboli, concetti) in SPECIALIZZAZIONI.items():
+    verifica(f"{tema}: ha un nome leggibile", bool(nome) and nome != tema)
+    verifica(f"{tema}: trimestre nel formato T1..T6", trim in {f"T{i}" for i in range(1, 7)})
+    verifica(f"{tema}: almeno sei termini forti", len(forti) >= 6)
+    verifica(f"{tema}: termini forti senza duplicati", len(set(forti)) == len(forti))
+    verifica(f"{tema}: termini di ricerca non vuoti", len(termini_di_ricerca(tema)) > 0)
+
+# ---------------------------------------------------------------- normalizzazione
+verifica("normalizza toglie gli accenti", normalizza("Epidemiologìa") == "epidemiologia")
+verifica("normalizza collassa gli spazi", normalizza("  a   b  ") == "a b")
+verifica("normalizza regge il None", normalizza(None) == "")
+
+# ---------------------------------------------------------------- classificazione
+temi = classifica("Causal inference for outbreak detection",
+                  "A cohort study on disease surveillance and incidence rate.",
+                  ["Epidemiology", "Causal inference"])
+assegnati = [t for t, _ in temi]
+verifica("articolo epidemiologico classificato", "epidemiologia" in assegnati)
+verifica("il tema più forte è il primo", temi == sorted(temi, key=lambda x: (-x[1], x[0])))
+
+temi_sql = classifica("Query optimization with cardinality estimation",
+                      "Execution plan selection in a columnar storage engine.")
+verifica("articolo su SQL classificato", {"ottimizzazione", "sql_base"} & {t for t, _ in temi_sql})
+
+verifica("titolo senza tema non viene classificato",
+         classifica("Una riflessione generale del tutto priva di argomento") == [])
+verifica("al più due temi per voce",
+         len(classifica("causal inference sql gdpr ai act epidemiology dashboard")) <= 2)
+
+verifica("confine di parola rispettato: 'ia' non compare dentro 'social'",
+         "ia" not in punteggi("social media research"))
+
+vuoti = punteggi("", "")
+verifica("titolo vuoto non produce punteggi", vuoti == {})
+
+# determinismo: due chiamate identiche danno lo stesso esito
+verifica("classificazione deterministica",
+         classifica("Query optimization with cardinality estimation") ==
+         classifica("Query optimization with cardinality estimation"))
+
+# ---------------------------------------------------------------- filtri
+verifica("ritrattazione scartata", not e_pubblicazione("Retracted: a former paper"))
+verifica("erratum scartato", not e_pubblicazione("Erratum to: something"))
+verifica("articolo normale conservato", e_pubblicazione("A study of cholera in Yemen"))
+
+esclusioni = json.load(open(os.path.join(RADICE, "assets", "contenuti",
+                                         "esclusioni_rassegna.json"), encoding="utf-8"))
+verifica("il rumore redazionale è riconosciuto", e_rumore("Top 10 best tools", esclusioni))
+verifica("un titolo scientifico non è rumore",
+         not e_rumore("Bayesian inference for time series", esclusioni))
+
+# ---------------------------------------------------------------- chiavi e deduplicazione
+verifica("il DOI normalizza l'URL completo",
+         fonti.chiave_di("https://doi.org/10.1/AB", "x") == fonti.chiave_di("10.1/ab", "y"))
+verifica("senza DOI la chiave viene dal titolo",
+         fonti.chiave_di(None, "Un Titolo!") == fonti.chiave_di(None, "un titolo"))
+verifica("titoli diversi danno chiavi diverse",
+         fonti.chiave_di(None, "alfa") != fonti.chiave_di(None, "beta"))
+
+v = fonti.voce("  Titolo   con  spazi  ", "prova", "https://e.org", doi="https://doi.org/10.1/x")
+verifica("voce: titolo con spazi normalizzati", v["titolo"] == "Titolo con spazi")
+verifica("voce: DOI ripulito dal prefisso", v["doi"] == "10.1/x")
+verifica("voce: campi obbligatori presenti",
+         all(k in v for k in ("chiave", "titolo", "autori", "data", "doi", "tipo",
+                              "fonte", "url", "url_pdf", "licenza", "abstract",
+                              "concetti", "editore")))
+verifica("voce: autori vuoti scartati",
+         fonti.voce("t", "f", "u", autori=["a", None, ""])["autori"] == ["a"])
+
+# ---------------------------------------------------------------- setaccio completo
+grezzo = catalogo.dati_di_prova()
+nuove, scartate = catalogo.setaccia(grezzo, esclusioni, set(), "1970-01-01")
+titoli = [v["titolo"] for v in nuove]
+
+verifica("duplicato per DOI unito", scartate["duplicate"] == 1)
+verifica("ritrattazione scartata dal setaccio", scartate["non_pubblicazione"] == 1)
+verifica("rumore scartato dal setaccio", scartate["rumore"] == 1)
+verifica("voce senza tema scartata", scartate["senza_tema"] == 1)
+verifica("restano solo le due voci buone", len(nuove) == 2)
+verifica("la copia conservata è quella con il testo pieno",
+         any(v.get("url_pdf") for v in nuove if v["doi"] == "10.1000/a"))
+verifica("ogni voce ha tema, trimestre e rilevanza",
+         all(v.get("tema_slug") and v.get("trimestre") and v.get("rilevanza") for v in nuove))
+verifica("ordinamento per rilevanza decrescente",
+         [v["rilevanza"] for v in nuove] == sorted([v["rilevanza"] for v in nuove], reverse=True))
+
+gia_viste = {v["chiave"] for v in grezzo}
+_, scartate2 = catalogo.setaccia(grezzo, esclusioni, gia_viste, "1970-01-01")
+verifica("il secondo giro non ripropone nulla", scartate2["gia_viste"] > 0)
+
+vecchie = [fonti.voce("Query optimization study", "p", "u", doi="10.9/z", data="2000-01-01")]
+_, scartate3 = catalogo.setaccia(vecchie, esclusioni, set(), "2026-01-01")
+verifica("voce fuori finestra scartata", scartate3["fuori_finestra"] == 1)
+
+# ---------------------------------------------------------------- uscite su disco
+with tempfile.TemporaryDirectory() as tmp:
+    storico = catalogo.scrivi_catalogo(tmp, nuove, scartate, [("prova", "ok", "", 6, 0.1)],
+                                       "2026-01-01", "2026-01-02")
+    for nome in ("catalogo.json", "catalogo.md", "manifesto.json", "rapporto.txt"):
+        verifica(f"scritto {nome}", os.path.exists(os.path.join(tmp, nome)))
+
+    manifesto = json.load(open(os.path.join(tmp, "manifesto.json"), encoding="utf-8"))
+    campi_attesi = {"codice", "titolo", "autore", "tema_slug", "trimestre",
+                    "licenza", "url", "formato", "nota"}
+    verifica("manifesto nella forma attesa da importaBiblioteca",
+             all(campi_attesi <= set(m) for m in manifesto))
+    verifica("manifesto: formato solo pdf o html",
+             all(m["formato"] in ("pdf", "html") for m in manifesto))
+    verifica("manifesto: codici distinti",
+             len({m["codice"] for m in manifesto}) == len(manifesto))
+    verifica("manifesto: ogni voce ha un indirizzo", all(m["url"] for m in manifesto))
+
+    # Seconda scrittura sugli stessi dati: il catalogo non deve duplicare.
+    storico2 = catalogo.scrivi_catalogo(tmp, nuove, scartate, [], "2026-01-01", "2026-01-02")
+    verifica("catalogo incrementale senza duplicati", len(storico2) == len(storico))
+
+# ---------------------------------------------------------------- ricercatore
+import ricercatore
+
+verifica("ogni via di accesso ha una qualità dichiarata",
+         all(isinstance(v, int) for v in ricercatore.QUALITA.values()))
+verifica("il prestito vale meno della copia scaricabile",
+         ricercatore.QUALITA["prestito bibliotecario (una copia per volta)"]
+         < ricercatore.QUALITA["pubblico dominio, scaricabile"])
+verifica("la richiesta in biblioteca è l'ultima risorsa",
+         min(ricercatore.QUALITA.values()) ==
+         ricercatore.QUALITA["da richiedere in biblioteca (prestito interbibliotecario)"])
+verifica("ogni accesso prodotto dagli adattatori ha una qualità nota",
+         {"pubblico dominio, scaricabile", "libro ad accesso aperto", "copia aperta depositata",
+          "copia aperta", "vista integrale", "testo su Internet Archive",
+          "pubblico dominio, lettura integrale"} <= set(ricercatore.QUALITA))
+
+with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
+    f.write("# commento\n\nUn titolo qualunque\n10.1000/xyz\ndoi:10.2000/abc\n")
+    elenco = f.name
+voci = list(ricercatore.voci_da_elenco(elenco))
+os.unlink(elenco)
+verifica("elenco: commenti e righe vuote ignorati", len(voci) == 3)
+verifica("elenco: titolo riconosciuto", voci[0]["titolo"] == "Un titolo qualunque")
+verifica("elenco: DOI nudo riconosciuto", voci[1]["doi"] == "10.1000/xyz")
+verifica("elenco: prefisso doi: rimosso", voci[2]["doi"] == "10.2000/abc")
+
+# La catena dei libri deve restare allineata alle funzioni che esistono davvero.
+verifica("catena dei libri tutta richiamabile",
+         all(callable(f) for f in fonti.CATENA_LIBRI))
+
+# ---------------------------------------------------------------- nessuna fonte ombra
+sorgenti = ""
+for nome in ("fonti_aperte.py", "catalogo.py", "ricercatore.py"):
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), nome),
+              encoding="utf-8") as f:
+        sorgenti += f.read().lower()
+# I nomi compaiono solo nel testo che spiega perché sono esclusi: mai in un indirizzo.
+import re as _re
+indirizzi = " ".join(_re.findall(r"https?://[^\s\"')]+", sorgenti))
+verifica("nessuna biblioteca ombra fra gli indirizzi interrogati",
+         not any(o in indirizzi for o in
+                 ("bookos", "b-ok", "zlibrary", "z-lib", "libgen", "library.lol",
+                  "annas-archive", "sci-hub")))
+
+print(f"Test superati : {ok}")
+print(f"Falliti       : {len(ko)}")
+for k in ko:
+    print(f"  FALLITO: {k}")
+sys.exit(1 if ko else 0)
