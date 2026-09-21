@@ -40,6 +40,21 @@ const versione = JSON.parse(readFileSync(join(RADICE, "node_modules/pdfjs-dist/p
 const comeStringa = (s) => JSON.stringify(s).replace(/<\//g, "<\\/");
 
 export const VISORE_JS = `
+// pdf.js 6 chiama Promise.withResolvers in 41 punti, fra cui il gestore dei
+// messaggi usato all'apertura di ogni documento. È ES2024: esiste da Chrome
+// 119, e la WebView di sistema può essere più vecchia — sull'emulatore
+// Android 14 del test di fumo lo è, e sul telefono dell'utente è quella che il
+// Play Store ha installato, che in due mesi senza rete non si aggiorna.
+// La build legacy di pdf.js porta core-js ma non questo riempitivo.
+// Cinque righe, esattamente il comportamento della specifica.
+if (typeof Promise.withResolvers !== "function") {
+  Promise.withResolvers = function () {
+    let resolve, reject;
+    const promise = new Promise((sciogli, rifiuta) => { resolve = sciogli; reject = rifiuta; });
+    return { promise, resolve, reject };
+  };
+}
+
 (async () => {
   const invia = (m) => window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(m));
   const stato = document.getElementById("stato");

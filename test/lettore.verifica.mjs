@@ -38,6 +38,18 @@ verifica("nessun </script> spurio dentro le stringhe", (html.match(/<\/script>/g
 const installata = JSON.parse(readFileSync("node_modules/pdfjs-dist/package.json", "utf8")).version;
 verifica(`lettore.html generato con pdf.js ${installata} (se no: node strumenti/genera-lettore.mjs)`,
   html.includes(`pdf.js ${installata} `));
+// Senza questo riempitivo il lettore non apre alcun documento sulle WebView
+// anteriori a Chrome 119, e il guasto si vede solo sul dispositivo.
+verifica("il visore definisce Promise.withResolvers prima di caricare pdf.js",
+  html.indexOf("Promise.withResolvers = function") < html.lastIndexOf("import(blob(LIB))"));
+// Il worker gira sul thread principale: un Worker non parte da file://.
+// Il controllo va ristretto al nostro visore: la stringa con pdf.js contiene
+// GlobalWorkerOptions.workerSrc come parte della libreria, non come assegnazione.
+const visore = script.slice(script.lastIndexOf("(async () => {"));
+verifica("il visore non assegna workerSrc",
+  !visore.includes("GlobalWorkerOptions.workerSrc"));
+verifica("il visore importa il worker sul thread principale",
+  visore.includes("import(blob(WORKER))"));
 console.log(`Test superati : ${ok}`);
 for (const k of ko) console.log("  FALLITA: " + k);
 process.exit(ko.length ? 1 : 0);
