@@ -853,7 +853,9 @@ difetto(
 const pdfSolitario = scriviEsterno("BIB-05_The_Art_of_PostgreSQL.pdf", contenutoPdf(1800, "arte"));
 
 const rottiAlParse = [
-  ["troncato", '[{"codice":"BIB-02","file":"x.pdf"', "Unexpected end of JSON input", "un manifesto tagliato dall'estrazione dello zip"],
+  // Il messaggio di V8 dipende da DOVE il file e' stato tagliato: dentro un
+  // oggetto e' "Expected ',' or '}'", dopo la fine e' "Unexpected end of JSON input".
+  ["troncato", '[{"codice":"BIB-02","file":"x.pdf"', "Expected ',' or '}'", "un manifesto tagliato dall'estrazione dello zip"],
   ["vuoto", "", "Unexpected end of JSON input", "un file di zero byte"],
   ["bom", "﻿[]", "not valid JSON", "un manifesto con il BOM iniziale"],
   ["html", "<!DOCTYPE html><html>errore 404</html>", "not valid JSON", "una pagina HTML salvata come manifesto.json"],
@@ -939,3 +941,406 @@ const esitoDueManifesti = await P.importaBiblioteca();
 ok("K10 con due .json vince il primo dell'elenco: il secondo è ignorato in silenzio",
   esitoDueManifesti.collegati === 1 && (await riga("BIB-06")).file_locale === null,
   JSON.stringify(esitoDueManifesti));
+
+// ======================= L. MANIFESTO OSTILE O SEMPLICEMENTE SBAGLIATO
+// Il nome del file nel manifesto viene usato per costruire il percorso di
+// destinazione senza alcuna ripulitura: "../" esce dalla cartella biblioteca.
+const pdfFuga = scriviEsterno("innocuo.pdf", contenutoPdf(400, "fuga"));
+const manifestoFuga = scriviManifesto("manifesto-fuga.json", [
+  { codice: "BIB-05", titolo: "The Art of PostgreSQL", file: "../evaso.pdf", byte: 400, sha256: "abc" },
+]);
+Selettore.programma({
+  assets: [assetFinto(manifestoFuga, "manifesto.json"), assetFinto(pdfFuga, "../evaso.pdf")],
+});
+const esitoFuga = await P.importaBiblioteca();
+difetto(
+  "IMP-22",
+  "un nome di file con ../ nel manifesto scrive FUORI dalla cartella biblioteca (qui in <documenti>/evaso.pdf)",
+  existsSync(join(FS.percorsoDocumenti(), "evaso.pdf")) && esitoFuga.collegati === 1,
+  `${JSON.stringify(esitoFuga)} — ${existsSync(join(FS.percorsoDocumenti(), "evaso.pdf"))}`
+);
+ok("L02 la riga collegata punta davvero al file fuori cartella",
+  (await riga("BIB-05")).file_locale === FS.uriDa(join(FS.percorsoDocumenti(), "evaso.pdf")));
+
+// Codice che non esiste in biblioteca: l'UPDATE non tocca niente, ma la
+// funzione lo conta come collegato e il registro riceve un evento per
+// un'entità che non esiste da nessuna parte.
+const pdfFantasma = scriviEsterno("BIB-99_fantasma.pdf", contenutoPdf(350, "fantasma"));
+const manifestoFantasma = scriviManifesto("manifesto-fantasma.json", [
+  { codice: "BIB-99", titolo: "Volume mai esistito", file: basename(pdfFantasma), byte: 350, sha256: "ff" },
+]);
+Selettore.programma({ percorsi: [manifestoFantasma, pdfFantasma] });
+const esitoFantasma = await P.importaBiblioteca();
+difetto(
+  "IMP-23",
+  "un codice assente dal catalogo viene contato fra i 'collegati' benché l'UPDATE non tocchi nessuna riga",
+  esitoFantasma.collegati === 1 && (await riga("BIB-99")) === null
+);
+difetto(
+  "IMP-24",
+  "e il registro riceve un evento 'aggiorna' per un'entità inesistente, che viaggerà anche nella sincronizzazione",
+  (await eventiDi("BIB-99")).length === 1
+);
+
+// sha256 e byte del manifesto vengono scritti senza confrontarli con il file.
+const pdfBugiardo = scriviEsterno("BIB-06_Fundamentals.pdf", contenutoPdf(1200, "bugiardo"));
+const manifestoBugiardo = scriviManifesto("manifesto-bugiardo.json", [
+  { codice: "BIB-06", titolo: "Fundamentals of Data Engineering", file: basename(pdfBugiardo),
+    byte: 999999, sha256: "0000000000000000000000000000000000000000000000000000000000000000" },
+]);
+Selettore.programma({ percorsi: [manifestoBugiardo, pdfBugiardo] });
+const esitoBugiardo = await P.importaBiblioteca();
+const rigaBugiarda = await riga("BIB-06");
+ok("L05 il volume risulta collegato", esitoBugiardo.collegati === 1);
+difetto(
+  "IMP-25",
+  "lo sha256 del manifesto viene salvato senza mai confrontarlo con il file copiato: un PDF sostituito passa inosservato",
+  rigaBugiarda.sha256 === "0000000000000000000000000000000000000000000000000000000000000000" &&
+    rigaBugiarda.sha256 !== sha256Di(pdfBugiardo)
+);
+difetto(
+  "IMP-26",
+  "anche 'byte' viene preso dal manifesto e non dal file: la riga dichiara 999999 byte per un file di 1200",
+  rigaBugiarda.byte === 999999 && statSync(join(cartellaBiblioteca(), basename(pdfBugiardo))).size !== 999999
+);
+
+// Due voci con lo stesso codice, e due PDF con lo stesso nome.
+const pdfDoppioA = scriviEsterno("doppio-a.pdf", contenutoPdf(500, "primo"));
+const pdfDoppioB = scriviEsterno("doppio-b.pdf", contenutoPdf(500, "secondo"));
+const manifestoDoppio = scriviManifesto("manifesto-doppio.json", [
+  { codice: "BIB-01", titolo: "Use The Index, Luke!", file: "omonimo.pdf", byte: 1, sha256: "a" },
+  { codice: "BIB-01", titolo: "Use The Index, Luke!", file: "omonimo.pdf", byte: 2, sha256: "b" },
+]);
+Selettore.programma({
+  assets: [
+    assetFinto(manifestoDoppio, "manifesto.json"),
+    assetFinto(pdfDoppioA, "omonimo.pdf"),
+    assetFinto(pdfDoppioB, "omonimo.pdf"),
+  ],
+});
+const esitoDoppio = await P.importaBiblioteca();
+ok("L08 due voci con lo stesso codice vengono contate due volte", esitoDoppio.collegati === 2);
+difetto(
+  "IMP-27",
+  "due PDF con lo stesso nome nella selezione: il primo viene sovrascritto dal secondo senza alcun avviso",
+  md5Di(join(cartellaBiblioteca(), "omonimo.pdf")) === md5Di(pdfDoppioB) &&
+    md5Di(pdfDoppioA) !== md5Di(pdfDoppioB)
+);
+ok("L10 la riga porta i dati dell'ultima voce applicata", (await riga("BIB-01")).sha256 === "b");
+ok("L11 due voci sullo stesso codice scrivono due eventi", (await eventiDi("BIB-01")).length === 2);
+
+// Il nome del file è confrontato senza normalizzare le maiuscole: il PDF viene
+// copiato ma non trovato dalla voce del manifesto.
+const pdfMaiuscolo = scriviEsterno("maiuscolo-sorgente.pdf", contenutoPdf(450, "maiuscolo"));
+const manifestoMaiuscoloFile = scriviManifesto("manifesto-caso.json", [
+  { codice: "BIB-04", titolo: "Designing Data-Intensive Applications", file: "guida.pdf", byte: 450, sha256: "c" },
+]);
+Selettore.programma({
+  assets: [assetFinto(manifestoMaiuscoloFile, "manifesto.json"), assetFinto(pdfMaiuscolo, "GUIDA.PDF")],
+});
+const esitoCaso = await P.importaBiblioteca();
+difetto(
+  "IMP-28",
+  "il PDF 'GUIDA.PDF' viene copiato ma la voce che cerca 'guida.pdf' non lo trova: copia orfana in biblioteca e voce contata come senza PDF",
+  esitoCaso.collegati === 0 && esitoCaso.senzaFile === 1 &&
+    fileBiblioteca().includes("GUIDA.PDF") && (await riga("BIB-04")).file_locale === null,
+  JSON.stringify(esitoCaso)
+);
+
+// Un database nella selezione: qui, a differenza di importaPdf, non entra.
+const dbNellaSelezione = scriviEsterno("archivio-utente.db", readFileSync(ASSET_PALESTRA).subarray(0, 4096));
+const manifestoConDb = scriviManifesto("manifesto-db.json", [
+  { codice: "BIB-03", titolo: "SQLite Documentation", file: "archivio-utente.db", byte: 4096, sha256: "d" },
+]);
+Selettore.programma({ percorsi: [manifestoConDb, dbNellaSelezione] });
+const esitoConDb = await P.importaBiblioteca();
+ok("L14 un .db nella selezione NON viene copiato: qui il filtro sull'estensione protegge",
+  !fileBiblioteca().includes("archivio-utente.db"));
+ok("L15 la voce che nomina il .db resta 'senza PDF'",
+  esitoConDb.collegati === 0 && esitoConDb.senzaFile === 1, JSON.stringify(esitoConDb));
+
+// Voce senza codice: la registrazione dell'evento fallisce e l'importazione si
+// interrompe a metà, dopo aver già collegato le voci precedenti.
+const pdfPrimaVoce = scriviEsterno("BIB-02_ancora.pdf", contenutoPdf(700, "ancora"));
+const pdfSenzaCodice = scriviEsterno("senza-codice.pdf", contenutoPdf(700, "senzacodice"));
+const manifestoSenzaCodice = scriviManifesto("manifesto-senza-codice.json", [
+  { codice: "BIB-02", titolo: "PostgreSQL Documentation", file: basename(pdfPrimaVoce), byte: 700, sha256: "e1" },
+  { titolo: "Voce senza codice", file: basename(pdfSenzaCodice), byte: 700, sha256: "e2" },
+  { codice: "BIB-03", titolo: "SQLite Documentation", file: basename(pdfBib03), byte: 10, sha256: "e3" },
+]);
+Selettore.programma({ percorsi: [manifestoSenzaCodice, pdfPrimaVoce, pdfSenzaCodice, pdfBib03] });
+let erroreSenzaCodice = null;
+try {
+  await P.importaBiblioteca();
+} catch (e) {
+  erroreSenzaCodice = String(e?.message ?? e);
+}
+difetto(
+  "IMP-29",
+  "una voce senza 'codice' fa fallire registra() e interrompe l'importazione: le voci successive non vengono mai applicate",
+  erroreSenzaCodice !== null && (await riga("BIB-03")).sha256 !== "e3",
+  String(erroreSenzaCodice)
+);
+ok("L18 la voce precedente era già stata applicata: lo stato resta a metà, e la schermata non riceve nessun conteggio",
+  (await riga("BIB-02")).sha256 === "e1");
+
+// ============== M. PERMESSI NEGATI E GUASTI A METÀ IN importaBiblioteca
+const eventiPrimaM = await contaEventi();
+Selettore.programma({ percorsi: [manifestoBuono, pdfBib02] });
+await conMetodoGuasto("text", function () { throw new Error("UnableToReadException: EACCES (Permission denied)"); }, () =>
+  lancia("M01 manifesto illeggibile per permessi: l'errore grezzo risale alla schermata",
+    () => P.importaBiblioteca(), "EACCES")
+);
+ok("M02 con il manifesto illeggibile nessun evento viene scritto", (await contaEventi()) === eventiPrimaM);
+
+// Copia che fallisce sul SECONDO PDF: il primo è già sul disco.
+const copiaVera = FS.File.prototype.copy;
+let copieFatte = 0;
+const copiaCheCedeAllaSeconda = function (destinazione) {
+  copieFatte++;
+  if (copieFatte >= 2) throw new Error("UnableToCopyException: ENOSPC (No space left on device)");
+  return copiaVera.call(this, destinazione);
+};
+const pdfUno = scriviEsterno("BIB-02_uno.pdf", contenutoPdf(600, "uno"));
+const pdfDue = scriviEsterno("BIB-03_due.pdf", contenutoPdf(600, "due"));
+const manifestoDueFile = scriviManifesto("manifesto-due.json", [
+  { codice: "BIB-02", titolo: "PostgreSQL Documentation", file: basename(pdfUno), byte: 600, sha256: "m1" },
+  { codice: "BIB-03", titolo: "SQLite Documentation", file: basename(pdfDue), byte: 600, sha256: "m2" },
+]);
+const eventiPrimaM2 = await contaEventi();
+Selettore.programma({ percorsi: [manifestoDueFile, pdfUno, pdfDue] });
+copieFatte = 0;
+await conMetodoGuasto("copy", copiaCheCedeAllaSeconda, () =>
+  lancia("M03 disco pieno sul secondo PDF: importaBiblioteca() solleva", () => P.importaBiblioteca(), "ENOSPC")
+);
+difetto(
+  "IMP-30",
+  "la copia dei PDF precede ogni scrittura: il primo file resta in biblioteca, nessuna riga viene aggiornata e l'utente non vede nulla",
+  fileBiblioteca().includes(basename(pdfUno)) && (await contaEventi()) === eventiPrimaM2 &&
+    (await riga("BIB-02")).sha256 !== "m1"
+);
+
+// La transazione che fallisce a metà elenco: alcune voci collegate, altre no.
+await base.execAsync(
+  `CREATE TRIGGER blocca_update BEFORE UPDATE ON biblioteca
+   WHEN NEW.sha256 = 'ko'
+   BEGIN SELECT RAISE(ABORT, 'simulazione: aggiornamento rifiutato'); END;`
+);
+const manifestoMisto = scriviManifesto("manifesto-misto.json", [
+  { codice: "BIB-02", titolo: "PostgreSQL Documentation", file: basename(pdfUno), byte: 600, sha256: "buono" },
+  { codice: "BIB-03", titolo: "SQLite Documentation", file: basename(pdfDue), byte: 600, sha256: "ko" },
+]);
+Selettore.programma({ percorsi: [manifestoMisto, pdfUno, pdfDue] });
+await lancia("M05 la proiezione rifiutata a metà elenco fa sollevare importaBiblioteca()",
+  () => P.importaBiblioteca(), "simulazione: aggiornamento rifiutato");
+ok("M06 la voce precedente resta applicata", (await riga("BIB-02")).sha256 === "buono");
+ok("M07 la voce rifiutata non lascia tracce (rollback della sua transazione)",
+  (await riga("BIB-03")).sha256 !== "ko");
+difetto(
+  "IMP-31",
+  "importaBiblioteca() non ha alcuna protezione: un guasto a metà elenco lascia il catalogo parzialmente collegato e nessun conteggio raggiunge la schermata",
+  true
+);
+await base.execAsync("DROP TRIGGER blocca_update");
+
+// ===================== N. rimuoviVolume: PRIMA IL FILE, POI LA TRANSAZIONE
+const pdfDaRimuovere = scriviEsterno("da-rimuovere.pdf", contenutoPdf(800, "rimozione"));
+Selettore.programma({ percorsi: [pdfDaRimuovere] });
+const volumeDaRimuovere = await P.importaPdf();
+const filePdfRimosso = join(cartellaBiblioteca(), `${volumeDaRimuovere.id}.pdf`);
+ok("N01 il volume da rimuovere esiste su disco e in tabella", existsSync(filePdfRimosso));
+
+await P.rimuoviVolume(volumeDaRimuovere.id);
+ok("N02 rimuoviVolume() cancella il file dallo spazio dell'app", !existsSync(filePdfRimosso));
+ok("N03 rimuoviVolume() toglie la riga dalla biblioteca", (await riga(volumeDaRimuovere.id)) === null);
+const eventiRimozione = await eventiDi(volumeDaRimuovere.id);
+ok("N04 resta un evento 'elimina' nel registro (è così che l'altro dispositivo lo apprende)",
+  eventiRimozione.some((e) => e.tipo === "elimina"));
+ok("N05 il payload dell'evento 'elimina' è vuoto",
+  eventiRimozione.find((e) => e.tipo === "elimina").payload === "{}");
+
+const eventiPrimaN = await contaEventi();
+await P.rimuoviVolume("MAI-ESISTITO");
+difetto(
+  "IMP-32",
+  "rimuovere un id inesistente scrive comunque un evento 'elimina': il registro racconta un'eliminazione mai avvenuta",
+  (await contaEventi()) === eventiPrimaN + 1 && (await eventiDi("MAI-ESISTITO")).length === 1
+);
+
+// Il file viene cancellato PRIMA della transazione: se la transazione fallisce,
+// il file non c'è più e la riga sì.
+const pdfSopravvissuto = scriviEsterno("SOPRAVVISSUTO.pdf", contenutoPdf(820, "sopravvissuto"));
+Selettore.programma({ percorsi: [pdfSopravvissuto] });
+const volumeBloccato = await P.importaPdf();
+const fileBloccato = join(cartellaBiblioteca(), `${volumeBloccato.id}.pdf`);
+await base.execAsync(
+  `CREATE TRIGGER blocca_delete BEFORE DELETE ON biblioteca
+   WHEN OLD.titolo = 'SOPRAVVISSUTO'
+   BEGIN SELECT RAISE(ABORT, 'simulazione: eliminazione rifiutata'); END;`
+);
+await lancia("N07 con il DELETE rifiutato rimuoviVolume() solleva",
+  () => P.rimuoviVolume(volumeBloccato.id), "simulazione: eliminazione rifiutata");
+difetto(
+  "IMP-33",
+  "il PDF viene cancellato dal disco PRIMA della transazione: se questa fallisce, la riga resta e il file non c'è più (il rollback protegge le tabelle, non il disco)",
+  !existsSync(fileBloccato) && (await riga(volumeBloccato.id)) !== null
+);
+await base.execAsync("DROP TRIGGER blocca_delete");
+
+// Rimuovere un volume della biblioteca APERTA cancella la voce di catalogo:
+// caricaContenuti() non la ripopolerà mai più (salta se ci sono esercizi).
+await P.rimuoviVolume("BIB-05");
+difetto(
+  "IMP-34",
+  "rimuovere un volume di dotazione ('aperta') cancella la voce di catalogo per sempre, e l'eliminazione viaggia anche verso l'altro dispositivo",
+  (await riga("BIB-05")) === null &&
+    (await eventiDi("BIB-05")).some((e) => e.tipo === "elimina")
+);
+
+// ================ O. COSA SUCCEDE AL FILE IMPORTATO QUANDO LO SI APRE
+Intento.azzera();
+Condivisione.azzera();
+const volumeSenzaFile = await riga("BIB-04");
+ok("O01 un volume senza file_locale non viene aperto", (await P.apriVolume(volumeSenzaFile)) === "non_scaricato");
+ok("O02 nessun intent viene lanciato per un volume non scaricato", Intento.giornale.length === 0);
+
+const volumeFantasma = { ...(await riga("BIB-02")), file_locale: FS.uriDa(join(cartellaBiblioteca(), "inesistente.pdf")) };
+ok("O03 un file_locale che punta al vuoto dà 'non_scaricato', non un crash",
+  (await P.apriVolume(volumeFantasma)) === "non_scaricato");
+
+const volumePdf = await riga("BIB-02");
+Intento.azzera();
+ok("O04 un PDF presente viene aperto con il visore di sistema", (await P.apriVolume(volumePdf)) === "aperto");
+const intentoPdf = Intento.giornale.at(-1);
+ok("O05 l'intent è VIEW con tipo application/pdf",
+  intentoPdf.azione === "android.intent.action.VIEW" && intentoPdf.parametri.type === "application/pdf");
+ok("O06 l'intent porta FLAG_GRANT_READ_URI_PERMISSION (senza, il visore non legge il file)",
+  intentoPdf.parametri.flags === 1);
+ok("O07 l'intent riceve un content:// e non un file://",
+  String(intentoPdf.parametri.data).startsWith("content://"), String(intentoPdf.parametri.data));
+
+const volumeEpub = await base.getFirstAsync(
+  "SELECT * FROM biblioteca WHERE formato = 'epub' AND file_locale IS NOT NULL LIMIT 1");
+ok("O08 esiste un volume epub importato da provare", volumeEpub !== null);
+Intento.azzera();
+await P.apriVolume(volumeEpub);
+ok("O09 per un epub il tipo dichiarato è application/epub+zip",
+  Intento.giornale.at(-1).parametri.type === "application/epub+zip");
+
+Intento.azzera();
+Condivisione.azzera();
+Intento.programmaNessunVisore(true);
+const esitoRipiego = await P.apriVolume(volumePdf);
+ok("O10 senza visore si ripiega sul foglio di condivisione", esitoRipiego === "aperto" &&
+  Condivisione.giornale.some((v) => v.chiamata === "shareAsync"));
+Condivisione.azzera();
+Condivisione.programmaDisponibilita(false);
+const esitoNessuno = await P.apriVolume(volumePdf);
+ok("O11 senza visore e senza condivisione l'esito è 'nessun_visore'", esitoNessuno === "nessun_visore");
+difetto(
+  "IMP-35",
+  "app/(tabs)/libreria.tsx ignora l'esito di apriVolume(): con 'nessun_visore' l'utente tocca 'Apri con il visore del sistema' e non succede assolutamente nulla",
+  // La schermata scrive: onPress: () => { void apriVolume(item); }
+  esitoNessuno === "nessun_visore"
+);
+Intento.programmaNessunVisore(false);
+Condivisione.programmaDisponibilita(true);
+
+// =============== P. DOPPIO TOCCO SU "AGGIUNGI PDF": DUE IMPORTAZIONI INSIEME
+const pdfGemelloA = scriviEsterno("gemello-a.pdf", contenutoPdf(410, "gemelloA"));
+const pdfGemelloB = scriviEsterno("gemello-b.pdf", contenutoPdf(420, "gemelloB"));
+const fileprimaP = fileBiblioteca().length;
+const eventiPrimaP = await contaEventi();
+const righePrimaP = await contaBiblioteca();
+Selettore.programma({ percorsi: [pdfGemelloA] }, { percorsi: [pdfGemelloB] });
+const esitiP = await Promise.allSettled([P.importaPdf(), P.importaPdf()]);
+const riusciteP = esitiP.filter((e) => e.status === "fulfilled").length;
+const motiviP = esitiP.filter((e) => e.status === "rejected").map((e) => String(e.reason?.message ?? e.reason));
+const fileNuoviP = fileBiblioteca().length - fileprimaP;
+const righeNuoveP = (await contaBiblioteca()) - righePrimaP;
+const eventiNuoviP = (await contaEventi()) - eventiPrimaP;
+
+console.log(`    (P: due importazioni concorrenti — riuscite ${riusciteP}/2, file copiati ${fileNuoviP}, ` +
+  `righe ${righeNuoveP}, eventi ${eventiNuoviP}${motiviP.length ? ", errori: " + motiviP.join(" | ") : ""})`);
+ok("P01 entrambi i file vengono comunque copiati sul disco", fileNuoviP === 2, String(fileNuoviP));
+difetto(
+  "IMP-36",
+  "due importazioni concorrenti (doppio tocco su 'Aggiungi PDF') non producono due volumi: le transazioni si annidano e qualcosa va perso",
+  righeNuoveP < 2 || eventiNuoviP < 2,
+  `righe ${righeNuoveP}, eventi ${eventiNuoviP}, errori: ${motiviP.join(" | ")}`
+);
+difetto(
+  "IMP-37",
+  "la corsa lascia una RIGA in biblioteca SENZA il suo evento: il ROLLBACK della seconda transazione annulla l'INSERT dell'evento della prima, che intanto prosegue fuori transazione e scrive la proiezione in autocommit. L'invariante 1 si rompe: quel volume non raggiungera mai l'altro dispositivo e sparirebbe da una ricostruzione dal registro",
+  righeNuoveP > eventiNuoviP,
+  `righe ${righeNuoveP}, eventi ${eventiNuoviP}`
+);
+
+// Se la concorrenza lascia una transazione aperta, tutto ciò che viene dopo
+// misurerebbe le macerie: lo si dice e si ripulisce, dichiarandolo.
+let transazioneAperta = false;
+try {
+  transazioneAperta = await base.isInTransactionAsync();
+} catch { /* niente */ }
+if (transazioneAperta) {
+  try { await base.execAsync("ROLLBACK"); } catch { /* niente */ }
+}
+ok(
+  "P04 dopo la corsa la connessione NON resta dentro una transazione aperta (il danno e' gia' avvenuto, ma il database non resta bloccato)",
+  transazioneAperta === false,
+  `isInTransaction: ${transazioneAperta}`
+);
+
+const pdfDopoLaCorsa = scriviEsterno("dopo-la-corsa.pdf", contenutoPdf(430, "dopo"));
+Selettore.programma({ percorsi: [pdfDopoLaCorsa] });
+const volumeDopoLaCorsa = await P.importaPdf();
+ok("P05 dopo la corsa una importazione normale riesce ancora",
+  volumeDopoLaCorsa !== null && (await eventiDi(volumeDopoLaCorsa.id)).length === 1);
+
+// ============================= Q. STATO FINALE: ORFANI E RIGHE AL VUOTO
+const righeConFile = await base.getAllAsync(
+  "SELECT id, titolo, file_locale FROM biblioteca WHERE file_locale IS NOT NULL");
+const riferiti = new Set(righeConFile.map((r) => FS.percorsoDa(r.file_locale)));
+const presenti = fileBiblioteca().map((n) => join(cartellaBiblioteca(), n));
+const orfani = presenti.filter((p) => !riferiti.has(p));
+const righeAlVuoto = righeConFile.filter((r) => !existsSync(FS.percorsoDa(r.file_locale)));
+const byteOrfani = orfani.reduce((t, p) => t + statSync(p).size, 0);
+
+console.log(`    (Q: ${presenti.length} file in biblioteca, ${righeConFile.length} righe con file, ` +
+  `${orfani.length} file orfani per ${(byteOrfani / 1048576).toFixed(1)} MB, ` +
+  `${righeAlVuoto.length} righe che puntano a un file inesistente)`);
+difetto(
+  "IMP-38",
+  "la cartella biblioteca accumula file che nessuna riga nomina (copie fallite, manifesti rotti, nomi non combacianti): nessuna funzione dell'app li cancella",
+  orfani.length > 0,
+  `orfani: ${orfani.map((p) => basename(p)).join(", ")}`
+);
+difetto(
+  "IMP-39",
+  "restano righe di biblioteca che puntano a un file che non esiste più: l'elenco le mostra come 'offline'",
+  righeAlVuoto.length > 0,
+  righeAlVuoto.map((r) => r.id).join(", ")
+);
+
+// Nessuna chiamata di rete in tutta la superficie: l'app deve funzionare in aereo.
+ok("Q03 nessun trasferimento di rete è stato tentato (il doppio di expo-file-system lo impedirebbe)",
+  typeof FS.File.downloadFileAsync === "function");
+
+// ------------------------------------------------------------------ RIEPILOGO
+const versione = (await base.getFirstAsync("SELECT sqlite_version() AS v")).v;
+console.log("\nsimulazione import-database (lib/palestra.ts, biblioteca) — SQLite " + versione);
+if (difettiInchiodati.length) {
+  console.log(`\nDifetti dell'app inchiodati da questa prova: ${difettiInchiodati.length}`);
+  for (const d of difettiInchiodati) console.log("  - " + d);
+}
+if (falliti.length) {
+  console.log(`\nFALLITE (${falliti.length}):`);
+  for (const f of falliti) console.log("  - " + f);
+  console.log("\ncartella di prova LASCIATA da aprire: " + radice);
+  console.log("file scelti dall'utente: " + esterna);
+} else {
+  rmSync(radice, { recursive: true, force: true });
+  rmSync(esterna, { recursive: true, force: true });
+}
+console.log(`\npassati ${passati} su ${passati + falliti.length}`);
+process.exit(falliti.length ? 1 : 0);
