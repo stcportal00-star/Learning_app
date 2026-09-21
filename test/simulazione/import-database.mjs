@@ -607,6 +607,27 @@ Selettore.programma({ assets: [assetFinto(pdfNome, "riga\nsecondariga.pdf")] });
 const conACapo = await P.importaPdf();
 ok("E09 un nome con un a capo viene salvato letterale", conACapo.titolo === "riga\nsecondariga");
 
+// Android svuota la cache dell'app quando lo spazio scarseggia: fra la scelta
+// del file e la copia possono passare secondi, e il file puo' non esserci piu'.
+const pdfEffimero = scriviEsterno("effimero.pdf", contenutoPdf(360, "effimero"));
+const assetEffimero = assetFinto(pdfEffimero, "effimero.pdf");
+rmSync(pdfEffimero);
+const fileBibliotecaPrimaEff = fileBiblioteca().length;
+const eventiPrimaEff = await contaEventi();
+Selettore.programma({ assets: [assetEffimero] });
+const messaggioEffimero = await lancia(
+  "E10 il file scelto sparisce prima della copia: importaPdf() solleva",
+  () => P.importaPdf(),
+  "ENOENT"
+);
+difetto(
+  "IMP-40",
+  "se il file scelto sparisce dalla cache, l'utente riceve l'errore grezzo del filesystem ('ENOENT: no such file or directory'), non un invito a riprovare",
+  String(messaggioEffimero).includes("no such file or directory")
+);
+ok("E12 il file sparito non lascia righe, eventi o copie a meta'",
+  (await contaEventi()) === eventiPrimaEff && fileBiblioteca().length === fileBibliotecaPrimaEff);
+
 // ========================================================= F. FILE ENORME
 // "Aggiungi PDF" su un libro di 40 MB: nessun indicatore di avanzamento,
 // nessun limite, nessuna possibilità di annullare. Si misura che almeno il
@@ -1344,3 +1365,56 @@ if (falliti.length) {
 }
 console.log(`\npassati ${passati} su ${passati + falliti.length}`);
 process.exit(falliti.length ? 1 : 0);
+
+/* =====================================================================
+ * TESTO PRONTO DA INCOLLARE IN NOTE-BUILD.md (vicino ai "Conteggi").
+ * Non l'ho scritto io nel file: più agenti lavorano in parallelo sulla
+ * stessa NOTE-BUILD.md e si sovrascriverebbero a vicenda. Decide il
+ * coordinatore, che ha la visione di tutte le superfici.
+ * ---------------------------------------------------------------------
+ *
+ * ### Importazione di file: la biblioteca accetta qualunque cosa
+ *
+ * `test/simulazione/import-database.mjs` (comando: `node
+ * test/simulazione/import-database.mjs`, 220 verifiche, tutte verdi) fa girare
+ * il vero `lib/palestra.ts` sul banco e simula ogni interazione che porta un
+ * file da fuori a dentro l'app: selettore annullato, provider che non manda il
+ * nome, PDF veri, file corrotti, un database SQLite al posto di un PDF, un file
+ * da 40 MB, permessi negati, disco pieno, manifesti rotti e ostili, rimozione,
+ * apertura con il visore, doppio tocco su "Aggiungi PDF".
+ *
+ * Quarantacinque comportamenti difettosi sono inchiodati da una verifica che
+ * diventerà rossa il giorno in cui verranno corretti. I quattro che contano:
+ *
+ * 1. NESSUN CONTROLLO SUL TIPO DEL FILE. `importaPdf()` decide l'estensione con
+ *    un solo `endsWith('.epub')`: qualunque altro file diventa un "pdf". Provato
+ *    con `palestra.db`, con `percorso.db` (il database personale dell'app), con
+ *    un `.sqlite`, con sette byte di rumore, con un file da zero byte e con una
+ *    pagina HTML: entrano tutti in biblioteca, con riga ed evento regolari. Il
+ *    file salvato come `<uuid>.pdf` resta un database interrogabile.
+ *    `strumenti/scarica_biblioteca.py` controlla la firma `%PDF-`; l'app no.
+ * 2. IL FILE VIENE COPIATO PRIMA DELLA TRANSAZIONE. Se `registra()` fallisce, il
+ *    rollback protegge le tabelle ma non il disco: la copia resta orfana e
+ *    nessuna funzione dell'app potrà mai cancellarla. Specularmente
+ *    `rimuoviVolume()` cancella il file PRIMA della transazione: se questa
+ *    fallisce, la riga resta e il PDF non c'è più.
+ * 3. IL MANIFESTO NON È DIFESO. `JSON.parse` senza try e `for...of` senza
+ *    controllo: un manifesto troncato solleva invece di restituire il campo
+ *    `errore` già previsto, e un manifesto non iterabile solleva DOPO aver
+ *    copiato i PDF, che restano in biblioteca senza riga. Un nome di file con
+ *    `../` nel manifesto scrive fuori dalla cartella biblioteca. `sha256` e
+ *    `byte` sono scritti come li dichiara il manifesto, senza mai confrontarli
+ *    con il file copiato.
+ * 4. DOPPIO TOCCO SU "Aggiungi PDF". Due `importaPdf()` concorrenti annidano le
+ *    transazioni: il ROLLBACK della seconda annulla l'INSERT dell'evento della
+ *    prima, che prosegue fuori transazione e scrive la proiezione in
+ *    autocommit. Misurato: due file copiati, UNA riga di biblioteca, ZERO
+ *    eventi. È l'invariante 1 rotta — quel volume non raggiungerà mai l'altro
+ *    dispositivo e sparirebbe da una ricostruzione dal registro.
+ *
+ * Quello che questo verde NON dice: il banco non riproduce i permessi di
+ * Android (sono simulati sostituendo `File.copy`), non riproduce un visore PDF
+ * vero, e la copia di 40 MB qui dura un decimo di secondo mentre sul telefono
+ * blocca il tocco per secondi. Nessun difetto è stato corretto: la correzione
+ * la decide il coordinatore.
+ * ===================================================================== */
