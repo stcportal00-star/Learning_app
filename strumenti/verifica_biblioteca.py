@@ -120,6 +120,43 @@ _doppio = trova_pdf.collegamenti(
     '<a href="/a.pdf">uno</a><a href="/a.pdf">due</a>', "https://x.org/")
 verifica("un indirizzo ripetuto conta una volta sola", len(_doppio) == 1)
 
+# Verificare che sia un PDF non dice che sia IL PDF. La prima versione ha
+# proposto la traduzione araba del framework NIST e il rapporto annuale OWASP
+# al posto della Top 10: erano PDF veri, e nessuno dei due era il testo chiesto.
+_owasp = "OWASP Top 10 for LLM Applications"
+verifica("il documento giusto batte un altro PDF dello stesso editore",
+         trova_pdf.punteggio("https://owasp.org/OWASP-Top-10-for-LLM-Applications.pdf",
+                             "Top 10 for LLM", _owasp)
+         > trova_pdf.punteggio("https://owasp.org/OWASP-Impact-Report-2025.pdf",
+                               "Impact Report", _owasp))
+_nist = "NIST AI Risk Management Framework 1.0"
+verifica("l'originale batte la traduzione",
+         trova_pdf.punteggio("https://nvlpubs.nist.gov/NIST.AI.100-1.pdf", "AI RMF", _nist)
+         > trova_pdf.punteggio("https://nvlpubs.nist.gov/NIST.AI.100-1.ara.pdf",
+                               "AI RMF", _nist))
+verifica("una traduzione è penalizzata anche senza titolo di riferimento",
+         trova_pdf.punteggio("https://x.org/doc.spa.pdf", "doc") < 0)
+verifica("le parole del titolo pesano più delle parole generiche",
+         trova_pdf.punteggio("https://x.org/cybersecurity-framework.pdf", "",
+                             "Cybersecurity Framework")
+         > trova_pdf.punteggio("https://x.org/complete-book.pdf", "Complete book",
+                               "Cybersecurity Framework"))
+verifica("le parole vuote del titolo non contano",
+         "the" not in trova_pdf.parole_del_titolo("The Effect and the Practice"))
+verifica("i numeri di versione del titolo contano",
+         "800-61" in trova_pdf.parole_del_titolo("NIST SP 800-61 Incident Handling"))
+
+# Il cercatore propone, non decide: restituisce ogni PDF verificato perché la
+# scelta finale vada rivista da chi conosce il titolo.
+verifica("il cercatore restituisce tutte le vie verificate, non solo la prima",
+         "verificati.append(indirizzo)" in open(
+             os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "trova_pdf.py"), encoding="utf-8").read())
+verifica("il riepilogo dichiara che sono proposte da rivedere",
+         "PROPOSTE, non decisioni" in open(
+             os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "trova_pdf.py"), encoding="utf-8").read())
+
 _trova_src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                "trova_pdf.py"), encoding="utf-8").read()
 verifica("il cercatore legge solo un assaggio, non scarica il libro",

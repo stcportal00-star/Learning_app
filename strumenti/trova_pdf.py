@@ -48,6 +48,31 @@ BUONE = ("full", "complete", "book", "whole", "entire", "integral", "print",
 CATTIVE = ("errata", "solution", "slide", "chapter", "cap-", "exercise",
            "sample", "preview", "toc", "cover", "appendix", "supplement")
 
+# Un altro documento dello stesso editore, che non è quello cercato. La prima
+# versione di questo strumento ha proposto l'"OWASP Impact Report 2025" per la
+# voce "OWASP Top 10 for LLM Applications": è un PDF, sta su owasp.org, e non
+# c'entra niente. Verificare il formato non basta, va verificata l'identità.
+ALTRO_DOCUMENTO = ("impact-report", "impact_report", "annual-report",
+                   "annual_report", "newsletter", "brochure", "flyer",
+                   "poster", "press-release", "factsheet", "one-pager")
+
+# Codici di lingua nel nome del file: NIST pubblica le traduzioni accanto
+# all'originale e la prima versione ha proposto NIST.AI.100-1.ara.pdf, cioè
+# l'arabo. Un testo che non si sa leggere è inutile quanto un link rotto.
+LINGUE_TRADOTTE = (".ara.", ".spa.", ".fra.", ".por.", ".chi.", ".rus.",
+                   ".jpn.", ".kor.", ".deu.", ".hin.", ".zho.", ".ukr.",
+                   "-arabic", "-spanish", "-french", "-chinese")
+
+PAROLE_VUOTE = {"the", "and", "for", "with", "una", "del", "della", "delle",
+                "dei", "degli", "testo", "integrale", "ediz", "edition",
+                "introduction", "principles", "practice"}
+
+
+def parole_del_titolo(titolo):
+    """I termini distintivi del titolo, per riconoscere il documento giusto."""
+    grezze = re.findall(r"[a-z0-9][a-z0-9.+-]{2,}", titolo.lower())
+    return [p for p in grezze if p not in PAROLE_VUOTE]
+
 
 def scarica_pagina(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA})
@@ -77,14 +102,25 @@ def collegamenti(documento, base):
     return trovati
 
 
-def punteggio(indirizzo, etichetta):
-    """Più alto = più probabile che sia il libro intero."""
+def punteggio(indirizzo, etichetta, titolo=""):
+    """Più alto = più probabile che sia IL documento cercato, intero.
+
+    Due domande distinte, e la seconda è quella che la prima versione di questo
+    strumento non faceva: è un PDF? ed è il PDF giusto?
+    """
     testo = (indirizzo + " " + etichetta).lower()
     p = 0
     if indirizzo.split("?")[0].lower().endswith(".pdf"):
         p += 3
     p += sum(2 for parola in BUONE if parola in testo)
     p -= sum(3 for parola in CATTIVE if parola in testo)
+    p -= sum(6 for parola in ALTRO_DOCUMENTO if parola in testo)
+    p -= sum(8 for codice in LINGUE_TRADOTTE if codice in testo)
+    # Le parole del titolo pesano più di tutto il resto: sono l'unico segnale
+    # che distingue questo documento dagli altri dello stesso editore.
+    for parola in parole_del_titolo(titolo):
+        if parola in testo:
+            p += 4
     return p
 
 
@@ -114,34 +150,34 @@ def esamina(codice, titolo, url):
     diretto, nota = assaggia(url)
     if diretto:
         print(f"  L'indirizzo attuale È un PDF ({nota}). Il guasto è altrove.")
-        return url
+        return [url]
 
     print(f"  non è un PDF: {nota}")
     try:
         documento, arrivo = scarica_pagina(url)
     except Exception as e:
         print(f"  la pagina non si apre: {type(e).__name__}: {e}")
-        return None
+        return []
     if arrivo != url:
         print(f"  arrivato a: {arrivo}")
 
     trovati = collegamenti(documento, arrivo)
     if not trovati:
         print("  nessun collegamento che somigli a un PDF in questa pagina.")
-        return None
+        return []
 
-    trovati.sort(key=lambda c: -punteggio(*c))
+    trovati.sort(key=lambda c: -punteggio(c[0], c[1], titolo))
     print(f"  {len(trovati)} candidati, provo i primi {min(len(trovati), CANDIDATI_MASSIMI)}:")
-    vincitore = None
+    verificati = []
     for indirizzo, etichetta in trovati[:CANDIDATI_MASSIMI]:
         time.sleep(PAUSA)
         vero, nota = assaggia(indirizzo)
         segno = "PDF " if vero else "  - "
-        print(f"    {segno} [{punteggio(indirizzo, etichetta):+d}] {indirizzo[:96]}")
+        print(f"    {segno} [{punteggio(indirizzo, etichetta, titolo):+d}] {indirizzo[:96]}")
         print(f"          {etichetta or '(senza testo)'} · {nota[:80]}")
-        if vero and vincitore is None:
-            vincitore = indirizzo
-    return vincitore
+        if vero:
+            verificati.append(indirizzo)
+    return verificati
 
 
 def main():
@@ -159,12 +195,19 @@ def main():
             print(f"  errore inatteso: {type(e).__name__}: {e}")
             esito = None
         if esito:
-            vinti[codice] = esito
+            vinti[codice] = (titolo, esito)
         time.sleep(PAUSA)
 
-    print(f"\n{'=' * 74}\nTrovati {len(vinti)} indirizzi verificati su {len(voci)}.\n")
-    for codice, indirizzo in vinti.items():
-        print(f'  {codice}  {indirizzo}')
+    print(f"\n{'=' * 74}\nTrovati {len(vinti)} indirizzi verificati su {len(voci)}.")
+    print("Sono PROPOSTE, non decisioni: ogni riga va confrontata con il titolo")
+    print("prima di finire nel catalogo. Verificare che sia un PDF non dice che")
+    print("sia IL PDF giusto — la prima versione di questo strumento ha proposto")
+    print("una traduzione araba e il rapporto annuale di un'altra collana.\n")
+    for codice, (titolo, indirizzi) in vinti.items():
+        print(f"  {codice}  {titolo}")
+        print(f"       proposto     {indirizzi[0]}")
+        for alternativo in indirizzi[1:3]:
+            print(f"       alternativa  {alternativo}")
     mancanti = [c for c, _, _ in voci if c not in vinti]
     if mancanti:
         print(f"\nSenza un PDF raggiungibile: {', '.join(mancanti)}")
