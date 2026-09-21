@@ -1154,19 +1154,21 @@ await prova("CORREZIONE SORVEGLIATA: F2 tre registra() sovrapposte (doppio tocco
   ok("non si resta dentro una transazione", (await base.isInTransactionAsync()) === false);
 });
 
-await prova("DIFETTO RIPRODOTTO: F3 registra() mentre la sincronizzazione applica un pacchetto (REG-07)", async () => {
+await prova("CORREZIONE SORVEGLIATA: F3 registra() mentre la sincronizzazione applica un pacchetto (REG-07)", async () => {
   const { app, base } = await avvia("foxtrot3");
-  // Copia della transazione di lib/sync/useAutoSync.ts:56-60 (l'hook non si
-  // puo importare: usa react e react-native).
   const remoti = [
     { id: "R1:e1", hlc: "000001800000-0000-altro001", dispositivo: "altro001",
       entita: "note", entita_id: "e1", tipo: "crea", payload: '{"testo":"da altro"}' },
     { id: "R2:e2", hlc: "000001800001-0000-altro001", dispositivo: "altro001",
       entita: "note", entita_id: "e2", tipo: "crea", payload: '{"testo":"da altro"}' },
   ];
+  // Copia della transazione di lib/sync/useAutoSync.ts:54-63 (l'hook non si
+  // puo importare: usa react e react-native). La riga che conta e la prima:
+  // inTransazione() e non d.withTransactionAsync(), cioe la STESSA coda di
+  // registra(). Serializzare solo registra() non bastava — la sincronizzazione
+  // scrive da un'altra strada, e da li l'accavallamento rientrava.
   const applicaRemoti = async () => {
-    const d = app.database();
-    await d.withTransactionAsync(async () => {
+    await app.inTransazione(async (d) => {
       for (const e of remoti) {
         await d.runAsync(
           `INSERT OR IGNORE INTO eventi (id, hlc, dispositivo, entita, entita_id, tipo, payload, sincronizzato)
@@ -1175,33 +1177,50 @@ await prova("DIFETTO RIPRODOTTO: F3 registra() mentre la sincronizzazione applic
       }
     });
   };
+  // Quanti eventi remoti vede la proiezione locale: con la coda il pacchetto e
+  // gia entrato TUTTO, perche la sua transazione si e chiusa prima che questa
+  // cominciasse.
+  let remotiVistiDallaLocale = null;
   const esiti = await Promise.allSettled([
     applicaRemoti(),
-    app.registra("sessioni", "s1", "crea", { tipo: "mattina", minuti: 30 },
-      proiettaSessione("s1", "mattina", Date.now(), 30)),
+    app.registra("sessioni", "s1", "crea", { tipo: "mattina", minuti: 30 }, async (d, hlc) => {
+      remotiVistiDallaLocale = (await d.getFirstAsync(
+        "SELECT count(*) AS n FROM eventi WHERE dispositivo='altro001'")).n;
+      await proiettaSessione("s1", "mattina", Date.now(), 30)(d, hlc);
+    }),
   ]);
-  const falliti = esiti.filter((e) => e.status === "rejected").map((e) => e.reason.message);
-  ok("nessuna delle due arriva in fondo", falliti.length === 2, JSON.stringify(esiti.map((e) => e.status)));
-  ok("il motivo parla sempre di transazioni annidate",
-    falliti.every((m) => m.includes("transaction")), falliti.join(" | "));
+  const motivi = esiti.map((e) => (e.status === "rejected" ? e.reason.message : "riuscita"));
+  corretto("le due transazioni riescono entrambe", esiti.every((e) => e.status === "fulfilled"),
+    motivi.join(" | "));
 
   const applicati = (await base.getAllAsync(
     "SELECT id FROM eventi WHERE dispositivo='altro001' ORDER BY id")).map((r) => r.id);
-  ok("PERDITA DI DATI: il pacchetto remoto viene applicato solo in parte",
-    applicati.length > 0 && applicati.length < remoti.length, `applicati=${applicati.join(",")}`);
-  ok("l'evento remoto scartato non tornera mai: il pari lo ha gia marcato come inviato",
-    !applicati.includes("R1:e1"), applicati.join(","));
-  ok("quello sopravvissuto resta marcato sincronizzato=1 (entrato fuori transazione)",
-    (await base.getFirstAsync("SELECT sincronizzato FROM eventi WHERE id='R2:e2'"))?.sincronizzato === 1);
+  corretto("il pacchetto remoto e tutto-o-niente: entrano entrambi gli eventi",
+    applicati.join(",") === "R1:e1,R2:e2", `applicati=${applicati.join(",")}`);
+  corretto("nessun evento remoto viene scartato: il pari li ha gia marcati come inviati e non li rispedira",
+    applicati.length === remoti.length, `${applicati.length} su ${remoti.length}`);
+  corretto("la transazione remota si chiude PRIMA che cominci la locale: la proiezione locale li vede gia tutti e due",
+    remotiVistiDallaLocale === 2, String(remotiVistiDallaLocale));
+  corretto("e restano marcati sincronizzato=1, come li ha scritti la sincronizzazione",
+    (await base.getFirstAsync(
+      "SELECT count(*) AS n FROM eventi WHERE dispositivo='altro001' AND sincronizzato=1")).n === 2);
 
   const eventiLocali = await contaEventi(base, "WHERE dispositivo='foxtrot3'");
   const sessioni = (await base.getFirstAsync("SELECT count(*) AS n FROM sessioni")).n;
-  ok("la scrittura locale si perde per intero: nessun evento", eventiLocali === 0, `eventi=${eventiLocali}`);
-  ok("e nessuna sessione: il blocco del cronometro sparisce senza un messaggio",
-    sessioni === 0, `sessioni=${sessioni}`);
-  ok("meta('hlc') non e mai nata: il timbro e stato consumato a vuoto",
-    (await base.getFirstAsync("SELECT * FROM meta WHERE chiave='hlc'")) === null);
-  ok("il catch vuoto di useAutoSync:66 nasconderebbe tutto all'utente", true);
+  corretto("la scrittura locale sopravvive: un evento locale", eventiLocali === 1, `eventi=${eventiLocali}`);
+  corretto("e il blocco del cronometro e sul disco", sessioni === 1, `sessioni=${sessioni}`);
+  const sessione = await base.getFirstAsync("SELECT hlc FROM sessioni WHERE id='s1'");
+  const eventoLocale = await base.getFirstAsync(
+    "SELECT hlc FROM eventi WHERE dispositivo='foxtrot3'");
+  corretto("INVARIANTE 1: la sessione porta lo stesso hlc del suo evento",
+    sessione !== null && eventoLocale !== null && sessione.hlc === eventoLocale.hlc,
+    `${sessione?.hlc} vs ${eventoLocale?.hlc}`);
+  const meta = await base.getFirstAsync("SELECT valore FROM meta WHERE chiave='hlc'");
+  corretto("meta('hlc') e nata e corrisponde al timbro dell'evento locale: nessun timbro consumato a vuoto",
+    meta !== null && eventoLocale !== null &&
+      parseInt(String(meta.valore).split("-")[0], 16) === parseInt(eventoLocale.hlc.split("-")[0], 16) &&
+      parseInt(String(meta.valore).split("-")[1], 16) === parseInt(eventoLocale.hlc.split("-")[1], 16),
+    `${meta?.valore} vs ${eventoLocale?.hlc}`);
   ok("non si resta dentro una transazione", (await base.isInTransactionAsync()) === false);
 });
 
@@ -1392,10 +1411,21 @@ const verificheTotali = scenari.reduce((n, s) => n + s.verifiche, 0);
 const verificheFallite = scenari.reduce((n, s) => n + s.errori.length, 0);
 const scenariPassati = scenari.filter((s) => s.errori.length === 0).length;
 const difetti = scenari.filter((s) => s.difetto);
+const correzioni = scenari.filter((s) => s.correzione);
 
 console.log("");
 console.log("DIFETTI DELL'APP RIPRODOTTI (non corretti: decide il coordinatore)");
-for (const d of difetti) console.log("  - " + d.nome.replace("DIFETTO RIPRODOTTO: ", ""));
+for (const d of difetti) console.log("  - " + d.nome.replace(PREFISSO_DIFETTO, ""));
+
+if (correzioni.length) {
+  console.log("");
+  console.log(
+    `CORREZIONI SORVEGLIATE: ${correzioni.length} scenari, ${correzioniSorvegliate.length} verifiche.`
+  );
+  console.log("Erano difetti riprodotti; la correzione li ha resi rossi e sono stati convertiti.");
+  console.log("Stessa scena, verdetto opposto: un rosso qui vuol dire che la correzione e REGREDITA.");
+  for (const c of correzioniSorvegliate) console.log(`  - ${c}`);
+}
 console.log("");
 console.log(`Verifiche: passati ${verificheTotali - verificheFallite} su ${verificheTotali}`);
 console.log(`passati ${scenariPassati} su ${scenari.length} scenari`);

@@ -39,12 +39,16 @@
  * lib/sessioni.ts, lib/verifica.ts, lib/promemoria.ts, lib/notifiche.ts,
  * lib/sync/stato.ts e lib/sync/accoppiamento.ts, con SQLite vero sotto.
  *
- * DUE TIPI DI VERIFICA, e la differenza conta:
- *   ok(...)      — il comportamento CORRETTO atteso. Rosso = qualcosa non va.
- *   difetto(...) — inchioda un comportamento SBAGLIATO dell'app, misurato qui.
- *                  Verde = il difetto e' ancora li'. Rosso = qualcuno l'ha
- *                  corretto e va aggiornata questa prova. Nessun difetto e'
- *                  stato corretto: la correzione la decide il coordinatore.
+ * TRE TIPI DI VERIFICA, e la differenza conta:
+ *   ok(...)       — il comportamento CORRETTO atteso. Rosso = qualcosa non va.
+ *   difetto(...)  — inchioda un comportamento SBAGLIATO dell'app, misurato qui.
+ *                   Verde = il difetto e' ancora li'. Rosso = qualcuno l'ha
+ *                   corretto e va aggiornata questa prova.
+ *   corretto(...) — un difetto che E' STATO corretto e che da qui in poi questa
+ *                   prova SORVEGLIA. Lo scenario che sapeva riprodurre il
+ *                   difetto e' anche il migliore per accorgersi se torna:
+ *                   quando la correzione arriva lo scenario cambia mestiere,
+ *                   non si cancella. Rosso = la correzione e' regredita.
  *
  * CHE COSA NON PROVA, da sapere prima di fidarsi:
  *   - niente pixel, niente gesti, niente tastiera: il "punto di rottura 600dp"
@@ -93,6 +97,19 @@
  * Per rifarla: copiare questo file in test/simulazione/falsificazione-schermate.mjs,
  * sostituire nella copia anche il nome del file dentro la riga di riavvio, e
  * applicare una delle tre modifiche qui sopra.
+ *
+ * Le tre guardie corretto() (F11, F12, H26) sono state falsificate a parte,
+ * perche' sorvegliano il codice vero e non il modello: si disattiva la coda di
+ * lib/db.ts sostituendo il corpo di inCoda con `return compito();`, cioe' si
+ * rimette il difetto di concorrenza che quelle guardie esistono per fermare.
+ *   -> 466 su 469, uscita 1. Rosse tutte e tre, e nessun'altra:
+ *        F11: "cannot rollback - no transaction is active | cannot start a
+ *             transaction within a transaction";
+ *        F12: note 1->2, righe con quel testo 1, eventi per riga: 0
+ *             (la riga operativa sopravvive al ROLLBACK che le porta via
+ *             l'evento: e' la rottura dell'invariante 1, vista dal vero);
+ *        H26: tentativi 9->10, esiti rejected/rejected, eventi per tentativo: 0.
+ * Subito dopo lib/db.ts e' stato riportato com'era (`git checkout --`).
  */
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -128,6 +145,7 @@ if (!process.env.SCHERMATE_STATO_IN_CORSO) {
 let passati = 0;
 const falliti = [];
 const difettiInchiodati = [];
+const correzioniSorvegliate = [];
 
 function ok(nome, condizione, extra = "") {
   if (condizione) passati++;
@@ -149,6 +167,21 @@ function difetto(codice, nome, condizione, extra = "") {
         extra ? " — " + extra : ""
       }`
     );
+  }
+}
+
+/**
+ * Il contraltare di difetto(): sorveglia un difetto GIA' CORRETTO. Passa
+ * finche' vale il comportamento corretto; rosso vuol dire che la correzione e'
+ * stata persa e il difetto e' tornato — che e' esattamente cio' che nessuno si
+ * accorgerebbe da solo, visto che il codice continua a compilare.
+ */
+function corretto(codice, nome, condizione, extra = "") {
+  if (condizione) {
+    passati++;
+    correzioniSorvegliate.push(`${codice}: ${nome}`);
+  } else {
+    falliti.push(`${codice}: ${nome} — LA CORREZIONE E' REGREDITA${extra ? " — " + extra : ""}`);
   }
 }
 
@@ -1475,21 +1508,45 @@ ok("F10 nessun riscontro visivo del salvataggio riuscito: nessun avviso", avvisi
 
 // --- NOT-03: doppio tocco su Salva con una nota NUOVA.
 // Due varianti, perche' sul telefono capitano tutte e due:
-//   (a) due dita davvero contemporanee, con le due registra() sovrapposte;
+//   (a) due dita davvero contemporanee: le due registra() partono sovrapposte,
+//       e la coda di lib/db.ts le mette in fila una dietro l'altra. Qui non si
+//       misura piu' un difetto ma la sua correzione (F11, F12);
 //   (b) secondo tocco sul pulsante del disegno PRECEDENTE, cioe' prima che
 //       React abbia mostrato il nuovo stato (setApertaId sta dopo l'await).
+//       Questo e' un difetto della SCHERMATA, non del registro, e resta (F12b).
 await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
 await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Nota scritta con due dita."));
 const primaDelDoppio = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
 const esitiDoppioSalva = await toccaDueVolte(noteSchermata, () => noteSchermata.schermo.editor.salva());
 const dopoIlDoppio = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
 const messaggiDoppio = esitiDoppioSalva.map((e) => (e.status === "rejected" ? String(e.reason?.message) : "risolta"));
-difetto("NOT-03/REG-06", "F11 due tocchi CONTEMPORANEI su Salva: tutte e due le scritture falliscono (transazione annidata) e l'utente non vede nulla", messaggiDoppio.includes("cannot start a transaction within a transaction") && avvisi.length === 0, messaggiDoppio.join(" | "));
+corretto(
+  "NOT-03/REG-06",
+  "F11 due tocchi CONTEMPORANEI su Salva: la coda serializza le due registra() e tutte e due le scritture riescono",
+  esitiDoppioSalva.every((e) => e.status === "fulfilled") &&
+    !messaggiDoppio.some((m) => m.includes("cannot start a transaction within a transaction")),
+  messaggiDoppio.join(" | ")
+);
 const notaScrittaDueDita = await base.getAllAsync("SELECT id FROM note WHERE testo = 'Nota scritta con due dita.'");
-const eventiDiQuellaNota = notaScrittaDueDita.length
-  ? await base.getAllAsync("SELECT id FROM eventi WHERE entita_id = ?", [notaScrittaDueDita[0].id])
-  : [];
-difetto("NOT-03b", "F12 dopo il doppio tocco resta una nota SENZA il suo evento: la riga e' stata scritta fuori dalla transazione e non si sincronizzera' mai", dopoIlDoppio === primaDelDoppio + 1 && notaScrittaDueDita.length === 1 && eventiDiQuellaNota.length === 0, `note ${primaDelDoppio}->${dopoIlDoppio}, eventi della nota: ${eventiDiQuellaNota.length}`);
+// Si guardano TUTTE le note nate dal doppio tocco, non solo la prima: il
+// difetto lasciava indietro proprio quella la cui transazione era stata
+// annullata, quindi una guardia che ne controlla una sola non lo vedrebbe.
+const eventiDelleNoteDueDita = [];
+for (const n of notaScrittaDueDita) {
+  eventiDelleNoteDueDita.push(
+    await base.getAllAsync("SELECT tipo FROM eventi WHERE entita = 'note' AND entita_id = ?", [n.id])
+  );
+}
+corretto(
+  "NOT-03b",
+  "F12 dopo il doppio tocco nessuna nota resta senza il suo evento: ogni riga scritta ha il suo 'crea' nel registro (invariante 1)",
+  dopoIlDoppio > primaDelDoppio &&
+    notaScrittaDueDita.length === dopoIlDoppio - primaDelDoppio &&
+    eventiDelleNoteDueDita.every((e) => e.length === 1 && e[0].tipo === "crea"),
+  `note ${primaDelDoppio}->${dopoIlDoppio}, righe con quel testo ${notaScrittaDueDita.length}, eventi per riga: ${
+    eventiDelleNoteDueDita.map((e) => e.length).join("/") || "nessuna riga"
+  }`
+);
 
 // (b) il secondo tocco usa il gestore del disegno precedente
 await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
@@ -1925,11 +1982,34 @@ ok("H24 finita l'esecuzione il pulsante torna attivo", esercizi.schermo.editor.p
 
 const chiamatePrima = motore.chiamate.length;
 const tentativiPrima = (await base.getFirstAsync("SELECT count(*) AS n FROM tentativi")).n;
+// Il rowid separa le righe nate da QUESTO doppio tocco da tutte le precedenti:
+// serve a interrogare il registro riga per riga, non solo a contarle.
+const ultimoTentativoPrima = (await base.getFirstAsync("SELECT max(rowid) AS r FROM tentativi")).r ?? 0;
 const esitiDoppioEsegui = await toccaDueVolte(esercizi, () => esercizi.schermo.editor.pulsante.premi());
 const chiamateDopo = motore.chiamate.length;
 const tentativiDopo = (await base.getFirstAsync("SELECT count(*) AS n FROM tentativi")).n;
 difetto("ESE-03", "H25 due tocchi prima che inCorso diventi vero eseguono DUE verifiche complete (quattro query)", chiamateDopo - chiamatePrima === 4, `chiamate ${chiamateDopo - chiamatePrima}`);
-difetto("ESE-03b", "H26 le due scritture concorrenti si accavallano: non si ottengono due tentativi puliti", tentativiDopo - tentativiPrima <= 1 && esitiDoppioEsegui.some((e) => e.status === "rejected"), `tentativi ${tentativiPrima}->${tentativiDopo}`);
+const tentativiNuovi = await base.getAllAsync("SELECT id FROM tentativi WHERE rowid > ? ORDER BY rowid", [ultimoTentativoPrima]);
+const eventiDeiTentativiNuovi = [];
+for (const t of tentativiNuovi) {
+  eventiDeiTentativiNuovi.push(
+    await base.getAllAsync("SELECT tipo FROM eventi WHERE entita = 'tentativi' AND entita_id = ?", [t.id])
+  );
+}
+// H25 resta un difetto: la schermata esegue comunque DUE verifiche complete.
+// Quello che la coda garantisce e' che le due scritture che ne seguono non si
+// danneggino a vicenda — due righe intere, ognuna con il suo evento.
+corretto(
+  "ESE-03b",
+  "H26 le due scritture concorrenti danno due tentativi puliti: due righe, due eventi 'crea', nessuna scrittura respinta",
+  esitiDoppioEsegui.every((e) => e.status === "fulfilled") &&
+    tentativiDopo - tentativiPrima === 2 &&
+    tentativiNuovi.length === 2 &&
+    eventiDeiTentativiNuovi.every((e) => e.length === 1 && e[0].tipo === "crea"),
+  `tentativi ${tentativiPrima}->${tentativiDopo}, esiti ${esitiDoppioEsegui
+    .map((e) => e.status)
+    .join("/")}, eventi per tentativo: ${eventiDeiTentativiNuovi.map((e) => e.length).join("/") || "nessuna riga"}`
+);
 
 // il doppio tocco seriale (secondo tocco sul pulsante del disegno precedente)
 const premiVecchio = esercizi.schermo.editor.pulsante.premi;
@@ -3492,6 +3572,11 @@ const totale = passati + falliti.length;
 console.log("");
 console.log(`Difetti dell'app inchiodati da questa prova: ${difettiInchiodati.length}`);
 for (const d of difettiInchiodati) console.log("  · " + d);
+if (correzioniSorvegliate.length) {
+  console.log("");
+  console.log(`correzioni sorvegliate (erano difetti, ora sono guardie): ${correzioniSorvegliate.length}`);
+  for (const c of correzioniSorvegliate) console.log("  - " + c);
+}
 console.log("");
 for (const f of falliti) console.log("ROSSO  " + f);
 console.log("");
