@@ -211,6 +211,19 @@ jobs:
         with:
           name: fumo
           path: fumo
+      # La pubblicazione ritenta, perché GitHub può negarla anche quando il
+      # token è a posto. Nel build 6 "gh release create" ha risposto
+      #   HTTP 403: Resource not accessible by integration
+      # con Contents: write nel token — identico al build 5, che settanta
+      # minuti prima aveva creato apk-5 con lo stesso comando. Nella stessa
+      # finestra modificare una release e caricarvi asset funzionava: il
+      # diniego colpiva la creazione, non il permesso. È la firma di un limite
+      # secondario sulla creazione di contenuti, che si esaurisce da sé.
+      #
+      # Senza ritenti si perde un APK già compilato, firmato e collaudato per
+      # una condizione che passa da sola in pochi minuti. Il test di fumo resta
+      # l'unico cancello: questo passo non decide se pubblicare, solo come
+      # insistere quando la piattaforma dice di no.
       - name: Release con l'APK
         env:
           GH_TOKEN: ${{ github.token }}
@@ -218,11 +231,40 @@ jobs:
         run: |
           set -euo pipefail
           tag="apk-${GITHUB_RUN_NUMBER}"
-          mv percorso.apk "percorso-${GITHUB_RUN_NUMBER}.apk"
-          gh release create "$tag" "percorso-${GITHUB_RUN_NUMBER}.apk" fumo/*.png \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
-            --title "Percorso — build ${GITHUB_RUN_NUMBER}" \
-            --notes "Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}. Installa l'APK sopra la versione precedente: i dati restano."
+          apk="percorso-${GITHUB_RUN_NUMBER}.apk"
+          mv percorso.apk "$apk"
+          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}. Installa l'APK sopra la versione precedente: i dati restano."
+
+          pubblica() {
+            # Una corsa precedente può aver creato la release e non i suoi
+            # asset: in quel caso si carica e basta, invece di fallire su
+            # "already exists" e lasciare una release vuota.
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release upload "$tag" "$apk" fumo/*.png \
+                --repo "$GITHUB_REPOSITORY" --clobber
+              return
+            fi
+            gh release create "$tag" "$apk" fumo/*.png \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+              --title "Percorso — build ${GITHUB_RUN_NUMBER}" --notes "$note"
+          }
+
+          for tentativo in 1 2 3 4 5; do
+            if pubblica; then
+              echo "Pubblicata al tentativo $tentativo."
+              exit 0
+            fi
+            if [ "$tentativo" -lt 5 ]; then
+              attesa=$((tentativo * 45))
+              echo "::warning::Pubblicazione respinta (tentativo $tentativo). Riprovo fra ${attesa}s."
+              sleep "$attesa"
+            fi
+          done
+
+          # Cinque tentativi in oltre sette minuti: non è più una condizione
+          # passeggera, e va detto forte invece di essere ingoiato.
+          echo "::error::Pubblicazione respinta cinque volte. L'APK resta fra gli artefatti della corsa."
+          exit 1
 
   rapporto:
     needs: [build, fumo, pubblica]
