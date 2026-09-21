@@ -260,9 +260,52 @@ verifica("ogni richiesta dichiara un Accept (arXiv rispondeva 406 senza)",
 verifica("Zenodo entro il tetto di pagina non autenticato",
          fonti.ZENODO_PAGINA_MASSIMA <= 25 and "min(massimo, ZENODO_PAGINA_MASSIMA)" in _fonti_src)
 
+# ------------------------------------------------------------- diagnosi di arXiv
+# La diagnosi vale solo se la prima variante è davvero identica alla richiesta
+# che fallisce: se UA o Accept cambiano in fonti_aperte e non qui, il controllo
+# smette di essere un controllo e le altre varianti non dimostrano più nulla.
+import diagnosi_arxiv as diagnosi
+
+_controllo = diagnosi.VARIANTI[0]
+verifica("la prima variante della diagnosi è il controllo",
+         _controllo[0] == "controllo")
+verifica("il controllo manda lo stesso User-Agent di fonti_aperte",
+         _controllo[4]["User-Agent"] == fonti.UA)
+verifica("il controllo manda lo stesso Accept di chiedi()",
+         _controllo[4]["Accept"] in _fonti_src)
+verifica("il controllo interroga l'indirizzo di fonti_aperte.arxiv",
+         _controllo[2] in _fonti_src)
+verifica("il controllo manda i parametri di fonti_aperte.arxiv",
+         set(_controllo[3]) == {"search_query", "sortBy", "sortOrder", "max_results"})
+
+# Ogni variante isola UNA dimensione: quelle della famiglia "testate" cambiano
+# una sola intestazione e nient'altro, quelle della famiglia "richiesta" non
+# toccano le intestazioni. Senza questo, una variante che cambia due cose
+# insieme passa o fallisce senza dire quale delle due contava.
+for _fam, _desc, _ind, _par, _test in diagnosi.VARIANTI[1:]:
+    if _fam == "testate":
+        verifica(f"variante testate senza altri cambiamenti: {_desc[:34]}",
+                 _ind == _controllo[2] and _par == _controllo[3])
+        _diverse = [k for k in set(_test) | set(_controllo[4])
+                    if _test.get(k) != _controllo[4].get(k)]
+        verifica(f"variante testate cambia una sola intestazione: {_desc[:34]}",
+                 len(_diverse) == 1)
+    else:
+        verifica(f"variante richiesta non tocca le intestazioni: {_desc[:34]}",
+                 _test == _controllo[4])
+        verifica(f"variante richiesta cambia qualcosa: {_desc[:34]}",
+                 _ind != _controllo[2] or _par != _controllo[3])
+
+verifica("la diagnosi rispetta la pausa chiesta da arXiv", diagnosi.PAUSA >= 3.0)
+# Una diagnosi che fa fallire il job non la legge nessuno: la rassegna del
+# giorno deve pubblicare comunque.
+verifica("la diagnosi esce sempre con 0", "return 0" in
+         open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "diagnosi_arxiv.py"), encoding="utf-8").read())
+
 # ---------------------------------------------------------------- nessuna fonte ombra
 sorgenti = ""
-for nome in ("fonti_aperte.py", "catalogo.py", "ricercatore.py"):
+for nome in ("fonti_aperte.py", "catalogo.py", "ricercatore.py", "diagnosi_arxiv.py"):
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), nome),
               encoding="utf-8") as f:
         sorgenti += f.read().lower()

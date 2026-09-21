@@ -80,6 +80,37 @@ jobs:
           python3 strumenti/rassegna/catalogo.py \
             --cartella rassegna --giorni "$giorni" ${TEMI:+--temi $TEMI}
 
+      # Gira solo quando c'è qualcosa da diagnosticare, e smette da sé il
+      # giorno in cui arXiv torna a rispondere: non è un passo permanente.
+      # Esiste perché il 406 di arXiv arriva col corpo vuoto, e due correzioni
+      # a indovinare (https, Accept esplicito) non l'hanno tolto. Invece di un
+      # terzo tentativo alla cieca, si manda una matrice di varianti e si legge
+      # quale passa — è il metodo che ha finalmente nominato il campo rifiutato
+      # da Zenodo.
+      - name: Diagnosi di arXiv (solo se è caduta)
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          set -uo pipefail
+          if [ ! -f rassegna/rapporto.txt ]; then
+            echo "Nessun rapporto: il catalogo non è arrivato a scriverlo."
+            exit 0
+          fi
+          if ! grep -qE "^  arxiv +(non disponibile|errore)" rassegna/rapporto.txt; then
+            echo "arXiv ha risposto: nessuna diagnosi da fare."
+            exit 0
+          fi
+          echo "arXiv risulta caduta nel rapporto di oggi. Interrogo il server."
+          python3 strumenti/rassegna/diagnosi_arxiv.py | tee diagnosi-arxiv.txt
+          {
+            echo "## Diagnosi di arXiv"
+            echo ""
+            echo '```'
+            cat diagnosi-arxiv.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Ricerca delle copie accessibili
         continue-on-error: true
         timeout-minutes: 12
