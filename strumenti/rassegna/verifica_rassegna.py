@@ -200,6 +200,26 @@ verifica("elenco: prefisso doi: rimosso", voci[2]["doi"] == "10.2000/abc")
 verifica("catena dei libri tutta richiamabile",
          all(callable(f) for f in fonti.CATENA_LIBRI))
 
+# ---------------------------------------------------------------- motivo degli errori
+import io
+import urllib.error
+
+def _errore(codice, corpo, tipo="application/json"):
+    return urllib.error.HTTPError("https://e.org", codice, "errore",
+                                  {"Content-Type": tipo}, io.BytesIO(corpo.encode()))
+
+verifica("motivo: estrae il messaggio da un JSON",
+         "campo ignoto" in fonti._motivo(_errore(400, '{"message": "campo ignoto: access_right"}')))
+verifica("motivo: estrae anche da una chiave errors",
+         "sintassi" in fonti._motivo(_errore(400, '{"errors": ["sintassi non valida"]}')))
+verifica("motivo: toglie i tag da una risposta HTML",
+         "Not Acceptable" in fonti._motivo(_errore(406, "<html><body>Not Acceptable</body></html>", "text/html")))
+verifica("motivo: corpo vuoto non produce rumore", fonti._motivo(_errore(400, "")) == "")
+verifica("motivo: un corpo illeggibile non solleva",
+         fonti._motivo(urllib.error.HTTPError("https://e.org", 400, "x", {}, None)) == "")
+verifica("motivo: la riga resta breve",
+         len(fonti._motivo(_errore(400, '{"message": "' + "x" * 4000 + '"}'))) < 260)
+
 # ------------------------------------------------- interrogazioni già respinte dagli archivi
 # Guardie di regressione: ognuna di queste sintassi ha fatto rispondere 4xx a
 # tutto l'archivio nella rassegna del 21/09/2026. Il rapporto quotidiano le

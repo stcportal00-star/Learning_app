@@ -58,6 +58,32 @@ class FonteNonDisponibile(Exception):
     """La fonte non ha risposto. Non ferma la rassegna: la annota e prosegue."""
 
 
+def _motivo(errore):
+    """Il testo utile del corpo di una risposta d'errore, in una riga breve.
+
+    Gli archivi spiegano i 400 nel corpo — campo ignoto, sintassi rifiutata — e
+    quella frase è l'unica via per correggere l'interrogazione invece di
+    indovinarla. Il corpo si legge una volta sola e non deve mai far fallire
+    la gestione dell'errore che si sta già gestendo.
+    """
+    try:
+        corpo = errore.read(1200).decode("utf-8", "replace")
+    except Exception:
+        return ""
+    if not corpo:
+        return ""
+    try:                                   # quasi sempre JSON: si prende il messaggio
+        dati = json.loads(corpo)
+        for chiave in ("message", "error", "detail", "errors", "title"):
+            if chiave in dati:
+                corpo = json.dumps(dati[chiave], ensure_ascii=False)
+                break
+    except ValueError:
+        corpo = re.sub(r"<[^>]+>", " ", corpo)   # HTML: via i tag
+    corpo = " ".join(corpo.split())
+    return f" — {corpo[:220]}" if corpo else ""
+
+
 def _attendi(host):
     scorso = time.monotonic() - _ultima_chiamata.get(host, 0.0)
     if scorso < PAUSA_HOST:
@@ -87,14 +113,23 @@ def chiedi(url, parametri=None, intestazioni=None, tentativi=TENTATIVI):
             with urllib.request.urlopen(richiesta, timeout=TIMEOUT) as r:
                 return r.read()
         except urllib.error.HTTPError as e:
+            # Il corpo della risposta d'errore dice perché l'interrogazione è
+            # stata respinta: quale campo non esiste, quale sintassi non si
+            # accetta. Senza, un 400 ripetuto resta indistinguibile da un
+            # archivio in avaria, e si finisce a correggere per tentativi.
+            dettaglio = _motivo(e)
             if e.code in (404, 410):
-                raise FonteNonDisponibile(f"HTTP {e.code}")
+                raise FonteNonDisponibile(f"HTTP {e.code}{dettaglio}")
             if e.code == 429:
                 attesa = e.headers.get("Retry-After")
                 pausa = float(attesa) if attesa and attesa.isdigit() else 2 ** tentativo
+            elif 400 <= e.code < 500 and e.code not in (408, 429):
+                # Un errore di richiesta non cambia esito ritentandolo: la
+                # richiesta è la stessa. Si esce subito e si dice perché.
+                raise FonteNonDisponibile(f"HTTP {e.code}{dettaglio}")
             else:
                 pausa = 2 ** tentativo
-            ultimo = f"HTTP {e.code}"
+            ultimo = f"HTTP {e.code}{dettaglio}"
         except Exception as e:                      # timeout, DNS, TLS, reset
             ultimo = type(e).__name__
             pausa = 2 ** tentativo
