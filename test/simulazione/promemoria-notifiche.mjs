@@ -1337,3 +1337,247 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
   ok("K/...e infatti la coda vera in quel momento non era vuota",
      (await notifiche.programmate()) === 2);
 }
+
+// ==========================================================================
+// PARTE L — la schermata /promemoria
+// ==========================================================================
+// app/promemoria.tsx NON si importa: il banco non ha react-native ne
+// expo-router, e una schermata si prova sull'emulatore. Qui sotto c'e la sua
+// LOGICA ricopiata riga per riga (montaggio, aggiorna, confermaOra e i tre
+// testi derivati dal render), con le stesse chiamate alle stesse funzioni
+// vere. Il valore della copia sta nel fatto che sotto gira il codice vero di
+// lib/notifiche.ts, lib/promemoria.ts e lib/db.ts.
+//
+// UNA FEDELTA CHE CONTA: in React `p` dentro un gestore e il valore del
+// RENDER, non quello aggiornato. Qui lo si riproduce passando esplicitamente
+// il `p` renderizzato a confermaOra(), che e cio che rende possibile lo
+// scenario della doppia conferma (onBlur + onSubmitEditing).
+{
+  let contatoreSessioni = 0;
+  async function registraSessione(tipo, inizio, minuti = 30) {
+    const id = `sessione-di-prova-${++contatoreSessioni}`;
+    // Stessa scrittura di components/Cronometro.tsx:56, invariante 1 inclusa.
+    await dbApp.registra("sessioni", id, "crea", { tipo, minuti }, async (d, hlc) => {
+      await d.runAsync(
+        "INSERT INTO sessioni (id, tipo, inizio, minuti, hlc) VALUES (?,?,?,?,?)",
+        [id, tipo, new Date(inizio).toISOString(), minuti, hlc]);
+    });
+  }
+  // Pulizia della PROVA, non dell'app: qui si tocca la tabella operativa
+  // direttamente perche serve riportare lo schermo alla condizione di
+  // partenza. Nel codice dell'app questo sarebbe una violazione dell'invariante 1.
+  const svuotaSessioni = () => dbApp.database().runAsync("DELETE FROM sessioni");
+
+  function creaSchermata() {
+    const s = { p: null, testoOra: "", permesso: true, inCoda: 0, fattoOggi: false };
+    const avvisi = [];
+    let impostazioniAperte = 0;
+
+    async function montaggio() {
+      const letto = await notifiche.leggiPromemoria();
+      s.p = letto;
+      s.testoOra = comeTesto(letto);
+      s.permesso = await notifiche.permessoConcesso(false);
+      s.inCoda = await notifiche.programmate();
+      const righe = await dbApp.database().getAllAsync(
+        "SELECT inizio FROM sessioni WHERE tipo = ? ORDER BY inizio DESC LIMIT 20", [letto.tipo]);
+      s.fattoOggi = giaFattoOggi(letto, righe.map((r) => r.inizio), new Date());
+    }
+
+    async function aggiorna(nuovo, chiediPermesso) {
+      s.p = nuovo;
+      await notifiche.salvaPromemoria(nuovo);
+      if (nuovo.attivo && chiediPermesso && !(await notifiche.permessoConcesso(true))) {
+        s.permesso = false;
+        avvisi.push({
+          titolo: "Permesso negato",
+          bottoni: ["Annulla", "Impostazioni"],
+          apriImpostazioni: () => { impostazioniAperte++; },
+        });
+        return;
+      }
+      s.permesso = await notifiche.permessoConcesso(false);
+      await notifiche.applica(nuovo);
+      s.inCoda = await notifiche.programmate();
+    }
+
+    function confermaOra(pRenderizzato = s.p) {
+      if (!pRenderizzato) return;
+      const letto = daTesto(s.testoOra);
+      if (!letto) {
+        avvisi.push({ titolo: "Ora non valida", messaggio: "Scrivila come 07:30." });
+        s.testoOra = comeTesto(pRenderizzato);
+        return;
+      }
+      return aggiorna({ ...pRenderizzato, ...letto }, pRenderizzato.attivo);
+    }
+
+    return {
+      stato: s,
+      avvisi,
+      montaggio,
+      aggiorna,
+      confermaOra,
+      scriviOra: (t) => { s.testoOra = t; },
+      commutaInterruttore: (v) => aggiorna({ ...s.p, attivo: v }, v),
+      scegliTipo: (t) => aggiorna({ ...s.p, tipo: t }, s.p.attivo),
+      tornaIndietro: () => "profilo",
+      // ------------------------------------------- cio che si vede a schermo
+      schermoVuoto: () => s.p === null,
+      bannerRosso: () => Boolean(s.p && s.p.attivo && !s.permesso),
+      impostazioniAperte: () => impostazioniAperte,
+      anteprima: () => testoNotifica(s.p),
+      rigaStato: (adesso = new Date()) => {
+        const prossima = prossimaOccorrenza(s.p, adesso);
+        return (s.p.attivo && prossima
+          ? `Prossimo avviso: ${prossima.toLocaleString("it-IT", { weekday: "long", hour: "2-digit", minute: "2-digit" })}.`
+          : "Nessun avviso programmato.")
+          + (s.p.attivo && s.fattoOggi ? " Il blocco di oggi risulta gia registrato." : "")
+          + ` In coda nel sistema: ${s.inCoda}.`;
+      },
+    };
+  }
+
+  // Riga di app/(tabs)/profilo.tsx:44-46, per verificare la coerenza al rientro.
+  const rigaProfilo = (prom) => prom.attivo
+    ? `Blocco ${prom.tipo} alle ${comeTesto(prom)}, ogni giorno.`
+    : "Nessun avviso. Notifica locale, funziona anche in aereo.";
+
+  // ------------------------------------------- L1: apertura, preferenza assente
+  pulisci();
+  await svuotaSessioni();
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    ok("L/apertura senza preferenza: interruttore spento", sc.stato.p.attivo === false);
+    ok("L/apertura senza preferenza: campo a 07:00", sc.stato.testoOra === "07:00");
+    ok("L/apertura senza preferenza: tipo mattina", sc.stato.p.tipo === "mattina");
+    ok("L/apertura: il permesso si LEGGE, non si chiede", Banco.conteggioRichiestePermesso() === 0);
+    ok("L/apertura: in coda 0", sc.stato.inCoda === 0);
+    ok("L/apertura: nessun banner rosso", sc.bannerRosso() === false);
+    ok("L/apertura: nessun avviso a sorpresa", sc.avvisi.length === 0);
+    ok("L/apertura: lo schermo non e piu vuoto", sc.schermoVuoto() === false);
+    ok("L/apertura: riga di stato senza avviso programmato",
+       sc.rigaStato() === "Nessun avviso programmato. In coda nel sistema: 0.", sc.rigaStato());
+    ok("L/apertura: l'apertura NON scrive la preferenza", Kv.chiaviGrezze().length === 0);
+  }
+
+  // ------------------------------------- L2: apertura con preferenza salvata
+  pulisci();
+  await svuotaSessioni();
+  await notifiche.salvaPromemoria(acceso(6, 45, "lettura"));
+  await notifiche.applica(acceso(6, 45, "lettura"));
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    ok("L/apertura con preferenza: campo a 06:45", sc.stato.testoOra === "06:45");
+    ok("L/apertura con preferenza: tipo lettura evidenziato", sc.stato.p.tipo === "lettura");
+    ok("L/apertura con preferenza: in coda 1", sc.stato.inCoda === 1);
+    uguali("L/apertura con preferenza: anteprima del blocco lettura",
+           sc.anteprima(), { titolo: "Blocco lettura", corpo: "25 minuti. Apri Percorso e avvia il cronometro." });
+    ok("L/apertura con preferenza: la riga di stato nomina il prossimo avviso",
+       sc.rigaStato().startsWith("Prossimo avviso: ") && sc.rigaStato().endsWith("In coda nel sistema: 1."),
+       sc.rigaStato());
+    ok("L/apertura con preferenza: 'gia registrato' assente senza sessioni",
+       !sc.rigaStato().includes("gia registrato"));
+  }
+
+  // --------------------------------- L3: 'gia fatto oggi' con sessioni vere
+  pulisci();
+  await svuotaSessioni();
+  await notifiche.salvaPromemoria(acceso(7, 0, "mattina"));
+  await registraSessione("mattina", Date.now() - 2 * 3600_000, 30);
+  await registraSessione("ripasso", Date.now() - 3 * 3600_000, 15);
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    ok("L/una sessione 'mattina' di oggi fa comparire 'gia registrato'", sc.stato.fattoOggi === true);
+    ok("L/...e la riga di stato lo dice", sc.rigaStato().includes("Il blocco di oggi risulta gia registrato."),
+       sc.rigaStato());
+    // Il tipo cambia, la frase no: fattoOggi e calcolato UNA volta al montaggio.
+    await sc.scegliTipo("paper");
+    ok("L/DIFETTO RIPRODOTTO: cambiando tipo la frase 'gia registrato' resta quella del tipo precedente",
+       sc.stato.p.tipo === "paper" && sc.stato.fattoOggi === true
+       && sc.rigaStato().includes("gia registrato"), sc.rigaStato());
+    // La controprova: aprendo di nuovo la schermata sul tipo 'paper' la frase sparisce.
+    const sc2 = creaSchermata();
+    await sc2.montaggio();
+    ok("L/...riaprendo la schermata sul tipo 'paper' la frase sparisce correttamente",
+       sc2.stato.p.tipo === "paper" && sc2.stato.fattoOggi === false);
+  }
+
+  // Sessione di ieri dello stesso tipo: non deve contare.
+  pulisci();
+  await svuotaSessioni();
+  await notifiche.salvaPromemoria(acceso(7, 0, "mattina"));
+  await registraSessione("mattina", Date.now() - 26 * 3600_000, 30);
+  {
+    const sc = creaSchermata();
+    await sc.montaggio();
+    ok("L/una sessione di ieri non fa comparire 'gia registrato'", sc.stato.fattoOggi === false);
+  }
+
+  // ------------------------------------ L4: un passo dell'apertura fallisce
+  // La mappa dei lettori diceva "la schermata resta BIANCA per sempre". E
+  // FALSO, e vale la pena inchiodarlo: setP(letto) avviene PRIMA di
+  // permessoConcesso(), quindi React ha gia di che renderizzare quando
+  // l'effetto rigetta. Il danno vero e un altro, ed e piu insidioso: la
+  // promessa rigetta senza catch, e `permesso` resta al suo valore INIZIALE,
+  // che e `true`. Risultato: notifiche impossibili e nessun banner rosso.
+  pulisci();
+  await svuotaSessioni();
+  await notifiche.salvaPromemoria(acceso(7, 0));
+  Doppio.guasto.attivo = "Cannot find native module 'ExpoNotifications'";
+  {
+    const sc = creaSchermata();
+    let rigettata = false;
+    await sc.montaggio().catch(() => { rigettata = true; });
+    ok("L/DIFETTO RIPRODOTTO: se permessoConcesso solleva, l'effetto di apertura rigetta senza catch",
+       rigettata === true);
+    ok("L/...ma lo schermo NON resta vuoto: setP avviene prima del passo che fallisce",
+       sc.schermoVuoto() === false);
+    ok("L/DIFETTO RIPRODOTTO: `permesso` resta al valore iniziale true e il banner rosso NON compare",
+       sc.stato.permesso === true && sc.bannerRosso() === false);
+    ok("L/DIFETTO RIPRODOTTO: 'In coda nel sistema' resta 0 anche se nessuno ha potuto contarle",
+       sc.stato.inCoda === 0 && sc.rigaStato().endsWith("In coda nel sistema: 0."), sc.rigaStato());
+    ok("L/...e il campo dell'ora e comunque corretto: il guasto non e del deposito",
+       sc.stato.testoOra === "07:00");
+  }
+  Doppio.guasto.attivo = null;
+
+  // L'unico passo che potrebbe lasciare lo schermo bianco e il primo, e non
+  // puo fallire: leggiPromemoria ha un catch e non rigetta mai, nemmeno con
+  // il deposito rotto. Lo si verifica invece di crederci.
+  pulisci();
+  Kv.guasto.lettura = "database is locked";
+  await nonLancia("L/lo schermo bianco per il primo passo non e raggiungibile: leggiPromemoria non rigetta mai",
+                  () => notifiche.leggiPromemoria());
+  Kv.guasto.lettura = null;
+
+  // Query sulle sessioni che fallisce: e l'ULTIMO passo dell'effetto, quindi
+  // tutto il resto e gia stato impostato. Effetto visibile: manca solo la
+  // frase "gia registrato", piu una promessa non gestita.
+  pulisci();
+  await svuotaSessioni();
+  await notifiche.salvaPromemoria(acceso(7, 0, "mattina"));
+  await registraSessione("mattina", Date.now() - 2 * 3600_000, 30);
+  {
+    const sc = creaSchermata();
+    let rigettata = false;
+    // Si sostituisce la SOLA query, per isolare l'ultimo passo dell'effetto.
+    const montaggioConQueryRotta = async () => {
+      const letto = await notifiche.leggiPromemoria();
+      sc.stato.p = letto;
+      sc.stato.testoOra = comeTesto(letto);
+      sc.stato.permesso = await notifiche.permessoConcesso(false);
+      sc.stato.inCoda = await notifiche.programmate();
+      const righe = await Promise.reject(new Error("Database non aperto: chiamare apri() all'avvio."));
+      sc.stato.fattoOggi = giaFattoOggi(letto, righe.map((r) => r.inizio), new Date());
+    };
+    await montaggioConQueryRotta().catch(() => { rigettata = true; });
+    ok("L/DIFETTO RIPRODOTTO: un errore della query sulle sessioni rigetta l'effetto, senza catch",
+       rigettata === true);
+    ok("L/...lo schermo e pieno e coerente, manca solo la frase 'gia registrato'",
+       sc.schermoVuoto() === false && sc.stato.fattoOggi === false
+       && !sc.rigaStato().includes("gia registrato"), sc.rigaStato());
+  }
