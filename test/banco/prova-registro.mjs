@@ -49,7 +49,7 @@
  *
  * Togliendo invece anche il BEGIN (proiezione eseguita senza transazione)
  * cadono pure "la proiezione gira DENTRO la transazione" e la spia della
- * parte D: 17 rosse. Le due falsificazioni insieme dicono che sono le
+ * parte D: 20 rosse. Le due falsificazioni insieme dicono che sono le
  * transazioni a far passare questa prova, non la compiacenza del doppio.
  */
 import { mkdtempSync, rmSync } from "node:fs";
