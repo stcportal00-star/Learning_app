@@ -82,14 +82,18 @@ jobs:
 
       - name: Ricerca delle copie accessibili
         continue-on-error: true
+        timeout-minutes: 12
         run: |
           set -euo pipefail
-          # Solo le voci senza testo pieno già noto, e non più di quaranta per
-          # corsa: il ricercatore interroga fino a sei archivi per voce, e una
-          # rassegna quotidiana non deve diventare una scansione di massa.
+          # Solo le voci senza testo pieno già noto, e con due tetti: venticinque
+          # voci e dieci minuti. Il tetto di tempo è quello che conta: ogni voce
+          # interroga fino a sei archivi con trenta secondi di attesa ciascuno,
+          # quindi il numero di voci non dice quanto durerà. Senza, questo passo
+          # si è mangiato l'intero job e la rassegna non è arrivata a pubblicare
+          # — e con continue-on-error non se ne accorgeva nessuno.
           python3 strumenti/rassegna/ricercatore.py \
             --catalogo rassegna/catalogo.json \
-            --solo-senza-testo --massimo 40 \
+            --solo-senza-testo --massimo 25 --minuti 10 \
             --uscita rassegna/trovati.json
 
       - name: Riepilogo

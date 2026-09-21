@@ -153,6 +153,12 @@ def main():
     p.add_argument("--solo-senza-testo", action="store_true",
                    help="dal catalogo, solo le voci senza testo pieno già noto")
     p.add_argument("--massimo", type=int, default=200, help="quante voci trattare al più")
+    # Tetto di tempo, non solo di voci. Ogni voce interroga fino a sei archivi
+    # con trenta secondi di attesa ciascuno: il numero di voci non dice quanto
+    # durerà. Senza questo tetto la ricerca si è mangiata l'intero job in
+    # Actions e la rassegna non è mai arrivata a pubblicare.
+    p.add_argument("--minuti", type=float, default=10.0,
+                   help="tetto di tempo; 0 per nessun limite")
     p.add_argument("--uscita", default=None, help="scrive l'esito in JSON")
     p.add_argument("--tutte-le-vie", action="store_true",
                    help="non fermarsi alla prima via utile: elencarle tutte")
@@ -165,10 +171,20 @@ def main():
     else:
         voci = [{"titolo": a.titolo, "doi": a.doi, "isbn": a.isbn,
                  "tema_slug": None, "trimestre": None}]
+    totali = len(voci)
     voci = voci[:a.massimo]
+    oltre_massimo = totali - len(voci)
 
-    esiti, senza = [], 0
+    scadenza = time.monotonic() + a.minuti * 60 if a.minuti > 0 else None
+    esiti, senza, interrotto = [], 0, 0
     for indice, v in enumerate(voci, 1):
+        if scadenza is not None and time.monotonic() >= scadenza:
+            # Ciò che resta non si tace: un elenco troncato in silenzio si legge
+            # come un elenco completo, ed è il modo migliore per non accorgersi
+            # che metà del catalogo non è mai stata cercata.
+            interrotto = len(voci) - indice + 1
+            print(f"\nTetto di {a.minuti:g} minuti raggiunto: {interrotto} voci non trattate.")
+            break
         etichetta = v["titolo"] or v["doi"] or "(senza riferimento)"
         print(f"[{indice}/{len(voci)}] {etichetta[:70]}", end=" ", flush=True)
         traccia = []
@@ -195,12 +211,17 @@ def main():
         os.makedirs(os.path.dirname(a.uscita) or ".", exist_ok=True)
         with open(a.uscita, "w", encoding="utf-8") as f:
             json.dump({"generato": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "trattate": len(esiti),
+                       "non_trattate_per_tempo": interrotto,
+                       "non_trattate_per_massimo": oltre_massimo,
                        "voci": esiti}, f, ensure_ascii=False, indent=1)
         print(f"\nEsito in {a.uscita}")
 
     scaricabili = sum(1 for e in esiti if QUALITA.get(e["accesso"], 0) >= 4)
-    print(f"\nTrattate {len(esiti)} · scaricabili e conservabili {scaricabili} · "
+    print(f"\nTrattate {len(esiti)} di {totali} · scaricabili e conservabili {scaricabili} · "
           f"senza via di accesso {senza}")
+    if interrotto or oltre_massimo:
+        print(f"Non trattate: {interrotto} per tempo, {oltre_massimo} oltre il massimo.")
     return 0
 
 
