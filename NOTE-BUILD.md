@@ -293,14 +293,15 @@ sarebbero compiacenza e non prova.
 
 | superficie | esito |
 |---|---|
-| `registro-eventi` | 45 scenari · 260 verifiche · verde |
+| `registro-eventi` | 45 scenari · 264 verifiche · verde |
 | `motore-sql` | 126 scenari · verde |
-| `import-database` | 220 scenari · verde |
-| `contenuti` | 59 scenari · 301 verifiche · verde |
+| `import-database` | 223 scenari · verde |
+| `contenuti` | 59 scenari · 309 verifiche · verde |
 | `ripasso-e-sessioni` | 67 scenari · verde |
-| `schermate-stato` | 469 verifiche · verde |
-| `sync-fusione` | 91 verifiche · verde |
-| `promemoria-notifiche` | **405 su 408** — tre rosse, vedi sotto |
+| `schermate-stato` | 476 verifiche · verde |
+| `sync-fusione` | 91 scenari · 350 verifiche · verde |
+| `promemoria-notifiche` | 408 verifiche · verde |
+| `coda-scritture` | 12 verifiche · verde (aggiunta con la correzione della coda) |
 
 Un numero verde qui non vuol dire che l'app sia sana: vuol dire che lo scenario
 fa quello che dice. Molti scenari **inchiodano** un difetto, cioè verificano che
@@ -368,6 +369,53 @@ tentativo era incompleto — serializzare solo `registra()` non bastava, perché
 `useAutoSync` e `contenuti` aprivano transazioni per conto loro. Ora
 `inTransazione()` è l'unica porta.
 
+### Corretto: «Rimuovi» cancellava per sempre un volume della biblioteca — `8fb942a`
+
+`LIB-06`. La voce di catalogo di un volume della biblioteca aperta nasce una
+volta sola, dentro `caricaContenuti()`, che al secondo avvio salta tutto perché
+gli esercizi ci sono già; e «Importa biblioteca» **aggiorna** righe esistenti,
+non le crea. `rimuoviVolume()` faceva `DELETE` su qualunque origine: il volume
+non tornava più, nemmeno reimportando la release, e l'evento `elimina` portava
+la perdita anche sull'altro dispositivo. Bastava una pressione lunga di troppo
+su un volume mai scaricato.
+
+Ora per l'origine `aperta` si cancella il file e si azzera `file_locale`: il
+volume torna «non scaricato» e la prossima importazione lo ricollega.
+`ultima_pagina` resta, perché è l'unica cosa che non si potrebbe ricostruire.
+Un PDF aggiunto a mano invece esiste solo lì e se ne va con la sua riga. Nel
+menu della pressione lunga la voce dice ora quello che fa — «Rimuovi il file
+scaricato» — e su un volume mai scaricato non compare.
+
+La conferma più bella non è mia: `import-database`, scritta da un'altra mano,
+è diventata rossa **da sola** sulle due prove che inchiodavano il difetto
+(`IMP-32`, `IMP-34`). Erano lì apposta per quel giorno.
+
+### Corretto: l'orologio non assorbiva il tempo dei pacchetti ricevuti — `f8b141d`
+
+`HLC-02`. `Orologio.ricevi()` era scritto, documentato e coperto da
+`test/nucleo.test.ts`, e non lo chiamava nessuno. Dopo una fusione l'orologio
+locale restava indietro, e la **prima** modifica scritta qui dopo lo scambio
+nasceva con un HLC più basso di quello appena ricevuto: in «vince il più
+recente» perdeva pur essendo successiva, senza un errore e senza un avviso.
+È il caso per cui l'invariante 2 esiste: due dispositivi, due fusi, un viaggio.
+Effetto collaterale, il riquadro di deriva oraria in Oggi era codice morto,
+perché `derivaSospetta()` non si alzava mai.
+
+`lib/db.ts` esporta ora `assorbiRemoto()`, dieci righe che passano da
+`Orologio.ricevi()` e salvano `meta('hlc')` **dentro** `inTransazione()`;
+`useAutoSync` la chiama come prima cosa del ramo `if (r.esito)`. Un hlc
+illeggibile viene saltato e non assorbito: un `NaN` nell'orologio non ne
+uscirebbe più. La trappola del trattino nell'identificativo di dispositivo si
+è rivelata innocua qui: di un HLC remoto servono solo `ms` e contatore, e
+l'identificativo che resta è sempre quello locale.
+
+Anche qui la conferma viene da fuori: la controprova avversariale di un altro
+agente ha la parte A **rossa in tutte e quattro le righe**, ed è il modo in cui
+quel verbale annuncia che il difetto non c'è più. La sua parte C mostra ancora
+il vecchio esito perché ricopia a mano `useAutoSync` com'era: misura quel
+codice, non l'app. L'ho annotato nel file invece di riscriverlo — è il verbale
+di una verifica fatta prima, e va letto per quello che era.
+
 ### Ancora aperto: la sincronizzazione non mostra mai ciò che riceve
 
 `SYN-01`, confermato, e per un'app su due dispositivi è grave.
@@ -413,23 +461,16 @@ che non si accorcia mai è un elenco di cui non fidarsi.
 
 ### Confermati dalla verifica avversariale, non ancora corretti
 
-- **`HLC-02`** (critico, 1 confutazione su 3) — `Orologio.ricevi()` non è
-  chiamato da nessun punto di `lib/` e `app/`. Ricevendo un evento con HLC più
-  avanti del proprio, l'orologio locale non avanza: la modifica locale
-  successiva ha un timbro **minore** di quella remota già vista, e in fusione
-  perde pur essendo più recente. Il revisore lo chiama «uno dei rari casi in cui
-  il pezzo mancante esiste già, collaudato»: `ricevi()` è scritto, documentato e
-  coperto da tre asserzioni in `test/nucleo.test.ts`. Mancano una decina di
-  righe per collegarlo, senza refactoring — ma con due trappole: la scrittura di
-  `meta('hlc')` deve stare **dentro** `inTransazione()`, altrimenti riapre
-  l'accavallamento appena chiuso, e `deserializza()` spezza su `-`, quindi un
-  identificativo di dispositivo con un trattino verrebbe troncato.
 - **`NOT-07`** (critico, **0 confutazioni su 3**) — le modifiche a una nota
   spariscono senza avviso in ogni modo di uscire dalla schermata: tasto
-  indietro, cambio scheda, apertura di un'altra nota.
-- **`LIB-06`** (critico, **0 su 3**) — «Rimuovi» su un volume della biblioteca
-  aperta cancella la voce di catalogo: il volume non torna più, perché la
-  biblioteca si carica una volta sola.
+  indietro, cambio scheda, apertura di un'altra nota. È l'unico dei quattro
+  confermati che resta, insieme a `SYN-01`: costa più degli altri perché tocca
+  la schermata e non solo una funzione, e lo lascio a te da decidere — la
+  correzione minima è salvare all'uscita, quella giusta è avvisare.
+
+Corretti in questa sessione: `HLC-02` (`f8b141d`) e `LIB-06` (`8fb942a`), con
+le loro guardie e la falsificazione di ognuna. `SYN-01` resta aperto per la
+ragione scritta sopra, che non è cambiata.
 
 ### Mai contestati
 
@@ -471,11 +512,14 @@ conteggi dichiarati in `CLAUDE.md` sono stati aggiornati di conseguenza.
 `verifica.yml` a ogni push e da `biblioteca.yml` prima di scaricare.
 
 `test/banco/`: 258 verifiche fra i tre banchi di prova.
-`test/simulazione/`: otto superfici, oltre 1400 scenari sul codice vero. **Non
-sono ancora in `verifica.sh`**: una superficie è rossa e diversi scenari
-inchiodano difetti aperti, quindi collegarli alla CI adesso la terrebbe rossa
-per ragioni che non sono regressioni. Vanno collegati quando i difetti confermati
-saranno corretti.
+`test/simulazione/`: nove superfici, oltre 1500 scenari sul codice vero, tutte
+verdi. **Non sono ancora in `verifica.sh`**, e ora è l'unica vera lacuna di
+processo rimasta: è per questo che due volte un agente ha potuto disattivare la
+coda delle scritture dentro `lib/db.ts` lasciando tutto verde. Le guardie
+`corretto()` esistono apposta, ma una guardia che nessuno esegue non ferma
+niente. Restano fuori perché molti scenari inchiodano difetti ancora aperti e
+la CI diventerebbe rossa per ragioni che non sono regressioni: la via è
+collegare per prime le superfici già tutte verdi.
 
 Mai modificati: `fumo.sh`, `test-firma.sh`, il passo della chiave di firma,
 la release `firma`.
