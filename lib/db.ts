@@ -15,7 +15,7 @@ import { Orologio, serializza, deserializza, HLC } from "./hlc";
 let db: SQLite.SQLiteDatabase | null = null;
 let orologio: Orologio | null = null;
 
-export const SCHEMA_VERSIONE = 1;
+export const SCHEMA_VERSIONE = 2;
 
 const MIGRAZIONI: string[][] = [
   // v1
@@ -91,6 +91,55 @@ const MIGRAZIONI: string[][] = [
        aggiunto_a TEXT NOT NULL, hlc TEXT);`,
     `CREATE INDEX IF NOT EXISTS biblioteca_trim_idx ON biblioteca (trimestre, tema_slug);`,
   ],
+  // v2 — ciò che arriva dalla nuvola, e i segni che si lasciano sopra.
+  //
+  // Tre aggiunte, tutte per lo stesso motivo: la rassegna quotidiana gira su
+  // GitHub, deposita su Supabase, e da lì l'app deve poter leggere SENZA RETE.
+  // Un articolo che si può solo aprire nel browser non è studiabile in metro.
+  [
+    // `articoli` tiene il TESTO, non il collegamento. È la differenza fra
+    // "ho un elenco di cose da leggere" e "ho da leggere".
+    `CREATE TABLE IF NOT EXISTS articoli (
+       id TEXT PRIMARY KEY,
+       titolo TEXT NOT NULL,
+       autori TEXT, fonte TEXT, url TEXT, url_pdf TEXT,
+       abstract TEXT, testo TEXT,
+       tema_slug TEXT, trimestre TEXT, licenza TEXT,
+       pubblicato_a TEXT, raccolto_a TEXT NOT NULL,
+       letto INTEGER NOT NULL DEFAULT 0,
+       salvato INTEGER NOT NULL DEFAULT 0,
+       hlc TEXT);`,
+    `CREATE INDEX IF NOT EXISTS articoli_raccolto_idx ON articoli (raccolto_a DESC);`,
+    `CREATE INDEX IF NOT EXISTS articoli_tema_idx ON articoli (tema_slug, letto);`,
+
+    // I segni stanno ACCANTO al file, mai dentro. Un'annotazione scritta
+    // dentro il PDF cambia i byte: l'impronta non torna più, il volume non si
+    // può riscaricare senza perdere il lavoro, e due dispositivi che segnano
+    // lo stesso testo producono due file diversi impossibili da fondere.
+    // Fuori, invece, un segno è un evento come gli altri e si fonde da sé.
+    `CREATE TABLE IF NOT EXISTS segni (
+       id TEXT PRIMARY KEY,
+       volume_id TEXT NOT NULL,
+       genere TEXT NOT NULL CHECK (genere IN ('nota','evidenza','segnalibro')),
+       pagina INTEGER, ancora TEXT,
+       testo TEXT NOT NULL DEFAULT '',
+       creato_a TEXT NOT NULL, hlc TEXT);`,
+    `CREATE INDEX IF NOT EXISTS segni_volume_idx ON segni (volume_id, pagina);`,
+
+    // `codice` è la chiave stabile con cui la conduttura riconosce un volume
+    // già pubblicato; `pdf_path` è dove stanno i byte nel deposito remoto.
+    // `file_locale` resta una faccenda del telefono e non viaggia mai.
+    `ALTER TABLE biblioteca ADD COLUMN codice TEXT;`,
+    `ALTER TABLE biblioteca ADD COLUMN pdf_path TEXT;`,
+    `ALTER TABLE biblioteca ADD COLUMN nota TEXT;`,
+    `CREATE INDEX IF NOT EXISTS biblioteca_codice_idx ON biblioteca (codice);`,
+
+    // La proiezione degli eventi ricevuti ricostruisce un'entità alla volta
+    // leggendo tutti i suoi eventi. Senza questo indice è una scansione
+    // dell'intero registro per ogni entità toccata: con qualche migliaio di
+    // eventi e una rassegna che ne porta cento al giorno diventa quadratica.
+    `CREATE INDEX IF NOT EXISTS eventi_entita_idx ON eventi (entita, entita_id, hlc);`,
+  ],
 ];
 
 export async function apri(dispositivoId: string): Promise<SQLite.SQLiteDatabase> {
@@ -102,7 +151,28 @@ export async function apri(dispositivoId: string): Promise<SQLite.SQLiteDatabase
   const versione = riga?.user_version ?? 0;
 
   for (let v = versione; v < MIGRAZIONI.length; v++) {
-    for (const istruzione of MIGRAZIONI[v]) await db.execAsync(istruzione);
+    for (const istruzione of MIGRAZIONI[v]) {
+      try {
+        await db.execAsync(istruzione);
+      } catch (e) {
+        // SQLite non conosce «ADD COLUMN IF NOT EXISTS», e ogni altra
+        // istruzione qui sopra è ripetibile. Una migrazione rieseguita su un
+        // database che ha già la colonna — user_version azzerata da un
+        // ripristino, un declassamento seguito da un aggiornamento — deve
+        // poter proseguire, altrimenti l'app non si apre più e sul telefono
+        // non c'è modo di ripararla.
+        //
+        // Si ingoia SOLO questo errore e SOLO su un ADD COLUMN: qualunque
+        // altro guasto dello schema deve fermare l'avvio, perché andare avanti
+        // su uno schema incompleto è peggio che non partire.
+        if (
+          !/duplicate column name/i.test(String(e)) ||
+          !/ADD\s+COLUMN/i.test(istruzione)
+        ) {
+          throw e;
+        }
+      }
+    }
   }
   if (versione < MIGRAZIONI.length) {
     await db.execAsync(`PRAGMA user_version = ${MIGRAZIONI.length}`);

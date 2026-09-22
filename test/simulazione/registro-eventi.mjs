@@ -315,21 +315,25 @@ await prova("A1 primo avvio: lo schema v1 nasce intero e il registro e vuoto", a
       "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )
   ).map((r) => r.name);
-  const atteseTabelle = ["artefatti", "biblioteca", "credenziali", "esercizi", "eventi", "meta",
-    "note", "pubblicazioni", "ripasso", "sessioni", "temi", "tentativi"];
-  ok("le 12 tabelle dello schema v1 esistono", tabelle.join(",") === atteseTabelle.join(","), tabelle.join(","));
+  // v2 ha aggiunto `articoli` (la rassegna quotidiana, con il testo dentro
+  // perche si legga senza rete) e `segni` (note e segnalibri ACCANTO ai PDF).
+  const atteseTabelle = ["artefatti", "articoli", "biblioteca", "credenziali", "esercizi",
+    "eventi", "meta", "note", "pubblicazioni", "ripasso", "segni", "sessioni", "temi", "tentativi"];
+  ok("le 14 tabelle dello schema v2 esistono", tabelle.join(",") === atteseTabelle.join(","), tabelle.join(","));
 
   const indici = (
     await base.getAllAsync(
       "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )
   ).map((r) => r.name);
-  const attesiIndici = ["biblioteca_trim_idx", "esercizi_tema_idx", "eventi_da_sincronizzare",
-    "eventi_hlc_idx", "ripasso_prossima_idx", "sessioni_inizio_idx", "tentativi_esercizio_idx"];
-  ok("i 7 indici dichiarati esistono", indici.join(",") === attesiIndici.join(","), indici.join(","));
+  const attesiIndici = ["articoli_raccolto_idx", "articoli_tema_idx", "biblioteca_codice_idx",
+    "biblioteca_trim_idx", "esercizi_tema_idx", "eventi_da_sincronizzare", "eventi_entita_idx",
+    "eventi_hlc_idx", "ripasso_prossima_idx", "segni_volume_idx", "sessioni_inizio_idx",
+    "tentativi_esercizio_idx"];
+  ok("i 12 indici dichiarati esistono", indici.join(",") === attesiIndici.join(","), indici.join(","));
 
   const v = await base.getFirstAsync("PRAGMA user_version");
-  ok("user_version passa a 1", v.user_version === 1, String(v.user_version));
+  ok("user_version passa a 2", v.user_version === 2, String(v.user_version));
   ok("SCHEMA_VERSIONE coincide con la versione scritta", app.SCHEMA_VERSIONE === v.user_version,
     `SCHEMA_VERSIONE=${app.SCHEMA_VERSIONE}`);
 
@@ -352,7 +356,7 @@ await prova("A2 secondo avvio sullo stesso file: niente migrazioni, dati intatti
 
   const secondo = await avvia("aaaa2222", primo.cartella);
   const v = await secondo.base.getFirstAsync("PRAGMA user_version");
-  ok("user_version resta 1", v.user_version === 1, String(v.user_version));
+  ok("user_version resta 2", v.user_version === 2, String(v.user_version));
   ok("l'evento di prima e ancora li", (await contaEventi(secondo.base)) === 1);
   ok("la nota di prima e ancora li",
     (await secondo.base.getFirstAsync("SELECT testo FROM note WHERE id='n1'")).testo === "prima");
@@ -377,7 +381,7 @@ await prova("A3 migrazione ripetibile: user_version riportata a 0 su un database
 
   const secondo = await avvia("aaaa3333", primo.cartella);
   const v = await secondo.base.getFirstAsync("PRAGMA user_version");
-  ok("la migrazione rigira senza errori e riporta la versione a 1", v.user_version === 1, String(v.user_version));
+  ok("la migrazione rigira senza errori e riporta la versione a 2", v.user_version === 2, String(v.user_version));
   ok("CREATE TABLE IF NOT EXISTS non ha cancellato l'evento", (await contaEventi(secondo.base)) === 1);
   ok("ne la nota", (await secondo.base.getFirstAsync("SELECT testo FROM note WHERE id='n1'")).testo === "testo");
 });
