@@ -108,19 +108,24 @@ console.log("\nA. lib/db.ts — due registra() sovrapposte (invariante 1)");
   const idEventi = new Set(eventi.map((e) => e.entita_id));
   const orfane = note.filter((n) => !idEventi.has(n.id));
 
+  // Le tre righe qui sotto misuravano il difetto REG-06/REG-07, ed erano verdi
+  // quando lo erano. La coda delle scritture di lib/db.ts (f890774) lo ha
+  // chiuso, e da allora questo triage le teneva rosse come se fosse una
+  // cattiva notizia: erano l'unica cosa in tutto il file a non essersi accorta
+  // di una correzione. Girate, con lo stesso codice sotto e la misura identica.
   ok(
-    "A1 almeno una delle due registra() sovrapposte rigetta",
-    esiti.some((e) => e.status === "rejected"),
+    "A1 nessuna delle due registra() sovrapposte viene respinta: la coda le serializza",
+    esiti.every((e) => e.status === "fulfilled"),
     motivi.join(" | ")
   );
   ok(
-    "A2 il rigetto e' un errore di transazione annidata",
-    motivi.some((m) => /transaction/i.test(m)),
+    "A2 e nessun errore di transazione annidata compare piu'",
+    !motivi.some((m) => /transaction/i.test(m)),
     motivi.join(" | ")
   );
   ok(
-    "A3 resta una riga in note SENZA il suo evento (invariante 1 rotta)",
-    orfane.length >= 1,
+    "A3 nessuna riga in note resta senza il suo evento (invariante 1 tenuta)",
+    orfane.length === 0 && note.length === 2,
     `note=${note.length} eventi=${idEventi.size} orfane=${orfane.length}`
   );
   console.log(`       note=${note.length} eventi=${idEventi.size} orfane=${JSON.stringify(orfane.map((o) => o.id))}`);
@@ -427,11 +432,20 @@ console.log("\nI. app/(tabs)/note.tsx");
 {
   ok("I1 NOT-03c setApertaId(id) sta dopo l'await", contiene("app/(tabs)/note.tsx", "setApertaId(id);\n    await ricarica();"));
   ok("I2 NOT-03b/c salva() non ha nessuna guardia di riesecuzione", !/const \[inCorso|salvataggioInCorso|if \(inCorso\)/.test(sorgente("app/(tabs)/note.tsx")));
-  ok("I3 NOT-07 'Nuova nota' azzera i campi senza salvare", contiene("app/(tabs)/note.tsx", 'function nuova() {\n    setApertaId("nuova"); setTitolo(""); setTesto(""); setPubblicabile(false);'));
-  ok("I4 NOT-07 '← Tutte le note' chiude l'editor senza salvare", contiene("app/(tabs)/note.tsx", "onPress={() => setApertaId(null)}"));
-  ok("I5 NOT-07 non esiste nessuna bozza ne' avviso", !/bozza|Alert/.test(sorgente("app/(tabs)/note.tsx")));
+  // NOT-07 corretto dopo questo triage: le tre vie di uscita passano tutte da
+  // esci(), che salva se c'e' qualcosa da salvare. Le righe restano, con il
+  // verso cambiato: erano la prova del difetto, ora sono la prova della
+  // correzione, ed e' lo stesso file a doverlo dire.
+  ok("I3 NOT-07 'Nuova nota' passa da esci(), che salva prima di azzerare i campi", contiene("app/(tabs)/note.tsx", "onPress={() => { void esci(nuova); }}"));
+  ok("I4 NOT-07 '← Tutte le note' passa dallo stesso esci()", contiene("app/(tabs)/note.tsx", "onPress={() => { void esci(() => setApertaId(null)); }}"));
+  ok("I4b NOT-07 e anche aprire un'altra nota dall'elenco", contiene("app/(tabs)/note.tsx", "onPress={() => { void esci(() => apri(item)); }}"));
+  ok("I4c NOT-07 lo smontaggio della scheda salva dalla pulizia dell'effetto", contiene("app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);"));
+  ok("I5 NOT-07 si salva e basta: nessun avviso da toccare, nessuna domanda", !/Alert/.test(sorgente("app/(tabs)/note.tsx")));
   ok("I6 NOT-05 il salvataggio vuoto esce in silenzio", contiene("app/(tabs)/note.tsx", "if (!testo.trim() && !titolo.trim()) return;"));
-  ok("I7 NOT-04 il salvataggio senza modifiche scrive comunque un 'aggiorna'", !/titolo !== |testo !== |immutata|invariata/.test(sorgente("app/(tabs)/note.tsx")));
+  // Il controllo guardava tutto il file; ora daSalvare() contiene proprio
+  // quei confronti, ma serve a decidere se salvare USCENDO, non a fermare il
+  // pulsante. NOT-04 riguarda il pulsante, e per quello si guarda salva().
+  ok("I7 NOT-04 il pulsante Salva non confronta niente: riscrive comunque", !/titolo !== |testo !== |immutata|invariata/.test(sorgente("app/(tabs)/note.tsx").split("async function salva()")[1].split("const Elenco")[0]));
 }
 
 // ============================================================= J. RIPASSO

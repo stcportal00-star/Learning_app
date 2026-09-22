@@ -1397,6 +1397,10 @@ libreriaPrima.smonta();
 ancora("NOT guardia del vuoto", "app/(tabs)/note.tsx", "if (!testo.trim() && !titolo.trim()) return;");
 ancora("NOT id nuovo o esistente", "app/(tabs)/note.tsx", 'const id = apertaId === "nuova" || !apertaId ? Crypto.randomUUID() : apertaId;');
 ancora("NOT setApertaId dopo l'await", "app/(tabs)/note.tsx", "setApertaId(id); await ricarica();");
+ancora("NOT si esce salvando", "app/(tabs)/note.tsx",
+  "async function esci(dopo: () => void) { if (daSalvare()) await salva(); dopo(); }");
+ancora("NOT salvataggio allo smontaggio", "app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);");
+ancora("NOT la copia salvata si aggiorna dopo la scrittura", "app/(tabs)/note.tsx", "salvato.current = { titolo, testo, pubblicabile };");
 ancora("NOT titolo vuoto come NULL", "app/(tabs)/note.tsx", "titolo || null");
 ancora("NOT ordine dell'elenco", "app/(tabs)/note.tsx", "SELECT * FROM note ORDER BY creato_a DESC");
 ancora("NOT filtro pubblicabili", "app/(tabs)/note.tsx", "SELECT * FROM note WHERE pubblicabile = 1 ORDER BY creato_a DESC");
@@ -1429,11 +1433,16 @@ function ModelloNote(p) {
     avvia(ricarica());
   }, [ricarica]);
 
+  // Copia di cio' che sta sul disco per la nota aperta: dice se c'e' qualcosa
+  // da salvare prima di uscire, senza un flag da aggiornare a ogni tasto.
+  const salvato = useRif({ titolo: "", testo: "", pubblicabile: false });
+
   function apriNota(n) {
     setApertaId(n.id);
     setTitolo(n.titolo ?? "");
     setTesto(n.testo);
     setPubblicabile(n.pubblicabile === 1);
+    salvato.current = { titolo: n.titolo ?? "", testo: n.testo, pubblicabile: n.pubblicabile === 1 };
   }
 
   function nuova() {
@@ -1441,6 +1450,18 @@ function ModelloNote(p) {
     setTitolo("");
     setTesto("");
     setPubblicabile(false);
+    salvato.current = { titolo: "", testo: "", pubblicabile: false };
+  }
+
+  function daSalvare() {
+    if (!apertaId) return false;
+    const s = salvato.current;
+    return titolo !== s.titolo || testo !== s.testo || pubblicabile !== s.pubblicabile;
+  }
+
+  async function esci(dopo) {
+    if (daSalvare()) await salva();
+    dopo();
   }
 
   async function salva() {
@@ -1466,12 +1487,25 @@ function ModelloNote(p) {
         }
       }
     );
+    salvato.current = { titolo, testo, pubblicabile };
     setApertaId(id);
     await ricarica();
   }
 
+  // Cambio di scheda e tasto indietro di sistema: la schermata si smonta senza
+  // passare da nessun pulsante, e il salvataggio parte lo stesso.
+  const salvaUscendo = useRif(async () => {});
+  useEffetto(() => {
+    salvaUscendo.current = async () => {
+      if (daSalvare()) await salva();
+    };
+  });
+  useEffetto(() => () => {
+    void salvaUscendo.current();
+  }, []);
+
   const elenco = {
-    nuova,
+    nuova: () => esci(nuova),
     filtroAttivo: soloPubblicabili,
     premiFiltro: () => setSoloPubblicabili((v) => !v),
     vuoto: note.length === 0,
@@ -1483,7 +1517,7 @@ function ModelloNote(p) {
       anteprima: n.testo,
       daPubblicare: n.pubblicabile === 1,
       evidenziata: apertaId === n.id,
-      premi: () => apriNota(n),
+      premi: () => esci(() => apriNota(n)),
     })),
   };
 
@@ -1503,7 +1537,7 @@ function ModelloNote(p) {
   return affiancato
     ? { disposizione: "affiancata", elenco, editor, larghezzaElenco: 320, ritornoElenco: null }
     : apertaId
-      ? { disposizione: "editor", elenco, editor, ritornoElenco: () => setApertaId(null) }
+      ? { disposizione: "editor", elenco, editor, ritornoElenco: () => esci(() => setApertaId(null)) }
       : { disposizione: "elenco", elenco, editor: null, ritornoElenco: null };
 }
 
@@ -1636,24 +1670,39 @@ const testoNotaAperta = noteSchermata.schermo.editor.testo;
 difetto("NOT-06", "F22 sotto il filtro la nota aperta resta nell'editor pur non essendo piu' nell'elenco", testoNotaAperta.length > 0 && !noteSchermata.schermo.elenco.voci.some((v) => v.id === notaNonPubblicabile.id));
 await tocca(noteSchermata, () => noteSchermata.schermo.elenco.premiFiltro());
 
-// --- NOT-07: abbandono con modifiche non salvate
-await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Modifica della sera che non verra' salvata."));
+// --- NOT-07 (corretto): uscire dall'editor non butta piu' via le modifiche.
+// Si esce salvando, da tutte e tre le vie — "Nuova nota", "← Tutte le note" e
+// lo smontaggio della scheda. Una bozza in piu' si cancella; un testo perso no.
+// (testoNotaAperta e' quello che c'era sul disco prima: serve a distinguere
+// "salvato" da "rimasto com'era", che e' l'unica differenza che conta qui.)
+const modificaDellaSera = "Modifica della sera, che adesso non si perde.";
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto(modificaDellaSera));
 avvisi.length = 0;
 await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
 const testoSulDisco = (await base.getFirstAsync("SELECT testo FROM note WHERE id = ?", [notaNonPubblicabile.id])).testo;
-difetto("NOT-07", "F23 'Nuova nota' scarta le modifiche non salvate senza chiedere niente", testoSulDisco === testoNotaAperta && avvisi.length === 0 && noteSchermata.schermo.editor.testo === "");
+corretto("NOT-07", "F23 'Nuova nota' salva la nota aperta prima di aprirne una vuota", testoSulDisco === modificaDellaSera && testoSulDisco !== testoNotaAperta && noteSchermata.schermo.editor.testo === "", testoSulDisco);
+ok("F23b e lo fa senza chiedere niente: nessun avviso, nessuna interruzione", avvisi.length === 0);
 
+const secondaModifica = "Seconda modifica, stavolta esco dall'elenco.";
 await tocca(noteSchermata, () => notaNonPubblicabile.premi());
-await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Seconda modifica, stavolta esco dall'elenco."));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto(secondaModifica));
 await tocca(noteSchermata, () => noteSchermata.schermo.ritornoElenco());
-difetto("NOT-07b", "F24 '← Tutte le note' butta via le modifiche allo stesso modo, senza bozza", noteSchermata.schermo.disposizione === "elenco" && (await base.getFirstAsync("SELECT testo FROM note WHERE id = ?", [notaNonPubblicabile.id])).testo === testoNotaAperta);
+corretto("NOT-07b", "F24 '← Tutte le note' salva prima di tornare all'elenco", noteSchermata.schermo.disposizione === "elenco" && (await base.getFirstAsync("SELECT testo FROM note WHERE id = ?", [notaNonPubblicabile.id])).testo === secondaModifica);
 
-// --- il tasto indietro di sistema: la scheda si smonta con le modifiche in memoria
-await tocca(noteSchermata, () => noteSchermata.schermo.elenco.voci[0].premi());
-await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Terza modifica, poi il tasto indietro."));
+// --- il tasto indietro di sistema e il cambio di scheda: nessun pulsante da
+// premere, la scheda si smonta e basta. E' la via che perdeva piu' testo.
+const terzaModifica = "Terza modifica, poi il tasto indietro.";
+const voceDaSmontare = noteSchermata.schermo.elenco.voci[0];
+await tocca(noteSchermata, () => voceDaSmontare.premi());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto(terzaModifica));
 noteSchermata.smonta();
+// Il salvataggio parte dalla pulizia dell'effetto e non lo aspetta nessuno:
+// nell'app e' cosi' per forza, perche' il componente non c'e' piu'.
+await respira(20);
+const dopoLoSmontaggio = (await base.getFirstAsync("SELECT testo FROM note WHERE id = ?", [voceDaSmontare.id])).testo;
+corretto("NOT-07c", "F25 smontando la scheda la modifica in memoria viene salvata lo stesso", dopoLoSmontaggio === terzaModifica, dopoLoSmontaggio);
 const noteRimontate = await monta("NoteRimontate", ModelloNote, { ...ambienteNote });
-difetto("NOT-07c", "F25 rimontando la scheda la modifica in memoria e' sparita e nessuno l'ha salvata", noteRimontate.schermo.disposizione === "elenco" && !noteRimontate.schermo.elenco.voci.some((v) => v.anteprima.includes("Terza modifica")));
+corretto("NOT-07d", "F25b e rimontando la scheda la modifica e' li', nell'elenco", noteRimontate.schermo.elenco.voci.some((v) => v.anteprima.includes("Terza modifica")));
 
 // --- la rotazione non perde il testo in scrittura
 await tocca(noteRimontate, () => noteRimontate.schermo.elenco.nuova());

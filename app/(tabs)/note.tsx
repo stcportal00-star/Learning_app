@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, FlatList, useWindowDimensions } from "react-native";
 import * as Crypto from "expo-crypto";
 import { database, registra } from "../../lib/db";
@@ -24,6 +24,15 @@ export default function Note() {
   const [pubblicabile, setPubblicabile] = useState(false);
   const [soloPubblicabili, setSoloPubblicabili] = useState(false);
 
+  /**
+   * Quello che c'è sul disco per la nota aperta. Le modifiche non salvate sono
+   * l'unica cosa che questa app può perdere davvero — il testo non sta in
+   * nessuna tabella finché non si tocca Salva — e prima ogni modo di uscire
+   * dalla schermata le buttava via senza dire niente. Tenere qui la copia
+   * salvata evita un flag "sporco" da ricordarsi di aggiornare a ogni tasto.
+   */
+  const salvato = useRef({ titolo: "", testo: "", pubblicabile: false });
+
   const ricarica = useCallback(async () => {
     const d = database();
     setNote(await d.getAllAsync<Nota>(
@@ -37,10 +46,24 @@ export default function Note() {
   function apri(n: Nota) {
     setApertaId(n.id); setTitolo(n.titolo ?? ""); setTesto(n.testo);
     setPubblicabile(n.pubblicabile === 1);
+    salvato.current = { titolo: n.titolo ?? "", testo: n.testo, pubblicabile: n.pubblicabile === 1 };
   }
 
   function nuova() {
     setApertaId("nuova"); setTitolo(""); setTesto(""); setPubblicabile(false);
+    salvato.current = { titolo: "", testo: "", pubblicabile: false };
+  }
+
+  function daSalvare() {
+    if (!apertaId) return false;
+    const s = salvato.current;
+    return titolo !== s.titolo || testo !== s.testo || pubblicabile !== s.pubblicabile;
+  }
+
+  /** Si esce sempre salvando: una bozza in più si cancella, un testo perso no. */
+  async function esci(dopo: () => void) {
+    if (daSalvare()) await salva();
+    dopo();
   }
 
   async function salva() {
@@ -60,14 +83,25 @@ export default function Note() {
             [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]);
         }
       });
+    salvato.current = { titolo, testo, pubblicabile };
     setApertaId(id);
     await ricarica();
   }
 
+  // Cambio di scheda e tasto indietro di sistema smontano la schermata senza
+  // passare da nessun pulsante. Il salvataggio parte lo stesso: che nessuno
+  // ne veda più l'esito non lo ferma, perché registra() vive nel livello dati
+  // e la sua transazione è già in coda quando il componente non c'è più.
+  const salvaUscendo = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    salvaUscendo.current = async () => { if (daSalvare()) await salva(); };
+  });
+  useEffect(() => () => { void salvaUscendo.current(); }, []);
+
   const Elenco = (
     <View style={{ flex: 1 }}>
       <View style={{ flexDirection: "row", gap: 8, padding: 12 }}>
-        <Pressable onPress={nuova}
+        <Pressable onPress={() => { void esci(nuova); }}
           style={{ backgroundColor: "#18181B", paddingHorizontal: 14, paddingVertical: 9, borderRadius: 9 }}>
           <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Nuova nota</Text>
         </Pressable>
@@ -89,7 +123,7 @@ export default function Note() {
             È la nota l'obiettivo, non le pagine lette.
           </Text>}
         renderItem={({ item }) => (
-          <Pressable onPress={() => apri(item)}
+          <Pressable onPress={() => { void esci(() => apri(item)); }}
             style={{ borderWidth: 1, borderRadius: 10, padding: 12,
                      borderColor: apertaId === item.id ? "#18181B" : "#E4E4E7" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
@@ -144,7 +178,7 @@ export default function Note() {
     </View>
   ) : apertaId ? (
     <View style={{ flex: 1 }}>
-      <Pressable onPress={() => setApertaId(null)} style={{ padding: 12 }}>
+      <Pressable onPress={() => { void esci(() => setApertaId(null)); }} style={{ padding: 12 }}>
         <Text style={{ fontSize: 14, color: "#0C447C" }}>← Tutte le note</Text>
       </Pressable>
       {Editor}
