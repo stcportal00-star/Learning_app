@@ -1,9 +1,9 @@
 # NOTE-BUILD — prima sessione, 21 settembre 2026
 
 Estrazione del progetto, APK firmato, test di fumo superato su emulatore
-Android 14. Undici build. Fino al quinto ogni fallimento aveva una causa
+Android 14. Dodici build. Fino al quinto ogni fallimento aveva una causa
 diversa dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
-Gli ultimi due portano le correzioni trovate dal collaudo.
+Gli ultimi portano le correzioni trovate dal collaudo.
 
 | Build | Esito | Causa del fallimento |
 |---|---|---|
@@ -18,8 +18,9 @@ Gli ultimi due portano le correzioni trovate dal collaudo.
 | 9 | **riuscito** | — release `apk-9` pubblicata |
 | 10 | **annullato** | l'ho cancellato io, di nuovo: un push su `lib/**` |
 | 11 | **riuscito** | — release `apk-11`, con le correzioni del collaudo |
+| 12 | fumo fallito, poi **riuscito** al secondo tentativo | l'emulatore, non l'app: vedi sotto — release `apk-12` |
 
-Stato del test di fumo al build 11: schermata Oggi in **3 secondi**, tutte e
+Stato del test di fumo al build 12: schermata Oggi in **3 secondi**, tutte e
 cinque le rotte percorse, lettore PDF che apre il documento di prova e ne conta
 le **2 pagine in 4 secondi**, riavvio a freddo superato. Firma in modalità
 **automatica**, impronta SHA-256
@@ -30,9 +31,39 @@ correzioni: è un campione solo, su un emulatore condiviso, e una spiegazione
 plausibile — `caricaContenuti()` che ora passa da `inTransazione()` — resta
 plausibile finché non è misurata su più corse.
 
-**APK da installare: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-11>**
-— `percorso-11.apk`, 58,0 MB, più le otto schermate del test di fumo.
-`apk-9` contiene ancora entrambi i difetti critici: non va installata.
+**APK da installare: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-12>**
+— `percorso-12.apk`, più le otto schermate del test di fumo. È la prima che
+contiene `LIB-06` e `HLC-02` corretti; `apk-11` e `apk-9` no.
+
+### Il fumo del build 12 è fallito una volta, e non era l'app
+
+Primo tentativo: «la schermata Oggi non è comparsa in 90 secondi». Secondo
+tentativo, **sullo stesso identico APK** — il job scarica l'artefatto del
+build, che non è stato ricompilato — Oggi in 3 secondi e tutto il resto
+superato. Stessi byte, esito diverso: la differenza sta nel giro
+dell'emulatore, che in quel tentativo aveva impiegato 63 secondi solo per il
+boot.
+
+Prima di rilanciare ho cercato un meccanismo nel mio diff, e non c'è:
+`useAutoSync` è montato **solo** in `app/sync.tsx`, una schermata impilata che
+il test di fumo non apre mai, quindi né l'hook né `assorbiRemoto()` girano
+all'avvio; e di `LIB-06` il test tocca il disegno della libreria, non
+`onLongPress`. In più `npx expo export --platform android` costruisce il
+bundle senza errori. Il rilancio è servito a separare «il difetto è nell'app»
+da «il runner era lento», non a sperare.
+
+Due cose imparate, e valgono più del singolo esito:
+
+- **l'estratto di logcat, in questo caso, non serviva a niente.** `fumo.sh`
+  filtra con `grep -E "FATAL EXCEPTION|AndroidRuntime|ReactNativeJS|E/|$PACCHETTO"`
+  e poi taglia con `tail -n 120`: le ultime 120 righe erano tutte il ciclo di
+  `uiautomator dump` del test stesso, e le righe dell'app — se c'erano — sono
+  finite fuori. Non ho toccato `fumo.sh`: è la regola di questa sessione, e la
+  regola vale anche quando toccarlo mi farebbe comodo.
+- **il messaggio non distingue due casi diversi.** Lo script cerca «Avvio non
+  riuscito» solo DOPO aver visto Oggi, quindi un avvio andato in errore
+  produce esattamente la stessa frase di un avvio lento. Chi legge quel
+  messaggio non sa quale dei due sia successo.
 
 Due build annullati, il 7 e il 10, li ho cancellati io nello stesso modo: un
 push che tocca `app/ lib/ components/ assets/ plugins/ package.json app.json
