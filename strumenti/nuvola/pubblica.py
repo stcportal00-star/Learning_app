@@ -116,6 +116,25 @@ def carica_json(percorso, difetto):
 # --------------------------------------------------------------- articoli
 
 
+# Il mezzo punto: la rilevanza alla quale il voto vale 50. Scelto sulla
+# distribuzione vera della prima corsa (mediana intorno a 5), non a occhio.
+MEZZO_PUNTO = 5.0
+
+
+def punteggio_da(rilevanza):
+    """
+    Da una rilevanza senza tetto a un voto 0..100 che non satura mai.
+
+    Monotona: se una voce è più rilevante di un'altra, il suo voto è più alto.
+    Limitata per costruzione: il CHECK della colonna non si può sforare nemmeno
+    con un valore assurdo, che è esattamente ciò che ha ucciso la prima corsa.
+    """
+    r = float(rilevanza or 0)
+    if r <= 0:
+        return 0
+    return int(round(100.0 * r / (r + MEZZO_PUNTO)))
+
+
 def riga_articolo(v, testo, rapporto):
     """Da una voce del catalogo alla riga di `percorso.articoli`."""
     autori = [a for a in (v.get("autori") or []) if a][:12]
@@ -132,12 +151,20 @@ def riga_articolo(v, testo, rapporto):
         "trimestre": v.get("trimestre"),
         "licenza": v.get("licenza"),
         "pubblicato_a": data_iso(v.get("data")),
-        # Due colonne, due contratti. `punteggio` ha un CHECK 0..100 e ci si
-        # sta dentro per forza: la prima corsa vera è morta proprio qui, con
-        # 370 su una voce da 3.7 di rilevanza. `rilevanza` è il numero grezzo,
-        # senza tetto, e serve a non perdere l'ordine in cima — due voci da
-        # 3.7 e da 8.2 schiacciate nel primo finirebbero entrambe a 100.
-        "punteggio": max(0, min(100, int(round(float(v.get("rilevanza") or 0) * 20)))),
+        # Due colonne, due contratti. `rilevanza` è il numero grezzo, senza
+        # tetto: nella prima corsa vera è arrivato a 11,2. `punteggio` ha un
+        # CHECK 0..100 ed è il voto leggibile.
+        #
+        # La conversione NON è lineare, e la prima stesura lineare era sbagliata
+        # due volte: `* 100` sforava il CHECK e ha fatto morire una corsa;
+        # `* 20` stava dentro ma dava 100 a tutte e ottanta le voci, perché
+        # satura da 5 in su. Una colonna costante non è un voto, è un rumore
+        # che occupa spazio.
+        #
+        # Una curva che si avvicina a 100 senza mai toccarlo tiene l'ordine su
+        # tutta la scala e non può sforare per costruzione, qualunque cosa
+        # arrivi dagli archivi: 1 → 17, 2,5 → 33, 5 → 50, 11,2 → 69.
+        "punteggio": punteggio_da(v.get("rilevanza")),
         "rilevanza": float(v.get("rilevanza") or 0),
         "raccolto_a": rapporto["adesso"],
     }

@@ -179,7 +179,7 @@ r = pubblica.riga_articolo(
 prova("titolo assente non diventa None", r["titolo"], "(senza titolo)")
 prova_vero("url assente non resta vuoto", bool(r["url"]), r["url"])
 prova("autori assenti diventano elenco vuoto", r["autori"], [])
-prova("la rilevanza diventa un punteggio dentro il CHECK", r["punteggio"], 74)
+prova("la rilevanza diventa un punteggio dentro il CHECK", r["punteggio"], 43)
 r2 = pubblica.riga_articolo(
     {"chiave": "k3", "titolo": "t", "rilevanza": 10_000},
     None,
@@ -188,7 +188,20 @@ r2 = pubblica.riga_articolo(
 # Il CHECK vero della colonna è 0..100, non lo smallint: è il vincolo che ha
 # ucciso la prima corsa, con 370 su una voce da 3.7 di rilevanza. Si prova sui
 # bordi e oltre, perché è lì che il vincolo morde.
-for rilevanza, atteso in ((0, 0), (1, 20), (5, 100), (5.5, 100), (10_000, 100), (-3, 0)):
+# Monotona e mai satura: è la proprietà che conta. La prima stesura lineare
+# dava 100 a tutte e ottanta le voci della corsa vera — un voto costante non
+# ordina niente — e quella prima ancora sforava il CHECK e uccideva la corsa.
+valori = [0, 0.5, 1, 2.5, 5, 8.2, 11.2, 100, 10_000]
+voti = [pubblica.punteggio_da(x) for x in valori]
+prova_vero("il punteggio cresce sempre con la rilevanza",
+           all(a < b for a, b in zip(voti, voti[1:])) or voti == sorted(voti),
+           "voti: %r" % voti)
+prova_vero("e non satura sui valori veri della rassegna",
+           len(set(pubblica.punteggio_da(x) for x in (1, 2.5, 5, 8.2, 11.2))) == 5,
+           "voti distinti: %r" % [pubblica.punteggio_da(x) for x in (1, 2.5, 5, 8.2, 11.2)])
+prova("mezzo punto a rilevanza 5", pubblica.punteggio_da(5), 50)
+
+for rilevanza, atteso in ((0, 0), (1, 17), (5, 50), (11.2, 69), (10_000, 100), (-3, 0)):
     riga = pubblica.riga_articolo(
         {"chiave": "k", "titolo": "t", "rilevanza": rilevanza}, None, {"adesso": "x"})
     prova_vero(
