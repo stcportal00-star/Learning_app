@@ -163,6 +163,21 @@ export function derivaSospetta(): boolean {
  * La guardia sta qui e non nei bottoni perché l'invariante è del registro:
  * ogni chiamante nuovo la eredita senza doversela ricordare.
  *
+ * IL PREZZO, e va letto prima di scrivere il decimo punto di scrittura.
+ * Una `registra()` (o `inTransazione()`) chiamata DENTRO la proiezione di
+ * un'altra non fallisce: si ferma. Si mette in coda dietro quella che la
+ * contiene, e quella sta aspettando proprio lei. Nessuna delle due finisce,
+ * la transazione esterna resta aperta e da quel momento l'app non scrive più
+ * niente — senza un errore e senza un messaggio. Prima della coda lo stesso
+ * annidamento falliva subito ("cannot rollback - no transaction is active").
+ * Non è distinguibile qui dentro: una scrittura annidata e una scrittura
+ * legittima partita altrove mentre questa è in corso hanno la stessa forma, e
+ * la seconda DEVE aspettare. Quindi non c'è una guardia da aggiungere, c'è una
+ * regola da rispettare: la proiezione scrive con la connessione che riceve,
+ * e non apre mai una scrittura nuova. Oggi nessuno dei punti di scrittura
+ * annida, e `test/banco/prova-registro.mjs` (E2 ed E3) lo verifica a ogni
+ * `npm run verifica`.
+ *
  * E deve coprire OGNI transazione su questo database, non solo registra():
  * basta che una scrittura passi da un'altra strada — la sincronizzazione che
  * applica un pacchetto, il caricamento dei contenuti al primo avvio — perché

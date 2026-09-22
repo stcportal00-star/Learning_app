@@ -52,9 +52,11 @@
  * parte D: 20 rosse. Le due falsificazioni insieme dicono che sono le
  * transazioni a far passare questa prova, non la compiacenza del doppio.
  */
-import { mkdtempSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 // L'ordine conta: carica.mjs per primo, perché registra i ganci.
 import "./carica.mjs";
 import { configuraCartella, openDatabaseSync } from "./expo-sqlite.mjs";
@@ -77,6 +79,8 @@ async function lancia(nome, azione, frammentoAtteso) {
     return messaggio;
   }
 }
+
+const RADICE_PROGETTO = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 // Cartella temporanea per processo: due agenti in parallelo non si pestano i
 // piedi e nessun percorso.db sopravvive alla prova.
@@ -429,39 +433,76 @@ ok(
     DISPOSITIVO
 );
 
-// --- E2. registra() dentro una proiezione: SQLite non annida le transazioni,
-//     e il ROLLBACK della registra() interna chiude quella ESTERNA. Il dato
-//     resta integro (non si salva niente), ma l'errore che arriva in superficie
-//     e' "cannot rollback - no transaction is active": il messaggio vero
-//     ("cannot start a transaction within a transaction") viene mangiato dal
-//     secondo ROLLBACK. Chi vede quel messaggio cerchi una registra() annidata.
-const eventiPrimaAnnidata = await conta("eventi");
-const sessioniPrimaAnnidata = await conta("sessioni");
-await lancia(
-  "E2 registra() annidata: fallisce (transazioni non annidabili)",
-  () =>
-    app.registra("note", "nota-esterna", "crea", {}, async (d, hlc) => {
-      await d.runAsync("INSERT INTO note (id, testo, creato_a, hlc) VALUES (?,?,?,?)", [
-        "nota-esterna",
-        "testo",
-        adesso,
-        hlc,
-      ]);
-      await app.registra("note", "nota-interna", "crea", {}, async (dd, hh) => {
-        await dd.runAsync("INSERT INTO note (id, testo, creato_a, hlc) VALUES (?,?,?,?)", [
-          "nota-interna",
-          "testo",
-          adesso,
-          hh,
-        ]);
-      });
-    }),
-  "cannot rollback"
+// --- E2. registra() dentro una proiezione. PRIMA della coda delle scritture
+//     falliva subito: SQLite non annida le transazioni e il ROLLBACK di
+//     quella interna chiudeva l'esterna, con l'errore "cannot rollback - no
+//     transaction is active". DALLA coda non fallisce piu': si FERMA. La
+//     scrittura interna si mette in fila dietro quella che la contiene, e
+//     quella aspetta proprio lei. Nessuna delle due finisce, la transazione
+//     esterna resta APERTA, e ogni scrittura successiva dell'app resta in
+//     coda per sempre — senza un errore, senza un messaggio.
+//
+//     E' il prezzo della coda, e va scritto dove si vede. Nessuno dei nove
+//     punti di scrittura dell'app annida (verificato sotto, E3), ma chi ne
+//     scrivera' un decimo deve trovarlo qui. Non e' distinguibile a runtime:
+//     dall'interno del modulo, una registra() annidata e una registra()
+//     legittima partita da un'altra parte mentre la prima e' in corso hanno
+//     esattamente la stessa forma, e la seconda DEVE aspettare.
+//
+//     Si misura in un processo a parte: nel nostro avvelenerebbe ogni
+//     verifica successiva che scrive.
+const figlioAnnidata = spawnSync(
+  process.execPath,
+  ["--import", "./test/banco/carica.mjs", "test/banco/prova-registro-annidata.mjs"],
+  { cwd: RADICE_PROGETTO, encoding: "utf8", timeout: 60_000 }
 );
-ok("E2: nessun evento sopravvive all'annidamento", (await conta("eventi")) === eventiPrimaAnnidata);
-ok("E2: nessuna nota sopravvive all'annidamento", (await conta("note")) === NOTE_BUONE);
-ok("E2: le sessioni non sono state toccate", (await conta("sessioni")) === sessioniPrimaAnnidata);
-ok("E2: dopo l'annidamento non si resta in transazione", (await base.isInTransactionAsync()) === false);
+const verdettoAnnidata = JSON.parse(
+  (figlioAnnidata.stdout || "").trim().split("\n").filter((r) => r.startsWith("{")).pop() || "{}"
+);
+ok(
+  "E2 una registra() annidata non si conclude mai: aspetta quella che la contiene",
+  verdettoAnnidata.esito === "mai conclusa",
+  JSON.stringify(verdettoAnnidata)
+);
+ok(
+  "E2 e lascia la transazione esterna APERTA: da li' in poi il registro non scrive piu'",
+  verdettoAnnidata.inTransazione === true,
+  JSON.stringify(verdettoAnnidata)
+);
+
+// --- E3. nessun punto di scrittura dell'app annida: e' quello che tiene E2
+//     nel campo delle trappole per il futuro invece che dei difetti di oggi.
+//     Si guarda dentro le closure passate a registra(): se una di loro
+//     nominasse registra o inTransazione, sarebbe un annidamento.
+const sorgentiScrittura = ["lib/palestra.ts", "lib/contenuti.ts", "lib/sessioni.ts",
+  "app/codice.tsx", "app/ripasso.tsx", "app/esercizi.tsx", "app/(tabs)/note.tsx",
+  "lib/sync/useAutoSync.ts"];
+const annidamenti = [];
+for (const percorso of sorgentiScrittura) {
+  const testo = readFileSync(join(RADICE_PROGETTO, percorso), "utf8");
+  // Dalla parentesi aperta di ogni registra()/inTransazione() si scorre fino
+  // alla sua chiusura contando le parentesi: dentro quegli argomenti c'e' la
+  // proiezione. Se li' dentro compare un'altra scrittura, e' un annidamento.
+  // Non vede quelli INDIRETTI (una funzione che ne chiama un'altra): quelli
+  // li ferma solo chi legge, ed e' per questo che E2 sta scritto per esteso.
+  const cerca = /\b(registra|inTransazione)\s*\(/g;
+  let trovato;
+  while ((trovato = cerca.exec(testo))) {
+    let i = trovato.index + trovato[0].length;
+    let livello = 1;
+    while (i < testo.length && livello > 0) {
+      if (testo[i] === "(") livello++;
+      else if (testo[i] === ")") livello--;
+      i++;
+    }
+    const argomenti = testo.slice(trovato.index + trovato[0].length, i - 1);
+    if (/\b(registra|inTransazione)\s*\(/.test(argomenti)) {
+      annidamenti.push(`${percorso}: dentro ${trovato[1]}()`);
+    }
+  }
+}
+ok("E3 nessuna proiezione dell'app contiene un'altra scrittura", annidamenti.length === 0, annidamenti.join(", "));
+
 // Il registro deve restare usabile: altrimenti un errore di un test
 // contagerebbe tutti quelli dopo.
 await app.registra("sessioni", "ses-fine", "crea", {}, async (d, hlc) => {
@@ -473,7 +514,7 @@ await app.registra("sessioni", "ses-fine", "crea", {}, async (d, hlc) => {
     hlc,
   ]);
 });
-ok("E2: dopo l'annidamento il registro riprende a scrivere", (await conta("sessioni", "WHERE id = 'ses-fine'")) === 1);
+ok("E2: il registro di QUESTO processo, che non ha annidato niente, scrive ancora", (await conta("sessioni", "WHERE id = 'ses-fine'")) === 1);
 
 // ==================================================================== ESITO
 console.log(`\nbanco: registro eventi di lib/db.ts — SQLite ${(await base.getFirstAsync("SELECT sqlite_version() AS v")).v}`);
