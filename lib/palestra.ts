@@ -199,6 +199,16 @@ export type Volume = {
   formato: string;
   byte: number | null;
   ultima_pagina: number;
+  /**
+   * Dove stanno i byte nel deposito remoto. È l'unico campo che dice «questo
+   * volume esiste anche fuori da qui»: `file_locale` è un percorso di questo
+   * telefono e su un altro dispositivo non significa niente.
+   */
+  pdf_path: string | null;
+  /** Chiave stabile con cui la conduttura riconosce un volume già pubblicato. */
+  codice: string | null;
+  /** A cosa serve questo volume. Viene dal catalogo, e va mostrata. */
+  nota: string | null;
 };
 
 function cartellaPdf(): Directory {
@@ -249,6 +259,11 @@ export async function importaPdf(opzioni?: {
     formato: estensione,
     byte: destinazione.size ?? null,
     ultima_pagina: 0,
+    // Nasce solo qui: la copia remota arriva dopo, quando c'è rete, e allora
+    // `pdf_path` viene riempito dall'evento che la registra.
+    pdf_path: null,
+    codice: null,
+    nota: null,
   };
 
   await registra("biblioteca", id, "crea", volume as unknown as Record<string, unknown>,

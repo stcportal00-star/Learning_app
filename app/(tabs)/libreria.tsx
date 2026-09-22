@@ -2,12 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, FlatList, Alert, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { elencaBiblioteca, importaPdf, importaBiblioteca, rimuoviVolume, apriVolume, Volume } from "../../lib/palestra";
+import { caricaVolumeInNuvola } from "../../lib/nuvola/manuale";
+import { scaricaVolume } from "../../lib/nuvola/sincronia";
 
 export default function Biblioteca() {
   const { width } = useWindowDimensions();
   const colonne = width >= 900 ? 2 : 1;
   const [volumi, setVolumi] = useState<Volume[]>([]);
   const [filtro, setFiltro] = useState<string | null>(null);
+  const [scaricando, setScaricando] = useState<string | null>(null);
 
   const ricarica = useCallback(async () => {
     setVolumi(await elencaBiblioteca(filtro ?? undefined));
@@ -15,9 +18,32 @@ export default function Biblioteca() {
 
   useEffect(() => { ricarica(); }, [ricarica]);
 
+  /**
+   * Un PDF aggiunto a mano prende la stessa strada di uno trovato dalla
+   * rassegna: prima sul dispositivo — dove serve subito e senza rete — poi nel
+   * deposito remoto, così sopravvive alla disinstallazione e raggiunge
+   * l'altro dispositivo. Il caricamento NON blocca: se la rete non c'è, il
+   * volume è comunque già leggibile e sale al primo rientro.
+   */
   async function aggiungi() {
     const v = await importaPdf();
-    if (v) { await ricarica(); Alert.alert("Aggiunto", v.titolo); }
+    if (!v) return;
+    await ricarica();
+    Alert.alert("Aggiunto", `${v.titolo}\nOra è leggibile offline. La copia remota parte da sé.`);
+    void caricaVolumeInNuvola(v.id).then(ricarica).catch(() => undefined);
+  }
+
+  async function scarica(v: Volume) {
+    setScaricando(v.id);
+    try {
+      await scaricaVolume(v.id);
+      await ricarica();
+    } catch (e) {
+      Alert.alert("Non scaricato",
+        "La copia remota non si è fatta raggiungere. Riprova quando c'è rete: " + String(e));
+    } finally {
+      setScaricando(null);
+    }
   }
 
   /**
@@ -93,10 +119,19 @@ export default function Biblioteca() {
         }
         renderItem={({ item }) => (
           <Pressable
-            onPress={() => item.file_locale
-              ? router.push({ pathname: "/lettore", params: { id: item.id } })
-              : Alert.alert("Non ancora sul dispositivo",
-                  "Importa la biblioteca dalla release di GitHub, oppure aggiungi il PDF a mano.")}
+            onPress={() => {
+              if (item.file_locale) {
+                router.push({ pathname: "/lettore", params: { id: item.id } });
+              } else if (item.pdf_path) {
+                Alert.alert(item.titolo,
+                  "Il testo è nel deposito remoto ma non ancora su questo dispositivo. Scaricarlo adesso?",
+                  [{ text: "Scarica", onPress: () => { void scarica(item); } },
+                   { text: "Annulla", style: "cancel" }]);
+              } else {
+                Alert.alert("Non ancora sul dispositivo",
+                  "Importa la biblioteca dalla release di GitHub, oppure aggiungi il PDF a mano.");
+              }
+            }}
             onLongPress={() => {
               const togli = async () => { await rimuoviVolume(item.id); await ricarica(); };
               Alert.alert(item.titolo, undefined, [
@@ -125,6 +160,10 @@ export default function Biblioteca() {
               ) : null}
               {item.file_locale ? (
                 <Text style={{ fontSize: 10, color: "#0F6E56", paddingVertical: 2 }}>offline</Text>
+              ) : scaricando === item.id ? (
+                <Text style={{ fontSize: 10, color: "#0C447C", paddingVertical: 2 }}>scarico…</Text>
+              ) : item.pdf_path ? (
+                <Text style={{ fontSize: 10, color: "#0C447C", paddingVertical: 2 }}>tocca per scaricare</Text>
               ) : (
                 <Text style={{ fontSize: 10, opacity: 0.45, paddingVertical: 2 }}>non scaricato</Text>
               )}
@@ -132,6 +171,11 @@ export default function Biblioteca() {
             <Text style={{ fontSize: 15, fontWeight: "500" }} numberOfLines={2}>{item.titolo}</Text>
             {item.autore ? (
               <Text style={{ fontSize: 12, opacity: 0.65, marginTop: 2 }}>{item.autore}</Text>
+            ) : null}
+            {item.nota ? (
+              <Text style={{ fontSize: 12, opacity: 0.6, marginTop: 6, lineHeight: 18 }} numberOfLines={3}>
+                {item.nota}
+              </Text>
             ) : null}
             {item.licenza ? (
               <Text style={{ fontSize: 11, opacity: 0.5, marginTop: 6 }}>{item.licenza}</Text>

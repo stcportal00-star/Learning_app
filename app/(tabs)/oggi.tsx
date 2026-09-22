@@ -1,16 +1,22 @@
 import { useEffect, useState } from "react";
-import { View, Text, ScrollView, useWindowDimensions } from "react-native";
+import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions } from "react-native";
+import { router } from "expo-router";
 import { database, derivaSospetta } from "../../lib/db";
 import { versioneMotore, supportaWindowFunctions } from "../../lib/palestra";
 import { divergenzaCorrente } from "../../lib/sync/stato";
 import { Divergenza } from "../../lib/sync/auto";
 import Cronometro from "../../components/Cronometro";
 import { riepilogoSettimana, Sessione } from "../../lib/sessioni";
+import { contaNovita } from "../../lib/nuvola/articoli";
+import { statoNuvola, sincronizzaNuvola, StatoNuvola } from "../../lib/nuvola/sincronia";
 
 export default function Oggi() {
   const { width } = useWindowDimensions();
   const [s, setS] = useState({ minuti: 0, daRipassare: 0, risolti: 0, totali: 0, volumi: 0 });
   const [div, setDiv] = useState<Divergenza | null>(null);
+  const [novita, setNovita] = useState({ daLeggere: 0, conTesto: 0, volumiDaScaricare: 0 });
+  const [nuvola, setNuvola] = useState<StatoNuvola | null>(null);
+  const [inCorso, setInCorso] = useState(false);
 
   const [versione, setVersione] = useState(0);
 
@@ -30,6 +36,8 @@ export default function Oggi() {
       setS({ minuti: settimana.minuti, daRipassare: rip?.n ?? 0, risolti: ris?.n ?? 0,
              totali: tot?.n ?? 0, volumi: vol?.n ?? 0 });
       setDiv(await divergenzaCorrente());
+      setNovita(await contaNovita());
+      setNuvola(await statoNuvola());
     })();
   }, [versione]);
 
@@ -57,6 +65,61 @@ export default function Oggi() {
           </Text>
         </View>
       ) : null}
+
+      {/*
+        Il riquadro della rassegna. Sta sopra al cronometro di proposito: è la
+        prima cosa che cambia da un giorno all'altro, e l'unica che arriva da
+        fuori mentre il telefono era spento.
+      */}
+      <Pressable onPress={() => router.push("/rassegna")}
+        style={{ padding: 13, borderRadius: 11, borderWidth: 1,
+                 borderColor: novita.daLeggere ? "#0F6E56" : "#E4E4E7",
+                 backgroundColor: novita.daLeggere ? "#F2FAF6" : "transparent" }}>
+        <Text style={{ fontSize: 12, opacity: 0.6 }}>Rassegna quotidiana</Text>
+        <Text style={{ fontSize: 20, fontWeight: "500", marginTop: 2 }}>
+          {novita.daLeggere ? `${novita.daLeggere} da leggere` : "Tutto letto"}
+        </Text>
+        <Text style={{ fontSize: 12, opacity: 0.6, marginTop: 3, lineHeight: 18 }}>
+          {novita.daLeggere
+            ? `${novita.conTesto} con il testo intero, leggibili senza rete.`
+            : "La prossima raccolta arriva domattina alle otto."}
+          {novita.volumiDaScaricare
+            ? ` ${novita.volumiDaScaricare} testi della biblioteca sono pronti da scaricare.`
+            : ""}
+        </Text>
+      </Pressable>
+
+      <View style={{ padding: 12, borderRadius: 11, borderWidth: 1, borderColor: "#E4E4E7" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 12, opacity: 0.6 }}>Copia remota</Text>
+            <Text style={{ fontSize: 13, marginTop: 2, lineHeight: 19 }}>
+              {nuvola?.ultimo
+                ? `Ultimo scambio ${nuvola.ultimo.slice(0, 16).replace("T", " ")}.`
+                : "Mai scambiato con la copia remota."}
+              {nuvola?.inSospeso ? ` ${nuvola.inSospeso} modifiche in attesa di salire.` : ""}
+            </Text>
+            {nuvola?.motivo ? (
+              <Text style={{ fontSize: 11, opacity: 0.55, marginTop: 4 }} numberOfLines={3}>
+                {nuvola.motivo}
+              </Text>
+            ) : null}
+          </View>
+          {inCorso ? <ActivityIndicator /> : (
+            <Pressable
+              onPress={async () => {
+                setInCorso(true);
+                try { await sincronizzaNuvola("oggi"); } finally {
+                  setInCorso(false);
+                  setVersione((v) => v + 1);
+                }
+              }}
+              style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: "#F4F4F5" }}>
+              <Text style={{ fontSize: 13, fontWeight: "600" }}>Ora</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
 
       <Cronometro onRegistrata={() => setVersione((v) => v + 1)} />
 
