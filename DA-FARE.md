@@ -332,3 +332,56 @@ Due strade: chiuderlo (e allora prima va risolta la voce 17, la forma di `file_l
 **Voci in tutto: 90.**
 **Toccano il viaggio (Prima del 2 ottobre + Non è codice): 58.**
 **Se avessi un'ora: installare l'APK su telefono e tablet, aprire Oggi e leggere `sqlite_version()`** — è il gesto che sblocca la regola di rinuncia del 29 settembre, decide se le voci 76 e 81 esistono, e trasforma 89 righe scritte da un emulatore in un elenco che parla di due dispositivi veri.
+
+---
+
+## PRM-01 — i promemoria perdono le sessioni di oggi dopo le 22:00 UTC
+
+**Aggiunta il 22 settembre 2026.** Non veniva da nessuno dei sei agenti: si è
+presentata da sé, facendo diventare rosso `npm run verifica` a fine giornata
+dopo essere stato verde la mattina, sullo stesso commit.
+
+**Cosa si osserva.** Tre verifiche del blocco L3 di
+`test/simulazione/promemoria-notifiche.mjs` — quelle su «il blocco di oggi
+risulta già registrato» — passano prima delle 22:00 UTC e falliscono dopo.
+`giaFattoOggi()` riceve un elenco VUOTO di sessioni odierne, mentre la stessa
+identica interrogazione (`SELECT inizio FROM sessioni WHERE tipo = ?`) eseguita
+una riga prima e una riga dopo il montaggio della schermata le righe le trova.
+
+**Misurato, non dedotto.** Con l'orologio inchiodato da
+`test/banco/orologio-fisso.mjs`:
+
+| ora UTC | esito |
+|---|---|
+| 02:30 | 408 su 408 |
+| 07:50 | 408 su 408 |
+| 12:00 | 408 su 408 |
+| 18:30 | 408 su 408 |
+| 20:30 | 408 su 408 |
+| 21:30 | 408 su 408 |
+| **22:30** | **405 su 408** |
+| **23:30** | **405 su 408** |
+
+Il confine è netto: le 22:00 UTC.
+
+**Non è di questa sessione.** Si riproduce identica al commit `a460bae`, cioè
+prima di qualunque modifica del lavoro sulla nuvola. Non tocca la
+sincronizzazione né la conduttura quotidiana.
+
+**Perché conta.** Non è solo rumore nella verifica: se la causa è nell'app e
+non nella prova, allora un promemoria impostato di sera non riconosce il blocco
+già fatto quel giorno, e lo ripropone. L'app va in viaggio il 2 ottobre.
+
+**Riproduzione.**
+
+```bash
+OROLOGIO_FISSO=$(node -e "console.log(Date.parse('2026-09-22T23:00:00Z'))") \
+NODE_OPTIONS="--import=./test/banco/orologio-fisso.mjs" \
+node test/simulazione/promemoria-notifiche.mjs
+```
+
+**Stato.** Aperta, causa non individuata. `verifica.sh` fa girare la
+simulazione a un'ora fissa del mattino — così il rosso torna a significare
+qualcosa — e subito dopo la rifà alle 23:00 come SENTINELLA: se il difetto
+smette di riprodursi, lo dice e chiede di chiudere questa voce. Il difetto non
+è stato nascosto, è stato inchiodato.
