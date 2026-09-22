@@ -1531,11 +1531,16 @@ const base = Db.database();
  * Se un domani l'hook cambiera', questa copia va riallineata: e' il prezzo.
  */
 async function applicaComeUseAutoSync(ricevuti, daInviare) {
+  // Prima riga del ramo `if (r.esito)`: l'orologio assorbe il tempo del
+  // pacchetto. Era il difetto HLC-02, ora corretto, e la copia lo segue.
+  await Db.assorbiRemoto(ricevuti.map((e) => e.hlc));
   const locali = await base.getAllAsync(
     "SELECT id, hlc, dispositivo, entita, entita_id, tipo, payload FROM eventi"
   );
   const f = fondi(locali, ricevuti);
-  await base.withTransactionAsync(async () => {
+  // `Db.inTransazione` e non `base.withTransactionAsync`: anche questa e'
+  // com'e' oggi l'hook, dalla correzione della coda delle scritture.
+  await Db.inTransazione(async (base) => {
     for (const e of f.nuovi) {
       await base.runAsync(
         `INSERT OR IGNORE INTO eventi
@@ -1763,9 +1768,10 @@ await scenario("I10 DIFETTO RIPRODOTTO (SYN-02): la guardia inCorso e' alzata do
      (await Stato.decisioneCorrente(false)).motivo !== "scambio già in corso");
 });
 
-await scenario("I11 DIFETTO RIPRODOTTO (HLC-02): Orologio.ricevi non e' chiamato da nessun punto dell'app", async () => {
+await scenario("I11 CORRETTO (HLC-02): l'orologio locale assorbe il tempo del pacchetto ricevuto", async () => {
   // L'invariante 2 vuole che dopo una fusione l'orologio locale assorba l'HLC
-  // massimo ricevuto. Si cerca la chiamata in tutto il codice di produzione.
+  // ricevuto. Prima non lo faceva nessuno: Orologio.ricevi() era scritto,
+  // collaudato in test/nucleo.test.ts, e senza un solo chiamante.
   const sorgenti = [];
   (function raccogli(cartella) {
     for (const voce of readdirSync(cartella, { withFileTypes: true })) {
@@ -1786,29 +1792,73 @@ await scenario("I11 DIFETTO RIPRODOTTO (HLC-02): Orologio.ricevi non e' chiamato
   // `modulo.ricevi()`, che e' il modulo nativo di prossimita', non l'orologio.
   // Chi chiama Orologio.ricevi deve per forza nominare l'Orologio nel file.
   const chiamanti = sorgenti.filter((p) => {
-    if (p.endsWith(join("lib", "hlc.ts"))) return false; // la definizione
-    const testo = readFileSync(p, "utf8");
-    return /\.ricevi\s*\(/.test(testo) && /Orologio/.test(testo);
+    if (p.endsWith(join("lib", "db.ts"))) return false; // la definizione
+    return /assorbiRemoto\s*\(/.test(readFileSync(p, "utf8"));
   });
   ok("almeno trenta sorgenti esaminate", sorgenti.length >= 30, String(sorgenti.length));
-  uguali("nessun chiamante in lib/ e app/", chiamanti.map((p) => p.replace(RADICE_PROGETTO + "/", "")), []);
-  // Conseguenza diretta: derivaSospetta() non si alza mai in produzione.
-  ok("e derivaSospetta() resta falsa dopo una fusione vera", Db.derivaSospetta() === false);
+  uguali("il chiamante e' uno solo, ed e' l'hook di sincronizzazione",
+    chiamanti.map((p) => p.replace(RADICE_PROGETTO + "/", "")), ["lib/sync/useAutoSync.ts"]);
+  ok("e assorbiRemoto passa da Orologio.ricevi, non da una copia sua",
+     /orologio\.ricevi\(/.test(readFileSync(join(RADICE_PROGETTO, "lib", "db.ts"), "utf8")));
+  ok("l'assorbimento avviene PRIMA di applicare il pacchetto",
+     (() => {
+       const hook = readFileSync(join(RADICE_PROGETTO, "lib", "sync", "useAutoSync.ts"), "utf8");
+       return hook.indexOf("assorbiRemoto(") < hook.indexOf("inTransazione(");
+     })());
 
-  // Lo scenario che il difetto produce, riprodotto sui dati: il pari ha l'ora
-  // avanti di due ore, si fonde, poi si scrive in locale un secondo dopo.
+  // Lo stesso scenario di prima, ma sul CODICE VERO: il pari ha l'ora avanti
+  // di due ore, si fonde, poi si scrive in locale. Prima la scrittura locale,
+  // pur successiva, nasceva con un HLC piu' basso e perdeva.
   const adesso = Date.now();
   const telefonoAvanti = new Orologio("tel2");
   const remoto = evento(telefonoAvanti, "tel2", "biblioteca", "v9", "aggiorna", { ultima_pagina: 200 }, adesso + 2 * 3600_000);
-  const tabletNormale = new Orologio("tab1");
-  const locale = evento(tabletNormale, "tab1", "biblioteca", "v9", "aggiorna", { ultima_pagina: 201 }, adesso + 1000);
-  uguali("la modifica locale piu' recente PERDE contro quella remota",
-    proietta([remoto, locale], "biblioteca", "v9"), { ultima_pagina: 200 });
-  // Con ricevi() l'orologio locale supererebbe il remoto e la modifica vincerebbe.
-  tabletNormale.ricevi(HLC.deserializza(remoto.hlc), adesso + 1000);
-  const dopoRicevi = evento(tabletNormale, "tab1", "biblioteca", "v9", "aggiorna", { ultima_pagina: 202 }, adesso + 1001);
-  uguali("con Orologio.ricevi vincerebbe",
-    proietta([remoto, dopoRicevi], "biblioteca", "v9"), { ultima_pagina: 202 });
+
+  const assorbito = await Db.assorbiRemoto([remoto.hlc]);
+  ok("assorbiRemoto restituisce il nuovo stato dell'orologio", assorbito !== null && Number.isFinite(assorbito.ms));
+  ok("l'orologio locale ha superato il remoto",
+     assorbito.ms > HLC.deserializza(remoto.hlc).ms ||
+     (assorbito.ms === HLC.deserializza(remoto.hlc).ms && assorbito.contatore > HLC.deserializza(remoto.hlc).contatore),
+     `${JSON.stringify(assorbito)} contro ${remoto.hlc}`);
+  ok("e l'identificativo resta QUESTO dispositivo, non quello remoto", assorbito.dispositivo === "tab1");
+
+  // Persistenza, e va letta ADESSO: dopo la prima registra() locale meta('hlc')
+  // sarebbe aggiornato comunque da quella, e il controllo non direbbe piu'
+  // niente sull'assorbimento. L'orologio deve sopravvivere alla chiusura
+  // dell'app anche se dopo la fusione non si scrive nient'altro.
+  const salvato = await base.getFirstAsync("SELECT valore FROM meta WHERE chiave = 'hlc'");
+  const [msSalvato] = salvato.valore.split("-");
+  ok("meta('hlc') e' gia' al tempo assorbito, senza aspettare una scrittura locale",
+     parseInt(msSalvato, 16) >= HLC.deserializza(remoto.hlc).ms, salvato.valore);
+
+  const hlcLocale = await Db.registra("biblioteca", "v9", "aggiorna", { ultima_pagina: 201 }, async () => {});
+  ok("la scrittura locale successiva ha un HLC piu' alto di quello remoto",
+     hlcLocale > remoto.hlc, `${hlcLocale} contro ${remoto.hlc}`);
+  const localeSerializzato = {
+    id: `${hlcLocale}:v9`, hlc: hlcLocale, dispositivo: "tab1",
+    entita: "biblioteca", entita_id: "v9", tipo: "aggiorna",
+    payload: JSON.stringify({ ultima_pagina: 201 }),
+  };
+  uguali("e infatti la modifica locale VINCE, com'e' giusto che sia",
+    proietta([remoto, localeSerializzato], "biblioteca", "v9"), { ultima_pagina: 201 });
+
+  // La deriva fra i due dispositivi ora si vede: e' l'altra meta' di ricevi().
+  ok("derivaSospetta() si alza dopo aver assorbito due ore di scarto", Db.derivaSospetta() === true);
+
+
+  // Un hlc illeggibile non deve entrare nell'orologio: un NaN non ne uscirebbe
+  // piu' e guasterebbe ogni timbro successivo.
+  const primaDellaSpazzatura = Db.timbro();
+  await Db.assorbiRemoto(["", "non-un-hlc", "zzzz-zzzz-tel2"]);
+  const dopoLaSpazzatura = Db.timbro();
+  ok("un hlc illeggibile viene saltato: l'orologio resta finito",
+     Number.isFinite(dopoLaSpazzatura.ms) && Number.isFinite(dopoLaSpazzatura.contatore),
+     JSON.stringify(dopoLaSpazzatura));
+  ok("e non torna indietro", dopoLaSpazzatura.ms >= primaDellaSpazzatura.ms);
+  ok("un pacchetto vuoto non tocca l'orologio", (await Db.assorbiRemoto([])) === null);
+
+  // L'evento scritto qui sopra e' vero e resterebbe in coda: I12 conta quanti
+  // eventi ci sono da inviare, e questo scenario non deve lasciargliene uno.
+  await Db.segnaSincronizzati([localeSerializzato.id]);
 });
 
 await scenario("I12 daSincronizzare: ordine causale, limite e coda vuota", async () => {

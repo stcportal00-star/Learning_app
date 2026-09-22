@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus } from "react-native";
-import { daSincronizzare, segnaSincronizzati, database, inTransazione } from "../db";
+import { daSincronizzare, segnaSincronizzati, database, inTransazione, assorbiRemoto } from "../db";
 import { sincronizza, DiarioSync } from "./trasporto";
 import { TrasportoFile } from "./file";
 import { TrasportoWifi } from "./wifi";
@@ -44,6 +44,12 @@ export function useAutoSync(dispositivo: string) {
       setUltimoDiario(r.diario);
 
       if (r.esito) {
+        // Prima di tutto l'orologio: assorbire il tempo del pacchetto è ciò
+        // che impedisce alla prossima modifica scritta qui di nascere più
+        // vecchia di quella appena ricevuta (invariante 2). Va fatto anche
+        // quando non arriva niente di nuovo, perché è l'ORA dell'altro
+        // dispositivo a contare, non la novità degli eventi.
+        await assorbiRemoto(r.esito.ricevuti.map((e) => e.hlc));
         const d = database();
         const locali = await d.getAllAsync<EventoSerializzato>(
           "SELECT id, hlc, dispositivo, entita, entita_id, tipo, payload FROM eventi"

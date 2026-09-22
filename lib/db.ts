@@ -10,7 +10,7 @@
  * i registri e deduplicare per id evento — non esistono conflitti per costruzione.
  */
 import * as SQLite from "expo-sqlite";
-import { Orologio, serializza, HLC } from "./hlc";
+import { Orologio, serializza, deserializza, HLC } from "./hlc";
 
 let db: SQLite.SQLiteDatabase | null = null;
 let orologio: Orologio | null = null;
@@ -227,6 +227,45 @@ async function scriviEvento(
     );
   });
   return hlc;
+}
+
+/**
+ * Assorbe il tempo di un pacchetto ricevuto (invariante 2).
+ *
+ * Senza questo passo l'orologio locale non sa niente dell'ora dell'altro
+ * dispositivo: il primo evento scritto qui DOPO una fusione nasce con un HLC
+ * più basso di quello appena ricevuto e perde ogni confronto «vince il più
+ * recente» pur essendo successivo. Con i due dispositivi su fusi diversi — il
+ * caso per cui l'HLC esiste — è il modo silenzioso di perdere una modifica.
+ * `Orologio.ricevi()` c'era già, collaudato, e non lo chiamava nessuno.
+ *
+ * Tre cautele:
+ *   - la scrittura di meta('hlc') passa dalla coda come tutte le altre: fuori
+ *     riaprirebbe l'accavallamento che inTransazione() ha chiuso;
+ *   - un hlc illeggibile viene SALTATO, non assorbito: un NaN entrerebbe
+ *     nell'orologio e da lì non uscirebbe più, guastando ogni timbro futuro;
+ *   - si assorbono tutti gli hlc ricevuti, duplicati compresi: il tempo
+ *     dell'altro dispositivo è informazione anche quando l'evento è già noto.
+ */
+export async function assorbiRemoto(hlcRemoti: string[]): Promise<HLC | null> {
+  if (!orologio || !hlcRemoti.length) return null;
+  let assorbito: HLC | null = null;
+  for (const grezzo of hlcRemoti) {
+    const remoto = deserializza(grezzo);
+    if (!Number.isFinite(remoto.ms) || !Number.isFinite(remoto.contatore)) continue;
+    assorbito = orologio.ricevi(remoto);
+  }
+  if (!assorbito) return null;
+
+  const stato = assorbito;
+  await inTransazione(async (d) => {
+    await d.runAsync(
+      `INSERT INTO meta (chiave, valore) VALUES ('hlc', ?)
+       ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
+      [stato.ms.toString(16) + "-" + stato.contatore.toString(16)]
+    );
+  });
+  return stato;
 }
 
 /** Eventi non ancora inviati, in ordine causale. Usato dai tre trasporti di sync. */

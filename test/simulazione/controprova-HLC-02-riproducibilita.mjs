@@ -31,6 +31,16 @@
  *      riavvio, cosa che renderebbe il difetto transitorio e non critico.
  *   D. l'effetto collaterale deterministico: la spia di deriva oraria in
  *      app/(tabs)/oggi.tsx. Non dipende da nessuna ipotesi sugli orologi.
+ *
+ * DOPO LA CORREZIONE (lasciato com'era, e' il verbale di una verifica fatta
+ * prima). La parte A e' ora ROSSA in tutte e quattro le righe, ed e' il modo
+ * in cui questo file annuncia che il difetto non c'e' piu': `lib/db.ts`
+ * chiama `orologio.ricevi()` ed esporta `assorbiRemoto()`, che l'hook di
+ * sincronizzazione invoca prima di applicare il pacchetto. La parte C invece
+ * continua a mostrare il vecchio esito perche' RICOPIA a mano la sequenza di
+ * useAutoSync com'era allora, senza l'assorbimento: misura quel codice, non
+ * quello dell'app. La prova della correzione sul codice vero e' lo scenario
+ * I11 di sync-fusione.mjs.
  */
 import { DatabaseSync } from "node:sqlite";
 import { readdirSync, readFileSync, mkdtempSync, rmSync, statSync } from "node:fs";
