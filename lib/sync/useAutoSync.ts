@@ -13,6 +13,7 @@ import { TrasportoFile } from "./file";
 import { TrasportoWifi } from "./wifi";
 import { TrasportoVicinanza } from "./vicinanza";
 import { fondi } from "./fusione";
+import { applica } from "../nuvola/proiezione";
 import { EventoSerializzato } from "./pacchetto";
 import { decisioneCorrente, passphraseCorrente, registraScambio } from "./stato";
 
@@ -66,6 +67,14 @@ export function useAutoSync(dispositivo: string) {
               [e.id, e.hlc, e.dispositivo, e.entita, e.entita_id, e.tipo, e.payload]
             );
           }
+          // E QUI la proiezione, nella stessa transazione degli eventi.
+          // Senza, questi tre trasporti scrivevano nel registro e lasciavano le
+          // tabelle operative com'erano: una nota scritta sul tablet arrivava
+          // sul telefono e restava invisibile. Sono proprio i trasporti che
+          // funzionano senza internet, cioè gli unici che ci saranno nei due
+          // mesi di viaggio; aspettare un passaggio da Supabase per veder
+          // comparire la riga significa non vederla mai.
+          await applica(d, f.entitaToccate);
         });
         await segnaSincronizzati(daInviare.map((e) => e.id));
       }
