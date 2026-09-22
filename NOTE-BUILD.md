@@ -506,6 +506,27 @@ inchiodato, come difetto cosmetico, che `fattoOggi` è calcolato una volta sola
 al montaggio: cambiando tipo di blocco la frase «già registrato» resta quella
 del tipo precedente.
 
+### La trappola trovata dal collegare le prove alla verifica
+
+Appena `prova-registro.mjs` è entrato in `verifica.sh` si è visto che non
+finiva più, e la ragione è una conseguenza della correzione della coda che
+nessuno aveva previsto: **una `registra()` annidata dentro la proiezione di
+un'altra non fallisce più, si ferma.** La interna si mette in fila dietro
+quella che la contiene, e quella sta aspettando proprio lei. La transazione
+esterna resta aperta e da quel momento l'app non scrive più niente, senza un
+errore e senza un messaggio. Prima della coda lo stesso annidamento falliva
+subito, ed è quello che quel file verificava dal principio.
+
+Non c'è una guardia da aggiungere: da dentro `lib/db.ts` una scrittura
+annidata e una scrittura legittima partita altrove mentre la prima è in corso
+hanno esattamente la stessa forma, e la seconda **deve** aspettare. C'è una
+regola, ed è scritta nel commento della coda: la proiezione scrive con la
+connessione che riceve e non apre mai una scrittura nuova. Oggi nessuno dei
+nove punti di scrittura annida, e ora due prove lo verificano a ogni
+`npm run verifica` — una misura il blocco in un processo a parte, l'altra
+conta le parentesi dentro ogni `registra()` per accorgersi di un annidamento
+nuovo il giorno in cui qualcuno lo scrive.
+
 ### Una cosa che vale più dei numeri
 
 `promemoria-notifiche.mjs` è nato senza il blocco finale che stampa il riepilogo:
@@ -531,15 +552,18 @@ conteggi dichiarati in `CLAUDE.md` sono stati aggiornati di conseguenza.
 `strumenti/verifica_biblioteca.py`: 216 test, nessuna rete, eseguito da
 `verifica.yml` a ogni push e da `biblioteca.yml` prima di scaricare.
 
-`test/banco/`: 258 verifiche fra i tre banchi di prova.
-`test/simulazione/`: nove superfici, oltre 1500 scenari sul codice vero, tutte
-verdi. **Non sono ancora in `verifica.sh`**, e ora è l'unica vera lacuna di
-processo rimasta: è per questo che due volte un agente ha potuto disattivare la
-coda delle scritture dentro `lib/db.ts` lasciando tutto verde. Le guardie
-`corretto()` esistono apposta, ma una guardia che nessuno esegue non ferma
-niente. Restano fuori perché molti scenari inchiodano difetti ancora aperti e
-la CI diventerebbe rossa per ragioni che non sono regressioni: la via è
-collegare per prime le superfici già tutte verdi.
+`test/banco/`: 256 verifiche fra i tre banchi di prova.
+`test/simulazione/`: nove superfici più il triage indipendente, 1614 verifiche
+sul codice vero, tutte verdi.
+
+**E da `da52897` sono dentro `verifica.sh`**, che era l'ultima lacuna di
+processo: prima la verifica non toccava il codice vero sopra SQLite, ed è per
+questo che due volte, in questa sessione, la coda delle scritture di
+`lib/db.ts` ha potuto essere disattivata dentro il file senza che niente
+diventasse rosso. Le guardie c'erano; nessuno le eseguiva. Trenta secondi in
+tutto, e l'uscita è 1 alla prima rossa. Non si poteva farlo prima perché una
+superficie era rossa per un difetto aperto, e una prova rossa per ragioni che
+non sono regressioni smette di essere letta.
 
 Mai modificati: `fumo.sh`, `test-firma.sh`, il passo della chiave di firma,
 la release `firma`.
