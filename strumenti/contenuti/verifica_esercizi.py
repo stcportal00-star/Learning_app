@@ -8,6 +8,16 @@ from esercizi_sql_c import ESERCIZI_C
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, "palestra.db")
+# sqlite3.connect CREA un file vuoto se non lo trova: senza questa guardia la
+# verifica gira su un database inesistente, riporta 150 fallimenti che dicono
+# "no such table" invece di dire la verita' — che il database non c'e' — e
+# lascia un file da 0 byte nel repository.
+if not os.path.exists(DB):
+    sys.exit(
+        f"palestra.db non c'e' in {BASE}.\n"
+        "Generalo con `python3 genera_palestra.py` (richiede Faker), "
+        "oppure copia qui assets/contenuti/palestra.db, che e' la stessa base."
+    )
 os.makedirs(os.path.join(BASE, "out"), exist_ok=True)
 ES = ESERCIZI_A + ESERCIZI_B + ESERCIZI_C
 

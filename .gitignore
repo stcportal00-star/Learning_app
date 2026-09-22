@@ -6,3 +6,6 @@ ios/
 out/
 __pycache__/
 *.log
+# generato da strumenti/contenuti/genera_palestra.py; quello che si spedisce
+# e' assets/contenuti/palestra.db
+strumenti/contenuti/palestra.db
