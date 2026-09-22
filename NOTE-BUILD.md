@@ -386,14 +386,49 @@ dispositivi devono davvero vedersi.
 ### Ancora aperto: il resto
 
 Trentanove scenari del solo `motore-sql` inchiodano difetti non ancora
-corretti. Il più notevole:
+corretti, più altri sulle altre superfici.
 
-- **`HLC-07`** — `meta('hlc')` illeggibile rende l'orologio `NaN` per sempre e
-  blocca le scritture sull'entità; il riavvio non guarisce.
+**Correzione a quanto scrivevo qui prima.** Avevo messo `HLC-07` — `meta('hlc')`
+illeggibile che rende l'orologio `NaN` per sempre — fra le cose aperte,
+classificato «alto». Era un **candidato**, non un difetto, e la verifica
+avversariale l'ha **confutato** due lenti su tre. Non c'è niente da correggere.
+Insieme a lui sono caduti `SYN-02` e `REG-08`, anche quelli che avevo elencato
+come reali. Le confutazioni valgono quanto le conferme, e un elenco di difetti
+che non si accorcia mai è un elenco di cui non fidarsi.
 
-Tre verifiche di `promemoria-notifiche` restano rosse, tutte sulla frase «già
-registrato». Non le ho attribuite all'app: un'asserzione rossa può voler dire
-tanto che l'app sbaglia quanto che il test sbaglia.
+### Confermati dalla verifica avversariale, non ancora corretti
+
+- **`HLC-02`** (critico, 1 confutazione su 3) — `Orologio.ricevi()` non è
+  chiamato da nessun punto di `lib/` e `app/`. Ricevendo un evento con HLC più
+  avanti del proprio, l'orologio locale non avanza: la modifica locale
+  successiva ha un timbro **minore** di quella remota già vista, e in fusione
+  perde pur essendo più recente. Il revisore lo chiama «uno dei rari casi in cui
+  il pezzo mancante esiste già, collaudato»: `ricevi()` è scritto, documentato e
+  coperto da tre asserzioni in `test/nucleo.test.ts`. Mancano una decina di
+  righe per collegarlo, senza refactoring — ma con due trappole: la scrittura di
+  `meta('hlc')` deve stare **dentro** `inTransazione()`, altrimenti riapre
+  l'accavallamento appena chiuso, e `deserializza()` spezza su `-`, quindi un
+  identificativo di dispositivo con un trattino verrebbe troncato.
+- **`NOT-07`** (critico, **0 confutazioni su 3**) — le modifiche a una nota
+  spariscono senza avviso in ogni modo di uscire dalla schermata: tasto
+  indietro, cambio scheda, apertura di un'altra nota.
+- **`LIB-06`** (critico, **0 su 3**) — «Rimuovi» su un volume della biblioteca
+  aperta cancella la voce di catalogo: il volume non torna più, perché la
+  biblioteca si carica una volta sola.
+
+### Mai contestati
+
+`RO-03` e `QRY-03`: tutti e sei i revisori sono caduti con `API Error: 529
+Overloaded`, e con loro la sintesi. Restano **candidati**. Sei agenti caduti per
+un errore del server non sono una verifica, sono un buco, e vanno trattati così.
+
+Le tre verifiche rosse di `promemoria-notifiche` che avevo segnalato **non sono
+riproducibili** sul file committato: 408 su 408 con ogni fuso orario e con la
+coda disattivata. Avevo misurato una versione che l'agente stava ancora
+scrivendo — l'ho visto crescere da 832 a 1967 righe in quella finestra. Resta
+inchiodato, come difetto cosmetico, che `fattoOggi` è calcolato una volta sola
+al montaggio: cambiando tipo di blocco la frase «già registrato» resta quella
+del tipo precedente.
 
 ### Una cosa che vale più dei numeri
 
