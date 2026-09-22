@@ -415,7 +415,7 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
   ok("H16b LIB-06 il ramo 'aperta' azzera file_locale invece di cancellare la riga", contiene("lib/palestra.ts", 'UPDATE biblioteca SET file_locale = NULL, hlc = ? WHERE id = ?'));
   ok("H17 LIB-06 caricaContenuti() salta tutto se esistono gia' esercizi", contiene("lib/contenuti.ts", 'SELECT count(*) AS n FROM esercizi') && contiene("lib/contenuti.ts", "saltato: true"));
   ok("H18 LIB-06 la voce di catalogo si reinserisce solo dentro caricaContenuti()", (sorgente("lib/palestra.ts") + sorgente("app/(tabs)/libreria.tsx")).indexOf("INSERT OR IGNORE INTO biblioteca") === -1);
-  ok("H19 LIB-05 l'esito di apriVolume e' scartato", contiene("app/(tabs)/libreria.tsx", "onPress: () => { void apriVolume(item); }"));
+  ok("H19 LIB-05 (corretto) l'esito di apriVolume viene raccolto e mostrato", contiene("app/(tabs)/libreria.tsx", "onPress: () => { void conVisoreDiSistema(item); }") && contiene("app/(tabs)/libreria.tsx", 'Alert.alert("Nessuna app per aprirlo"'));
   ok("H20 LIB-08 l'annullamento produce comunque il messaggio di successo", contiene("lib/palestra.ts", "if (scelta.canceled || !scelta.assets?.length) return { collegati: 0, senzaFile: 0 };") && contiene("app/(tabs)/libreria.tsx", "volumi ora disponibili offline."));
   ok("H21 LIB-08 collegati++ non guarda le righe toccate dall'UPDATE", /await registra\("biblioteca", v\.codice, "aggiorna",[\s\S]*?collegati\+\+;/.test(sorgente("lib/palestra.ts")));
   ok("H22 LIB-08 JSON.parse del manifesto non e' protetto", contiene("lib/palestra.ts", "const voci = JSON.parse(await new File(manifesto.uri).text())"));

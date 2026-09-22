@@ -1081,7 +1081,7 @@ import * as Condivisione from "../banco/expo-sharing.mjs";
 ancora("LIB due colonne a 900", "app/(tabs)/libreria.tsx", "const colonne = width >= 900 ? 2 : 1;");
 ancora("LIB chiave della lista", "app/(tabs)/libreria.tsx", "key={colonne}");
 ancora("LIB avviso non scaricato", "app/(tabs)/libreria.tsx", '"Non ancora sul dispositivo"');
-ancora("LIB esito di apriVolume ignorato", "app/(tabs)/libreria.tsx", "onPress: () => { void apriVolume(item); }");
+ancora("LIB esito di apriVolume raccolto", "app/(tabs)/libreria.tsx", "onPress: () => { void conVisoreDiSistema(item); }");
 ancora("LIB conteggio annunciato", "app/(tabs)/libreria.tsx", "`${r.collegati} volumi ora disponibili offline.`");
 ancora("LIB rimozione solo del file per la biblioteca aperta", "app/(tabs)/libreria.tsx", '{ text: "Rimuovi il file scaricato", style: "destructive" as const, onPress: togli }');
 ancora("LIB ricarica dipende dal filtro", "app/(tabs)/libreria.tsx", "}, [filtro]);");
@@ -1106,6 +1106,18 @@ function ModelloLibreria(p) {
     if (v) {
       await ricarica();
       Avviso.alert("Aggiunto", v.titolo);
+    }
+  }
+
+  async function conVisoreDiSistema(v) {
+    const esito = await p.apriVolume(v);
+    if (esito === "nessun_visore") {
+      Avviso.alert("Nessuna app per aprirlo",
+        "Su questo dispositivo non c'e' un'app per i PDF, e nemmeno il foglio di condivisione. " +
+        "Il lettore interno lo apre lo stesso: tocca il volume invece di tenerlo premuto.");
+    } else if (esito === "non_scaricato") {
+      Avviso.alert("File non piu' sul dispositivo",
+        "Il file non e' piu' nello spazio dell'app. Reimporta la biblioteca per riaverlo.");
     }
   }
 
@@ -1166,7 +1178,7 @@ function ModelloLibreria(p) {
                 {
                   text: "Apri con il visore del sistema",
                   onPress: () => {
-                    void p.apriVolume(item);
+                    void conVisoreDiSistema(item);
                   },
                 },
               ]
@@ -1272,7 +1284,7 @@ await tocca(libreriaPrima, () => conFile.pressioneLunga());
 ok("E19 la pressione lunga su un volume scaricato offre anche 'Apri con il visore del sistema'", ultimoAvviso().pulsanti.map((b) => b.text).join(",") === "Apri con il visore del sistema,Rimuovi,Annulla");
 await tocca(libreriaPrima, () => pulsante(ultimoAvviso(), "Apri con il visore del sistema").onPress());
 await respira(4);
-difetto("LIB-05", "E20 senza visore ne' foglio di condivisione apriVolume risponde 'nessun_visore' e la schermata non dice nulla", esitiApriVolume[0] === "nessun_visore" && avvisi.length === 1, JSON.stringify(esitiApriVolume));
+corretto("LIB-05", "E20 senza visore ne' foglio di condivisione la schermata lo DICE, e nomina il lettore interno", esitiApriVolume[0] === "nessun_visore" && avvisi.length === 2 && ultimoAvviso().titolo === "Nessuna app per aprirlo" && ultimoAvviso().messaggio.includes("lettore interno"), `esiti ${JSON.stringify(esitiApriVolume)}, avvisi ${avvisi.length}`);
 IntentLauncher.programmaNessunVisore(false);
 Condivisione.programmaDisponibilita(true);
 

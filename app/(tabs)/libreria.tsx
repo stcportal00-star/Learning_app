@@ -20,6 +20,25 @@ export default function Biblioteca() {
     if (v) { await ricarica(); Alert.alert("Aggiunto", v.titolo); }
   }
 
+  /**
+   * L'esito di apriVolume() veniva buttato via: senza un'app per i PDF e senza
+   * foglio di condivisione, toccare «Apri con il visore del sistema» non
+   * faceva assolutamente niente, e l'apertura dei PDF è la priorità di questo
+   * progetto. Qui si dice cosa è successo, e si nomina la via che resta: il
+   * lettore interno, che è quello che fa un tocco semplice.
+   */
+  async function conVisoreDiSistema(v: Volume) {
+    const esito = await apriVolume(v);
+    if (esito === "nessun_visore") {
+      Alert.alert("Nessuna app per aprirlo",
+        "Su questo dispositivo non c'è un'app per i PDF, e nemmeno il foglio di condivisione. " +
+        "Il lettore interno lo apre lo stesso: tocca il volume invece di tenerlo premuto.");
+    } else if (esito === "non_scaricato") {
+      Alert.alert("File non più sul dispositivo",
+        "Il file non è più nello spazio dell'app. Reimporta la biblioteca per riaverlo.");
+    }
+  }
+
   async function daRelease() {
     const r = await importaBiblioteca();
     await ricarica();
@@ -81,7 +100,7 @@ export default function Biblioteca() {
             onLongPress={() => {
               const togli = async () => { await rimuoviVolume(item.id); await ricarica(); };
               Alert.alert(item.titolo, undefined, [
-                ...(item.file_locale ? [{ text: "Apri con il visore del sistema", onPress: () => { void apriVolume(item); } }] : []),
+                ...(item.file_locale ? [{ text: "Apri con il visore del sistema", onPress: () => { void conVisoreDiSistema(item); } }] : []),
                 // Un volume della biblioteca aperta non si cancella: la sua voce di
                 // catalogo nasce una volta sola e non tornerebbe. Qui si può solo
                 // liberare il file scaricato, e se non c'è non si offre niente.

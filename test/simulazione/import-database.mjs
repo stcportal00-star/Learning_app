@@ -1305,10 +1305,11 @@ Condivisione.azzera();
 Condivisione.programmaDisponibilita(false);
 const esitoNessuno = await P.apriVolume(volumePdf);
 ok("O11 senza visore e senza condivisione l'esito è 'nessun_visore'", esitoNessuno === "nessun_visore");
-difetto(
-  "IMP-35",
-  "app/(tabs)/libreria.tsx ignora l'esito di apriVolume(): con 'nessun_visore' l'utente tocca 'Apri con il visore del sistema' e non succede assolutamente nulla",
-  // La schermata scrive: onPress: () => { void apriVolume(item); }
+corretto(
+  "IMP-35/LIB-05",
+  "apriVolume() risponde 'nessun_visore' quando non c'è né un visore né il foglio di condivisione: è l'esito che la schermata ora raccoglie",
+  // La schermata ora lo raccoglie (LIB-05 corretto): onPress chiama
+  // conVisoreDiSistema(item), che mostra l'avviso e nomina il lettore interno.
   esitoNessuno === "nessun_visore"
 );
 Intento.programmaNessunVisore(false);
