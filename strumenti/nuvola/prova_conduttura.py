@@ -30,6 +30,33 @@ import pubblica  # noqa: E402
 
 RICEVUTO = {"tabelle": {}, "deposito": {}, "richieste": []}
 
+# I CHECK veri dello schema `percorso`, ricopiati qui perché il finto server li
+# faccia rispettare. È la lezione della prima corsa vera: un doppio che accetta
+# ciò che il servizio rifiuta non è una prova, è un permesso. `punteggio` fuori
+# range è passato da qui senza un fiato ed è morto in produzione.
+VINCOLI = {
+    "articoli": {
+        "punteggio": lambda v: v is None or (isinstance(v, int) and 0 <= v <= 100),
+    },
+    "biblioteca": {
+        "origine": lambda v: v in ("aperta", "manuale"),
+    },
+    "eventi": {
+        "tipo": lambda v: v in ("crea", "aggiorna", "elimina"),
+    },
+}
+
+
+class VincoloViolato(Exception):
+    pass
+
+
+def controlla(tabella, riga):
+    for colonna, regola in VINCOLI.get(tabella, {}).items():
+        if colonna in riga and not regola(riga[colonna]):
+            raise VincoloViolato(
+                "%s.%s = %r viola il CHECK dello schema" % (tabella, colonna, riga[colonna]))
+
 
 class FintoSupabase(BaseHTTPRequestHandler):
     def log_message(self, *_):
@@ -85,6 +112,14 @@ class FintoSupabase(BaseHTTPRequestHandler):
             chiavi = parse_qs(u.query).get("on_conflict", [""])[0].split(",")
             chiavi = [c for c in chiavi if c]
             righe = json.loads(grezzo)
+            try:
+                for r in righe:
+                    controlla(tabella, r)
+            except VincoloViolato as e:
+                # Stessa forma di PostgREST: stato 400 e il motivo nel corpo.
+                self._rispondi(400, json.dumps(
+                    {"code": "23514", "message": str(e)}).encode())
+                return
             deposito = RICEVUTO["tabelle"].setdefault(tabella, [])
             for r in righe:
                 if chiavi:
@@ -176,17 +211,29 @@ def principale():
 
     vero_scarica = pubblica.scarica
     pubblica.scarica = niente_rete
+    rapporto = {
+        "adesso": "2026-09-22T00:00:00+00:00", "gia_in_archivio": 0, "candidate": 0,
+        "articoli": 0, "con_testo": 0, "pdf": 0, "manuali": 0, "volumi": 0,
+        "eventi": 0, "falliti": [], "tempo_scaduto": False,
+    }
     try:
         n = cliente.Nuvola(base=base)
-        rapporto = {
-            "adesso": "2026-09-22T00:00:00+00:00", "gia_in_archivio": 0, "candidate": 0,
-            "articoli": 0, "con_testo": 0, "pdf": 0, "manuali": 0, "volumi": 0,
-            "eventi": 0, "falliti": [], "tempo_scaduto": False,
-        }
         pubblica.pubblica(
             os.path.join(cartella, "rassegna"), manuale, n,
             {"articoli": 80, "pdf": 8, "minuti": 20}, rapporto,
         )
+    except cliente.ErroreNuvola as e:
+        # Un rifiuto del finto server è un guasto della conduttura, e va
+        # riportato come tale invece che come traccia di stack: chi legge deve
+        # vedere QUALE vincolo è stato violato, non dove si è rotto Python.
+        guasti.append("la conduttura è stata respinta dal servitore:\n    %s" % e)
+        server.shutdown()
+        shutil.rmtree(cartella, ignore_errors=True)
+        print("PROVA DELLA CONDUTTURA: ROSSA\n")
+        for g in guasti:
+            print("  ✗ " + g)
+        print("\n%d verifiche passate, %d fallite" % (passate, len(guasti)))
+        return 1
     finally:
         pubblica.scarica = vero_scarica
 

@@ -179,13 +179,26 @@ r = pubblica.riga_articolo(
 prova("titolo assente non diventa None", r["titolo"], "(senza titolo)")
 prova_vero("url assente non resta vuoto", bool(r["url"]), r["url"])
 prova("autori assenti diventano elenco vuoto", r["autori"], [])
-prova("la rilevanza entra in uno smallint", r["punteggio"], 370)
+prova("la rilevanza diventa un punteggio dentro il CHECK", r["punteggio"], 74)
 r2 = pubblica.riga_articolo(
     {"chiave": "k3", "titolo": "t", "rilevanza": 10_000},
     None,
     {"adesso": "x"},
 )
-prova_vero("una rilevanza assurda resta dentro lo smallint", r2["punteggio"] <= 32000)
+# Il CHECK vero della colonna è 0..100, non lo smallint: è il vincolo che ha
+# ucciso la prima corsa, con 370 su una voce da 3.7 di rilevanza. Si prova sui
+# bordi e oltre, perché è lì che il vincolo morde.
+for rilevanza, atteso in ((0, 0), (1, 20), (5, 100), (5.5, 100), (10_000, 100), (-3, 0)):
+    riga = pubblica.riga_articolo(
+        {"chiave": "k", "titolo": "t", "rilevanza": rilevanza}, None, {"adesso": "x"})
+    prova_vero(
+        "punteggio dentro il CHECK 0..100 con rilevanza %s" % rilevanza,
+        0 <= riga["punteggio"] <= 100 and riga["punteggio"] == atteso,
+        "atteso %r, ottenuto %r" % (atteso, riga["punteggio"]))
+    prova_vero(
+        "e la rilevanza grezza non viene schiacciata (rilevanza %s)" % rilevanza,
+        riga["rilevanza"] == float(rilevanza),
+        "atteso %r, ottenuto %r" % (float(rilevanza), riga["rilevanza"]))
 
 # ------------------------------------- 5bis. il cancello dell'orario
 

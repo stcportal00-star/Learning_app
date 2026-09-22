@@ -132,8 +132,13 @@ def riga_articolo(v, testo, rapporto):
         "trimestre": v.get("trimestre"),
         "licenza": v.get("licenza"),
         "pubblicato_a": data_iso(v.get("data")),
-        # `rilevanza` è un numero fra 0 e qualche unità; la colonna è smallint.
-        "punteggio": max(0, min(32000, int(round(float(v.get("rilevanza") or 0) * 100)))),
+        # Due colonne, due contratti. `punteggio` ha un CHECK 0..100 e ci si
+        # sta dentro per forza: la prima corsa vera è morta proprio qui, con
+        # 370 su una voce da 3.7 di rilevanza. `rilevanza` è il numero grezzo,
+        # senza tetto, e serve a non perdere l'ordine in cima — due voci da
+        # 3.7 e da 8.2 schiacciate nel primo finirebbero entrambe a 100.
+        "punteggio": max(0, min(100, int(round(float(v.get("rilevanza") or 0) * 20)))),
+        "rilevanza": float(v.get("rilevanza") or 0),
         "raccolto_a": rapporto["adesso"],
     }
 
