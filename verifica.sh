@@ -33,7 +33,7 @@ for b in prova-banco prova-altri prova-registro; do
 done
 
 echo "— simulazioni delle superfici (test/simulazione/)"
-for s in registro-eventi motore-sql import-database contenuti ripasso-e-sessioni \
+for s in registro-eventi motore-sql import-database contenuti ripasso-e-sessioni nuvola \
          schermate-stato sync-fusione promemoria-notifiche; do
   esegui "$s" node "test/simulazione/$s.mjs"
 done
