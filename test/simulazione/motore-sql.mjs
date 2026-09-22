@@ -554,8 +554,8 @@ ok("F0 nessun residuo temporaneo prima di cominciare", nomiTmp(cartellaSqlite).l
 const inVolo = palestra.eseguiConPreparazione(SQL088.preparazione, SQL088.soluzione);
 const durante = nomiTmp(cartellaSqlite);
 const piano088 = await inVolo;
-ok("F1 PRE-01 durante l'esecuzione esiste UNA copia temporanea palestra_tmp_<ms>.db",
-  durante.length === 1 && /^palestra_tmp_\d+\.db$/.test(durante[0]), JSON.stringify(durante));
+ok("F1 PRE-01 durante l'esecuzione esiste UNA copia temporanea palestra_tmp_<ms>_<id>.db",
+  durante.length === 1 && /^palestra_tmp_\d+_[0-9a-f-]{8}\.db$/.test(durante[0]), JSON.stringify(durante));
 ok("F2 PRE-01 al termine la cartella SQLite non contiene piu' nessuna copia",
   nomiTmp(cartellaSqlite).length === 0, JSON.stringify(nomiTmp(cartellaSqlite)));
 ok("F3 PRE-01 la preparazione ha effetto: il piano usa l'indice creato",
@@ -636,8 +636,8 @@ try {
 } finally {
   Date.now = oraVera;
 }
-difetto("PRE-04", `due esecuzioni concorrenti nello stesso millisecondo si contendono palestra_tmp_<ms>.db: ${JSON.stringify(collisione)}`,
-  collisione.some((e) => e !== "ok"));
+corretto("PRE-04", `due esecuzioni concorrenti nello stesso millisecondo non si contendono piu' niente: ${JSON.stringify(collisione)}`,
+  collisione.every((e) => e === "ok"));
 ok("F15 PRE-04b dopo la collisione non resta nessuna copia orfana",
   nomiTmp(cartellaSqlite).length === 0, JSON.stringify(nomiTmp(cartellaSqlite)));
 

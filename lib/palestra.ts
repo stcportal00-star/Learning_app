@@ -133,7 +133,12 @@ export async function eseguiConPreparazione(
   sql: string
 ): Promise<{ colonne: string[]; righe: Riga[] }> {
   const cartella = new Directory(Paths.document, "SQLite");
-  const temporanea = `palestra_tmp_${Date.now()}.db`;
+  // Il nome portava solo il millisecondo: due verifiche partite insieme — un
+  // doppio tocco su «Esegui e verifica» basta — si contendevano lo STESSO
+  // file, e la prima che finiva chiudeva la connessione sotto i piedi della
+  // seconda. L'identificativo casuale toglie la collisione alla radice; il
+  // millisecondo resta perché rende leggibile un eventuale orfano sul disco.
+  const temporanea = `palestra_tmp_${Date.now()}_${Crypto.randomUUID().slice(0, 8)}.db`;
   const copia = new File(cartella, temporanea);
   new File(cartella, "palestra.db").copy(copia);
   const d = await SQLite.openDatabaseAsync(temporanea);
