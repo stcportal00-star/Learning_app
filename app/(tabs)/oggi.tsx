@@ -109,7 +109,7 @@ export default function Oggi() {
             <Pressable
               onPress={async () => {
                 setInCorso(true);
-                try { await sincronizzaNuvola("oggi"); } finally {
+                try { await sincronizzaNuvola(); } finally {
                   setInCorso(false);
                   setVersione((v) => v + 1);
                 }

@@ -28,7 +28,7 @@ export function useNuvola(dispositivo: string) {
     if (inCorso.current) return null;
     inCorso.current = true;
     try {
-      const e = await sincronizzaNuvola(dispositivo);
+      const e = await sincronizzaNuvola();
       setUltimo(e);
       return e;
     } catch {

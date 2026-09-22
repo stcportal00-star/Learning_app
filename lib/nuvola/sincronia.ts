@@ -108,8 +108,13 @@ async function segnaposto(): Promise<string> {
   return (await leggiMeta("nuvola_hlc")) ?? "";
 }
 
+/**
+ * Non prende il dispositivo, e non è una dimenticanza: l'identità del mittente
+ * viaggia dentro ogni evento, nel campo `dispositivo` che `registra()` ci ha
+ * scritto quando l'evento è nato. Un parametro qui prometterebbe che il
+ * chiamante possa cambiarla, e non può.
+ */
 export async function sincronizzaNuvola(
-  dispositivo: string,
   opzioni: { scaricaVolumi?: boolean; nuvola?: Nuvola } = {}
 ): Promise<EsitoNuvola> {
   const esito: EsitoNuvola = {
