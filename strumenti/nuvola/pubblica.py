@@ -458,8 +458,18 @@ def principale(argv=None):
         "tempo_scaduto": False,
     }
     nuvola = Nuvola()
-    if not nuvola.raggiungibile():
-        print("Supabase non risponde o la chiave non è più buona: niente da fare.", file=sys.stderr)
+    # `raggiungibile()` torna un booleano, e un booleano non dice mai perché.
+    # Alla prima corsa vera questa riga ha stampato «Supabase non risponde o la
+    # chiave non è più buona» su un 404 di PostgREST — cioè «questa tabella non
+    # è nella mia cache dello schema», che ha un rimedio preciso e nessuna
+    # attinenza con la chiave. Il corpo della risposta va mostrato: di notte,
+    # senza nessuno che guardi, è l'unica cosa che resta.
+    try:
+        nuvola.seleziona("articoli", "select=chiave", massimo=1)
+    except ErroreNuvola as e:
+        print("Supabase non accetta la conduttura: %s" % e, file=sys.stderr)
+        print("Esegui «python3 strumenti/nuvola/diagnosi.py» per sapere quale "
+              "dei quattro permessi manca.", file=sys.stderr)
         return 1
     try:
         pubblica(a.cartella, a.manuale, nuvola, {

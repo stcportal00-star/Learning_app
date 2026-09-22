@@ -38,6 +38,9 @@ on:
       giorni:
         description: "Ampiezza della finestra in giorni"
         default: "1"
+      diagnosi:
+        description: "si = solo la diagnosi dei permessi, in mezzo minuto"
+        default: "no"
   push:
     paths:
       - "strumenti/nuvola/**"
@@ -73,6 +76,16 @@ jobs:
           CRON: ${{ github.event.schedule }}
         run: |
           set -euo pipefail
+          # La diagnosi e' una corsa a se': mezzo minuto invece di tredici
+          # minuti. Serve quando Supabase rifiuta e si vuole sapere QUALE dei
+          # quattro permessi manca, senza rifare il catalogo per scoprirlo.
+          if [ "${{ github.event.inputs.diagnosi }}" = "si" ]; then
+            echo "Solo diagnosi: si salta tutto il resto."
+            echo "esegui=si" >> "$GITHUB_OUTPUT"
+            echo "solo=si" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "solo=no" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
             echo "Avvio $GITHUB_EVENT_NAME: il cancello non si applica, si corre."
             echo "esegui=si" >> "$GITHUB_OUTPUT"
@@ -125,8 +138,20 @@ jobs:
         if: steps.orario.outputs.esegui == 'si'
         run: python3 strumenti/nuvola/verifica_nuvola.py
 
-      - name: Stato precedente della rassegna
+      # Gira sempre, prima di toccare gli archivi: se i permessi non ci sono,
+      # il motivo resta scritto qui invece di essere dedotto da un rapporto
+      # mancante. continue-on-error perche' e' una diagnosi, non un cancello:
+      # il cancello vero e' `pubblica.py`, che si ferma da se'.
+      - name: Diagnosi dei permessi su Supabase
         if: steps.orario.outputs.esegui == 'si'
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
+        run: python3 strumenti/nuvola/diagnosi.py
+
+      - name: Stato precedente della rassegna
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
         id: stato
         env:
           GH_TOKEN: ${{ github.token }}
@@ -143,7 +168,7 @@ jobs:
 
       - name: Catalogo delle nuove uscite
         id: catalogo
-        if: steps.orario.outputs.esegui == 'si'
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
         env:
           PERCORSO_CONTATTO: ${{ secrets.PERCORSO_CONTATTO }}
           GIORNI: ${{ github.event.inputs.giorni || '1' }}
@@ -152,7 +177,7 @@ jobs:
           python3 strumenti/rassegna/catalogo.py --cartella rassegna --giorni "$GIORNI"
 
       - name: Ricerca delle copie accessibili
-        if: steps.orario.outputs.esegui == 'si'
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
         continue-on-error: true
         timeout-minutes: 12
         env:
@@ -171,7 +196,7 @@ jobs:
             --uscita rassegna/trovati.json
 
       - name: Pubblicazione su Supabase
-        if: steps.orario.outputs.esegui == 'si'
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
         env:
           # Se il segreto non è impostato la variabile resta vuota e il modulo
           # ricade sulla chiave publishable incorporata in cliente.py. È voluto:
@@ -194,7 +219,7 @@ jobs:
       # `pubblica.py` salta ciò che è già in archivio e riprende dal catalogo
       # quello che ieri non è riuscito a scrivere.
       - name: Stato aggiornato nella release
-        if: always() && steps.orario.outputs.esegui == 'si' && steps.catalogo.outcome == 'success'
+        if: always() && steps.orario.outputs.esegui == 'si' && steps.catalogo.outcome == 'success' && steps.orario.outputs.solo != 'si'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -238,7 +263,7 @@ jobs:
       # always(): il rapporto serve soprattutto quando qualcosa è caduto, ed è
       # l'unica cosa che l'utente legge dal telefono.
       - name: Riepilogo
-        if: always() && steps.orario.outputs.esegui == 'si'
+        if: always() && steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
         run: |
           set -euo pipefail
           {
