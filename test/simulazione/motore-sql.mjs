@@ -758,16 +758,26 @@ difetto("QRY-16", "una query che non termina blocca il motore per sempre: nessun
 // davvero in sola lettura, qui si legge un rifiuto e le verifiche diventano
 // rosse in modo leggibile, invece di far cadere la prova con un'eccezione.
 //
-// LIMITE DEL BANCO, dichiarato: il doppio di expo-sqlite non riproduce
-// l'apertura in sola lettura (node:sqlite non la espone qui), quindi questa
-// prova NON puo' dimostrare che SQLITE_READONLY scatterebbe se l'app la
-// chiedesse. Dimostra l'altra meta', che e' quella che conta: la via di
-// esecuzione dell'app non contiene NESSUNA protezione, e l'apertura non
-// chiede la sola lettura.
+// Questo commento descriveva il codice PRIMA della correzione — diceva che la
+// via di esecuzione non contiene nessuna protezione — mentre due righe sotto la
+// prova pretende ormai il contrario. Un commento rimasto indietro e' peggio di
+// nessun commento: chi legge si fa l'idea sbagliata di cosa sia sorvegliato.
+//
+// Stato vero: apriPalestra() impone PRAGMA query_only = ON sulla connessione, e
+// il doppio del banco lo rispetta perche' node:sqlite implementa quella pragma
+// per davvero. Quindi qui non si misura piu' l'assenza di una protezione: si
+// misura che la protezione c'e' e che regge a ogni forma di scrittura.
 
-const sorgentePalestra = readFileSync(join(RADICE_PROGETTO, "lib/palestra.ts"), "utf8");
-corretto("RO-01a", "apriPalestra() impone PRAGMA query_only subito dopo l'apertura",
-  /PRAGMA query_only = ON/.test(sorgentePalestra));
+// RO-01a guardava il TESTO di lib/palestra.ts con una regex, non il
+// comportamento della connessione. Due lenti del revisore l'hanno smontata
+// separatamente, e la seconda ha aggiunto il colpo di grazia: quella stringa
+// compare DUE volte nel file — in apriPalestra() e in eseguiConPreparazione() —
+// quindi togliendo la prima la guardia sarebbe rimasta verde mentre la palestra
+// tornava scrivibile. Ora si chiede alla connessione, che e' l'unico testimone
+// che conta.
+const statoQueryOnly = await palestra.esegui("PRAGMA query_only");
+corretto("RO-01a", "la connessione della palestra dichiara query_only attivo",
+  Number(statoQueryOnly.righe[0][0]) === 1, JSON.stringify(statoQueryOnly.righe));
 
 const md5Prima = md5Di(fileCopiato);
 const visitePrima = (await palestra.esegui("SELECT count(*) AS n FROM visite")).righe[0][0];

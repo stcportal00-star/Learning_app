@@ -113,7 +113,7 @@
  *
  * Esito dell'ultima esecuzione: 59 scenari su 59, 308 verifiche su 308.
  */
-import { copyFileSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -301,7 +301,13 @@ await scenario("A1 · caricaContenuti() prima di apri() lancia in italiano e non
     () => contenuti.caricaContenuti(),
     "Database non aperto: chiamare apri() all'avvio."
   );
-  ok("nessun file di database e stato creato", true);
+  // Era `ok("nessun file di database e stato creato", true)`: una costante, in
+  // una riga che prometteva un controllo sul disco. E' il caso peggiore fra le
+  // guardie vuote trovate dal revisore, perche' il fatto affermato E'
+  // controllabile — bastava guardare la cartella — e non veniva controllato.
+  const restiSulDisco = readdirSync(cartella).filter((n) => n.endsWith(".db"));
+  ok("nessun file di database e stato creato", restiSulDisco.length === 0,
+     JSON.stringify(restiSulDisco));
 });
 
 // Da qui in poi il database e aperto.

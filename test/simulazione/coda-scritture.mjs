@@ -74,9 +74,14 @@ const noteC = daDisco("SELECT id FROM note WHERE id = 'n-C'");
 ok("C la nota locale non resta orfana", !(noteC.length === 1 && evC.length === 0));
 ok("C la nota locale c'e', con il suo evento", evC.length === 1 && noteC.length === 1);
 const remoti = daDisco("SELECT id FROM eventi WHERE id LIKE 'rem-%'");
-ok("C la transazione remota e' tutto-o-niente: 0 o 2, mai 1",
-   remoti.length === 0 || remoti.length === 2, `applicati ${remoti.length}`);
-ok("C i due eventi remoti sono applicati", remoti.length === 2);
+// Scritta prima cosi': `remoti.length === 0 || remoti.length === 2`. Una lente
+// del revisore l'ha smontata, e aveva ragione: quella condizione e' soddisfatta
+// dal caso PEGGIORE, cioe' il pacchetto remoto perso per intero. Sarebbe stata
+// verde proprio il giorno in cui la sincronizzazione smette di applicare
+// niente. "Tutto-o-niente" da solo non e' una garanzia: la garanzia e' TUTTO.
+ok("C la transazione remota ha applicato TUTTI e due gli eventi, non uno solo",
+   remoti.length === 2, `applicati ${remoti.length}`);
+ok("C nessun evento remoto e' applicato a meta", remoti.length !== 1, `applicati ${remoti.length}`);
 
 // --- D: una scrittura che fallisce non blocca la coda per sempre
 const rotta = db.registra("note", "n-D0", "crea", {}, async () => {
