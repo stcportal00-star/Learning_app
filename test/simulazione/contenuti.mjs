@@ -1124,15 +1124,22 @@ await scenario("DIFETTO RIPRODOTTO H1 · scenari: tipo e tempo_min del JSON non 
   ok("la colonna tipo e occupata dal valore cablato 'rubrica'", riga.tipo === "rubrica");
 });
 
-await scenario("DIFETTO RIPRODOTTO H2 · biblioteca: il campo nota dei 52 volumi viene buttato via", async () => {
+// Era "DIFETTO RIPRODOTTO H2 · biblioteca: il campo nota dei 52 volumi viene
+// buttato via". Lo schema v2 ha dato una colonna alla nota e caricaContenuti()
+// adesso ce la scrive. Verdetto rovesciato, come vuole la convenzione: un
+// rosso qui vuol dire che la correzione e REGREDITA, non che la prova e vecchia.
+await scenario("CORREZIONE SORVEGLIATA H2 · biblioteca: la nota dei 52 volumi arriva in tabella", async () => {
   ok("tutti e 52 i volumi hanno una nota nel JSON", veriVolumi.every((v) => typeof v.nota === "string" && v.nota.length > 0));
   const colonne = dbApp.database().getAllSync("PRAGMA table_info(biblioteca)").map((c) => c.name);
-  ok("DIFETTO: la tabella biblioteca non ha nessuna colonna per la nota",
-    !colonne.some((c) => /nota|descrizione|commento/i.test(c)), colonne.join(","));
+  ok("la tabella biblioteca ha una colonna per la nota",
+    colonne.includes("nota"), colonne.join(","));
   const riga = dbApp.database().getFirstSync("SELECT * FROM biblioteca WHERE id=?", [veriVolumi[0].codice]);
-  ok("DIFETTO: la nota non compare in nessun campo della riga",
-    !Object.values(riga).some((v) => String(v) === veriVolumi[0].nota));
-  ok("il tipo VolumeAperto la dichiara comunque (nota: string): il campo e letto e mai usato", true);
+  uguale("la nota del primo volume e quella del JSON", riga.nota, veriVolumi[0].nota);
+  uguale("e il codice diventa anche la chiave stabile con cui la conduttura lo riconosce",
+    riga.codice, veriVolumi[0].codice);
+  const senzaNota = dbApp.database().getFirstSync(
+    "SELECT count(*) AS n FROM biblioteca WHERE origine='aperta' AND (nota IS NULL OR nota='')");
+  uguale("nessuno dei 52 resta senza nota", senzaNota.n, 0);
 });
 
 await scenario("DIFETTO RIPRODOTTO H3 · moduli di codice: il testo della consegna non arriva mai a schermo", async () => {

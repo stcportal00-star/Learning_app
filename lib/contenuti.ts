@@ -128,11 +128,16 @@ export async function caricaContenuti(): Promise<{
 
     const adesso = new Date().toISOString();
     for (const v of volumi) {
+      // `nota` e `codice` esistono in tabella dalla v2 dello schema: la nota
+      // dice a cosa serve il volume, ed era l'unico campo dei 52 che veniva
+      // letto dal JSON e poi buttato via prima di arrivare a schermo.
       await d.runAsync(
         `INSERT OR IGNORE INTO biblioteca
-         (id, titolo, autore, tema_slug, trimestre, origine, licenza, url, formato, aggiunto_a)
-         VALUES (?,?,?,?,?,'aperta',?,?,?,?)`,
-        [v.codice, v.titolo, v.autore, v.tema_slug, v.trimestre, v.licenza, v.url, v.formato, adesso]
+         (id, codice, titolo, autore, tema_slug, trimestre, origine, licenza, url,
+          formato, nota, aggiunto_a)
+         VALUES (?,?,?,?,?,?,'aperta',?,?,?,?,?)`,
+        [v.codice, v.codice, v.titolo, v.autore, v.tema_slug, v.trimestre, v.licenza,
+         v.url, v.formato, v.nota ?? null, adesso]
       );
     }
 
