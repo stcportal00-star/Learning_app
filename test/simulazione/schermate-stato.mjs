@@ -1399,6 +1399,8 @@ ancora("NOT id nuovo o esistente", "app/(tabs)/note.tsx", 'const id = apertaId =
 ancora("NOT setApertaId dopo l'await", "app/(tabs)/note.tsx", "setApertaId(id); await ricarica();");
 ancora("NOT si esce salvando", "app/(tabs)/note.tsx",
   "async function esci(dopo: () => void) { if (daSalvare()) await salva(); dopo(); }");
+ancora("NOT la nota gia' aperta non si riapre", "app/(tabs)/note.tsx",
+  "onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}");
 ancora("NOT salvataggio allo smontaggio", "app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);");
 ancora("NOT la copia salvata si aggiorna dopo la scrittura", "app/(tabs)/note.tsx", "salvato.current = { titolo, testo, pubblicabile };");
 ancora("NOT titolo vuoto come NULL", "app/(tabs)/note.tsx", "titolo || null");
@@ -1517,7 +1519,7 @@ function ModelloNote(p) {
       anteprima: n.testo,
       daPubblicare: n.pubblicabile === 1,
       evidenziata: apertaId === n.id,
-      premi: () => esci(() => apriNota(n)),
+      premi: () => (apertaId === n.id ? undefined : esci(() => apriNota(n))),
     })),
   };
 
@@ -1688,6 +1690,15 @@ await tocca(noteSchermata, () => notaNonPubblicabile.premi());
 await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto(secondaModifica));
 await tocca(noteSchermata, () => noteSchermata.schermo.ritornoElenco());
 corretto("NOT-07b", "F24 '← Tutte le note' salva prima di tornare all'elenco", noteSchermata.schermo.disposizione === "elenco" && (await base.getFirstAsync("SELECT testo FROM note WHERE id = ?", [notaNonPubblicabile.id])).testo === secondaModifica);
+
+// Toccare nell'elenco la nota che si sta gia' scrivendo: la voce dell'elenco
+// porta con se' il testo di PRIMA, e riaprirla da li' lo rimetterebbe
+// nell'editor cancellando quello che si sta scrivendo. Non deve fare niente.
+const quartaModifica = "Quarta modifica, e intanto ritocco la stessa voce nell'elenco.";
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.voci.find((v) => v.id === notaNonPubblicabile.id).premi());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto(quartaModifica));
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.voci.find((v) => v.id === notaNonPubblicabile.id).premi());
+corretto("NOT-07e", "F24b toccare la nota che si sta gia' scrivendo non rimette nell'editor il testo di prima", noteSchermata.schermo.editor.testo === quartaModifica, noteSchermata.schermo.editor.testo);
 
 // --- il tasto indietro di sistema e il cambio di scheda: nessun pulsante da
 // premere, la scheda si smonta e basta. E' la via che perdeva piu' testo.

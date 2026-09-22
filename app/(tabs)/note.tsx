@@ -123,7 +123,11 @@ export default function Note() {
             È la nota l'obiettivo, non le pagine lette.
           </Text>}
         renderItem={({ item }) => (
-          <Pressable onPress={() => { void esci(() => apri(item)); }}
+          // `item` viene dall'elenco disegnato ORA: se fosse la nota aperta,
+          // salvarla e poi riaprirla da quella copia rimetterebbe nell'editor
+          // il testo di prima, che sul disco non c'è più. Toccare la nota che
+          // si sta già scrivendo non deve fare niente.
+          <Pressable onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}
             style={{ borderWidth: 1, borderRadius: 10, padding: 12,
                      borderColor: apertaId === item.id ? "#18181B" : "#E4E4E7" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>

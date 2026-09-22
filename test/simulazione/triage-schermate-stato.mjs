@@ -438,7 +438,7 @@ console.log("\nI. app/(tabs)/note.tsx");
   // correzione, ed e' lo stesso file a doverlo dire.
   ok("I3 NOT-07 'Nuova nota' passa da esci(), che salva prima di azzerare i campi", contiene("app/(tabs)/note.tsx", "onPress={() => { void esci(nuova); }}"));
   ok("I4 NOT-07 '← Tutte le note' passa dallo stesso esci()", contiene("app/(tabs)/note.tsx", "onPress={() => { void esci(() => setApertaId(null)); }}"));
-  ok("I4b NOT-07 e anche aprire un'altra nota dall'elenco", contiene("app/(tabs)/note.tsx", "onPress={() => { void esci(() => apri(item)); }}"));
+  ok("I4b NOT-07 e anche aprire un'ALTRA nota dall'elenco (la stessa no: rimetterebbe il testo vecchio)", contiene("app/(tabs)/note.tsx", "onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}"));
   ok("I4c NOT-07 lo smontaggio della scheda salva dalla pulizia dell'effetto", contiene("app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);"));
   ok("I5 NOT-07 si salva e basta: nessun avviso da toccare, nessuna domanda", !/Alert/.test(sorgente("app/(tabs)/note.tsx")));
   ok("I6 NOT-05 il salvataggio vuoto esce in silenzio", contiene("app/(tabs)/note.tsx", "if (!testo.trim() && !titolo.trim()) return;"));
