@@ -298,7 +298,7 @@ sarebbero compiacenza e non prova.
 | `import-database` | 223 scenari · verde |
 | `contenuti` | 59 scenari · 309 verifiche · verde |
 | `ripasso-e-sessioni` | 67 scenari · verde |
-| `schermate-stato` | 476 verifiche · verde |
+| `schermate-stato` | 481 verifiche · verde |
 | `sync-fusione` | 91 scenari · 350 verifiche · verde |
 | `promemoria-notifiche` | 408 verifiche · verde |
 | `coda-scritture` | 12 verifiche · verde (aggiunta con la correzione della coda) |
@@ -416,6 +416,26 @@ il vecchio esito perché ricopia a mano `useAutoSync` com'era: misura quel
 codice, non l'app. L'ho annotato nel file invece di riscriverlo — è il verbale
 di una verifica fatta prima, e va letto per quello che era.
 
+### Corretto: le modifiche a una nota sparivano da ogni via d'uscita — `cf42950`
+
+`NOT-07`. Il testo di una nota non sta in nessuna tabella finché non si tocca
+Salva, e ogni modo di lasciare l'editor lo buttava via senza dire niente:
+«Nuova nota», «← Tutte le note», aprire un'altra nota dall'elenco, e
+soprattutto il cambio di scheda o il tasto indietro di sistema, che smontano la
+schermata senza passare da nessun pulsante. Per un'app il cui scopo dichiarato
+è «una nota per sessione di lettura», era la perdita di dati più probabile di
+tutte.
+
+Ora si esce salvando, da tutte e quattro le vie. Per lo smontaggio il
+salvataggio parte dalla pulizia dell'effetto: che nessuno ne veda più l'esito
+non lo ferma, perché `registra()` vive nel livello dati e la sua transazione è
+già in coda quando il componente non c'è più.
+
+**Salvare invece di chiedere.** Una bozza in più si cancella con due tocchi, un
+testo perso no; e un avviso da toccare, in un'app che si usa la sera con una
+mano, è un pedaggio che si paga ogni volta per un caso che capita di rado.
+Resta aperto `NOT-04`: il pulsante Salva riscrive anche senza modifiche.
+
 ### Ancora aperto: la sincronizzazione non mostra mai ciò che riceve
 
 `SYN-01`, confermato, e per un'app su due dispositivi è grave.
@@ -461,16 +481,16 @@ che non si accorcia mai è un elenco di cui non fidarsi.
 
 ### Confermati dalla verifica avversariale, non ancora corretti
 
-- **`NOT-07`** (critico, **0 confutazioni su 3**) — le modifiche a una nota
-  spariscono senza avviso in ogni modo di uscire dalla schermata: tasto
-  indietro, cambio scheda, apertura di un'altra nota. È l'unico dei quattro
-  confermati che resta, insieme a `SYN-01`: costa più degli altri perché tocca
-  la schermata e non solo una funzione, e lo lascio a te da decidere — la
-  correzione minima è salvare all'uscita, quella giusta è avvisare.
+Nessuno. I tre che erano correggibili senza refactoring — `HLC-02`
+(`f8b141d`), `LIB-06` (`8fb942a`), `NOT-07` (`cf42950`) — sono corretti, con
+le loro guardie e la falsificazione di ognuna. Resta `SYN-01`, aperto per la
+ragione scritta sopra, che non è cambiata: correggerlo è un refactoring, e
+questa sessione non ne fa.
 
-Corretti in questa sessione: `HLC-02` (`f8b141d`) e `LIB-06` (`8fb942a`), con
-le loro guardie e la falsificazione di ognuna. `SYN-01` resta aperto per la
-ragione scritta sopra, che non è cambiata.
+Restano aperti anche i difetti minori inchiodati dalle simulazioni (`NOT-04`,
+`LIB-02`, `LIB-05`, `LIB-07`, `LIB-08`, `CRO-02`, `SES-03`, `SCH-05` e gli
+altri): nessuno di loro perde dati, e sono elencati scenario per scenario nelle
+superfici, con il codice davanti.
 
 ### Mai contestati
 
