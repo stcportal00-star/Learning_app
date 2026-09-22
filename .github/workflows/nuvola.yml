@@ -69,16 +69,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # La decisione vive in strumenti/nuvola/cancello.py, non qui: dentro un
+      # workflow non si può provare, e un cancello sbagliato non fa rumore —
+      # la rassegna semplicemente non esce, e ce ne si accorge dopo giorni, in
+      # viaggio, quando è tardi. Là è provata su millecinquecento giorni, con
+      # la regola che conta: ogni giorno ESATTAMENTE una corsa, alle otto
+      # locali, col fuso giusto per la data.
       - name: Cancello dell'orario
         id: orario
         env:
-          # Il cron che ha acceso questa corsa, vuoto su dispatch e su push.
+          # Il cron che ha acceso questa corsa; vuoto su dispatch e su push.
           CRON: ${{ github.event.schedule }}
         run: |
           set -euo pipefail
-          # La diagnosi e' una corsa a se': mezzo minuto invece di tredici
-          # minuti. Serve quando Supabase rifiuta e si vuole sapere QUALE dei
-          # quattro permessi manca, senza rifare il catalogo per scoprirlo.
           if [ "${{ github.event.inputs.diagnosi }}" = "si" ]; then
             echo "Solo diagnosi: si salta tutto il resto."
             echo "esegui=si" >> "$GITHUB_OUTPUT"
@@ -91,49 +94,11 @@ jobs:
             echo "esegui=si" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          python3 - <<'PY'
-          import os
-          from datetime import datetime, timezone
-          from zoneinfo import ZoneInfo
+          python3 strumenti/nuvola/cancello.py --cron "$CRON"
 
-          # Il giorno in cui l'utente si sposta dal Messico all'Italia.
-          CAMBIO = datetime(2026, 10, 2, tzinfo=timezone.utc)
-
-          adesso = datetime.now(timezone.utc)
-
-          # Si ragiona sull'ora *nominale* del cron, non su quella reale. GitHub
-          # fa partire i lavori pianificati con ritardi di minuti e, nelle ore
-          # affollate, anche oltre l'ora: con l'ora reale un ritardo di dieci
-          # minuti sul cron delle 06:00 darebbe le 09:0x a Roma, nessuno dei tre
-          # cancelli si aprirebbe e la giornata sarebbe persa in silenzio.
-          # La conversione di fuso resta comunque affidata a zoneinfo.
-          cron = os.environ.get("CRON", "").split()
-          riferimento = adesso
-          if len(cron) >= 2:
-              try:
-                  minuto, ora = int(cron[0]), int(cron[1])
-              except ValueError:
-                  print("Cron '%s' non interpretabile: uso l'ora reale." % " ".join(cron))
-              else:
-                  riferimento = adesso.replace(hour=ora, minute=minuto, second=0, microsecond=0)
-
-          fuso = ZoneInfo("America/Mexico_City") if riferimento < CAMBIO else ZoneInfo("Europe/Rome")
-          locale = riferimento.astimezone(fuso)
-          esegui = "si" if locale.hour == 8 else "no"
-
-          print("Cron acceso:  %s" % (" ".join(cron) or "(nessuno)"))
-          print("Riferimento:  %s UTC" % riferimento.strftime("%Y-%m-%d %H:%M"))
-          print("Fuso scelto:  %s" % fuso.key)
-          print("Ora locale:   %s" % locale.strftime("%Y-%m-%d %H:%M %Z"))
-          print("Esecuzione:   %s" % ("SI, sono le 08 locali" if esegui == "si" else "NO, non sono le 08 locali"))
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as uscita:
-              uscita.write("esegui=%s\n" % esegui)
-          PY
-
-      # Prima di qualunque passo di rete, e senza rete: una conduttura rotta non
-      # deve poter scrivere sul database. Un upsert sbagliato su `biblioteca` si
-      # ripara a mano, e da qui non c'è nessuna mano.
+      # Prima di qualunque passo di rete, e senza rete: una conduttura rotta
+      # non deve poter scrivere sul database. Un upsert sbagliato su
+      # `biblioteca` si ripara a mano, e da qui non c'è nessuna mano.
       - name: Verifica della conduttura (nessuna rete)
         if: steps.orario.outputs.esegui == 'si'
         run: python3 strumenti/nuvola/verifica_nuvola.py

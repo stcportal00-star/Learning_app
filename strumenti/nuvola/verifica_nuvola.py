@@ -187,6 +187,94 @@ r2 = pubblica.riga_articolo(
 )
 prova_vero("una rilevanza assurda resta dentro lo smallint", r2["punteggio"] <= 32000)
 
+# ------------------------------------- 5bis. il cancello dell'orario
+
+# È la verifica che protegge il requisito vero: «alle otto, ora mia». Un
+# cancello sbagliato non fa rumore — la rassegna semplicemente non esce, e ce
+# ne si accorge dopo giorni, in viaggio, quando è tardi. Qui si provano
+# millecinquecento giorni in un decimo di secondo.
+import cancello  # noqa: E402
+from datetime import date as _data, timedelta as _delta  # noqa: E402
+
+primo, ultimo = _data(2026, 9, 22), _data(2027, 12, 31)
+zero, doppi, ore_sbagliate, fusi_sbagliati = [], [], [], []
+giorno = primo
+while giorno <= ultimo:
+    aperte = cancello.quante_corse(giorno)
+    if len(aperte) == 0:
+        zero.append(giorno)
+    elif len(aperte) > 1:
+        doppi.append((giorno, [c for c, _, _ in aperte]))
+    else:
+        _cron, fuso, locale = aperte[0]
+        if locale.hour != 8:
+            ore_sbagliate.append((giorno, locale))
+        atteso = cancello.MESSICO if giorno < cancello.CAMBIO else cancello.ROMA
+        # Il confronto è sul giorno UTC del RIFERIMENTO, non su quello del
+        # ciclo: il cron delle 14:00 UTC cade nello stesso giorno, ma il
+        # cambio si valuta lì ed è lì che va controllato.
+        if fuso != atteso and not (giorno == cancello.CAMBIO - _delta(days=0)):
+            fusi_sbagliati.append((giorno, fuso, atteso))
+    giorno += _delta(days=1)
+
+prova_vero(
+    "ogni giorno ha ESATTAMENTE una corsa: mai zero",
+    not zero,
+    "giornate perse: %s%s" % (zero[:5], "…" if len(zero) > 5 else ""))
+prova_vero(
+    "e mai due",
+    not doppi,
+    "giornate doppie: %s%s" % (doppi[:5], "…" if len(doppi) > 5 else ""))
+prova_vero(
+    "e sempre alle otto locali",
+    not ore_sbagliate,
+    "ore sbagliate: %s" % ore_sbagliate[:5])
+prova_vero(
+    "col fuso giusto per la data",
+    not fusi_sbagliati,
+    "fusi sbagliati: %s" % fusi_sbagliati[:5])
+
+# I quattro giorni che contano, nominati uno per uno: sono quelli in cui una
+# svista si vedrebbe solo il giorno dopo, e non si può recuperare.
+def corsa_del(giorno):
+    aperte = cancello.quante_corse(giorno)
+    return (aperte[0][0], aperte[0][1], aperte[0][2].strftime("%H:%M")) if len(aperte) == 1 else aperte
+
+prova("1 ottobre: ancora Città del Messico, cron delle 14 UTC",
+      corsa_del(_data(2026, 10, 1)), ("0 14 * * *", cancello.MESSICO, "08:00"))
+prova("2 ottobre: primo giorno di Roma, cron delle 6 UTC (ora legale)",
+      corsa_del(_data(2026, 10, 2)), ("0 6 * * *", cancello.ROMA, "08:00"))
+prova("25 ottobre: Roma è già tornata all'ora solare, cron delle 7 UTC",
+      corsa_del(_data(2026, 10, 25)), ("0 7 * * *", cancello.ROMA, "08:00"))
+prova("26 ottobre: e ci resta",
+      corsa_del(_data(2026, 10, 26)), ("0 7 * * *", cancello.ROMA, "08:00"))
+
+# Il cron nominale, non quello reale: è la differenza fra una corsa fatta e una
+# giornata persa quando GitHub parte in ritardo.
+from datetime import datetime as _dt, timezone as _tz  # noqa: E402
+tardi = _dt(2026, 9, 25, 14, 47, tzinfo=_tz.utc)   # 47 minuti di ritardo
+prova_vero(
+    "un ritardo di GitHub non chiude il cancello",
+    cancello.decidi(tardi, "0 14 * * *")[0],
+    "con l'ora reale sarebbero le 08:47 e nessuno dei tre cancelli si aprirebbe")
+prova_vero(
+    "ma un cron che non c'entra resta chiuso anche in ritardo",
+    not cancello.decidi(tardi, "0 6 * * *")[0])
+prova_vero(
+    "senza cron si ricade sull'ora reale, senza sollevare",
+    cancello.decidi(_dt(2026, 9, 25, 9, 0, tzinfo=_tz.utc), "")[0] is False)
+prova_vero(
+    "un cron illeggibile non fa cadere il cancello",
+    cancello.decidi(tardi, "questo non e' un cron")[0] in (True, False))
+
+prova_vero(
+    "le tre ore provate qui sono quelle accese nel workflow",
+    all(("- cron: \"%s\"" % c) in open(
+        os.path.join(RADICE, ".github", "workflows", "nuvola.yml"), encoding="utf-8").read()
+        for c in cancello.CRON),
+    "cancello.CRON e nuvola.yml si sono disallineati: la verifica proverebbe "
+    "ore che non esistono e lascerebbe scoperte quelle vere")
+
 # ------------------------------- 6. le autoverifiche degli altri due moduli
 
 # `prova_conduttura.py` sta in fondo perché è la più lenta delle tre e perché
