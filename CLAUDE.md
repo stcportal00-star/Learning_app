@@ -93,6 +93,24 @@ Per caricare un PDF a mano senza l'app: lasciarlo cadere in
 veri. Il push fa il resto, per la stessa strada di un PDF trovato dalla
 rassegna.
 
+### Se Supabase rifiuta
+
+Prima cosa: `python3 strumenti/nuvola/diagnosi.py`, oppure l'avvio a mano di
+`nuvola.yml` con `diagnosi: si` (mezzo minuto invece di tredici). Prova i
+quattro permessi uno per uno e stampa stato, corpo e rimedio. I quattro stati
+hanno quattro rimedi diversi e confonderli costa una corsa quotidiana:
+
+| stato | significato | rimedio |
+|---|---|---|
+| 404 (`PGRST205`) | la tabella non è nella cache dello schema di PostgREST | `NOTIFY pgrst, 'reload schema'` |
+| 406 (`PGRST106`) | lo schema non è fra quelli serviti | `ALTER ROLE authenticator SET pgrst.db_schemas = 'public, graphql_public, percorso'` poi `NOTIFY pgrst, 'reload config'` |
+| 401 | la chiave è rifiutata | ruotarla con il segreto `SUPABASE_CHIAVE` |
+| 403 | una policy RLS non lascia passare | la policy `solo_utente_fisso` dello schema |
+
+È già successo: esporre lo schema non basta, perché il `reload config` da solo
+non ricostruisce la cache. La prima corsa vera è morta lì, e il messaggio
+diceva «la chiave non è più buona», che era falso.
+
 Due verifiche girano **prima di qualunque scrittura**, e senza rete:
 `strumenti/nuvola/verifica_nuvola.py` (confronta il payload degli eventi con lo
 schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
