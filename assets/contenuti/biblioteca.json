@@ -61,9 +61,9 @@
   "tema_slug": "lettura_codice",
   "trimestre": "T1",
   "licenza": "CC BY-NC-SA 3.0",
-  "url": "https://git-scm.com/book/en/v2",
-  "formato": "html",
-  "nota": "Disponibile anche in PDF ed EPUB dal sito ufficiale."
+  "url": "https://github.com/progit/progit2/releases/download/2.1.450/progit.pdf",
+  "formato": "pdf",
+  "nota": "PDF ufficiale degli autori, 501 pagine, 18,8 MB: e' l'unico libro del T1 che si apre senza rete."
  },
  {
   "codice": "BIB-07",
@@ -94,9 +94,9 @@
   "tema_slug": "statistica",
   "trimestre": "T2",
   "licenza": "CC BY-SA 3.0",
-  "url": "https://www.openintro.org/book/os/",
+  "url": "https://raw.githubusercontent.com/OpenIntroStat/openintro-statistics/b27ac1ac7a01e8690094806392015cec958c9e84/main.pdf",
   "formato": "pdf",
-  "nota": "PDF gratuito ufficiale."
+  "nota": "PDF ufficiale, 422 pagine: indirizzo agganciato allo SHA del commit, non cambia sotto i piedi."
  },
  {
   "codice": "BIB-10",
@@ -325,9 +325,9 @@
   "tema_slug": "ia",
   "trimestre": "T3",
   "licenza": "CC BY-SA 4.0",
-  "url": "https://owasp.org/www-project-top-10-for-large-language-model-applications/",
-  "formato": "pdf",
-  "nota": "Sicurezza dei sistemi basati su LLM."
+  "url": "https://genai.owasp.org/llm-top-10/",
+  "formato": "html",
+  "nota": "Dichiarata 'pdf' con l'indirizzo della pagina di progetto, che pdf non e'. Il PDF 2025 esiste ma sta in un repository che si dichiara archiviato: da riverificare da una rete non filtrata prima di rimetterlo."
  },
  {
   "codice": "BIB-31",
@@ -403,8 +403,8 @@
   "trimestre": "T5",
   "licenza": "Pubblico dominio",
   "url": "https://www.nist.gov/cyberframework",
-  "formato": "pdf",
-  "nota": "Govern, Identify, Protect, Detect, Respond, Recover."
+  "formato": "html",
+  "nota": "Dichiarata 'pdf' su una pagina che pdf non e'. Il file ufficiale dovrebbe essere nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf: non verificabile da qui (host bloccato), da provare prima di dichiararlo."
  },
  {
   "codice": "BIB-38",

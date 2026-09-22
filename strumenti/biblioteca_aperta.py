@@ -20,12 +20,12 @@ BIBLIOTECA = [
 ("BIB-03","SQLite Documentation","SQLite Consortium","sql_base","T1","Pubblico dominio","https://sqlite.org/docs.html","html","Il motore che gira dentro l'app. Pubblico dominio."),
 ("BIB-04","Automate the Boring Stuff with Python","Al Sweigart","lettura_codice","T1","CC BY-NC-SA 3.0","https://automatetheboringstuff.com/","html","Per leggere ed eseguire codice, non per scriverlo di produzione."),
 ("BIB-05","The Missing Semester of Your CS Education","MIT","lettura_codice","T1","CC BY-NC-SA 4.0","https://missing.csail.mit.edu/","html","Shell, git, debugging. Colma esattamente le lacune operative."),
-("BIB-06","Pro Git (2ª ed.)","Chacon & Straub","lettura_codice","T1","CC BY-NC-SA 3.0","https://git-scm.com/book/en/v2","html","Disponibile anche in PDF ed EPUB dal sito ufficiale."),
+("BIB-06","Pro Git (2ª ed.)","Chacon & Straub","lettura_codice","T1","CC BY-NC-SA 3.0","https://github.com/progit/progit2/releases/download/2.1.450/progit.pdf","pdf","PDF ufficiale degli autori, 501 pagine, 18,8 MB: e' l'unico libro del T1 che si apre senza rete."),
 ("BIB-07","Readings in Database Systems (Red Book, 5ª ed.)","Bailis, Hellerstein, Stonebraker","modellazione","T1","Accesso libero dei curatori","http://www.redbook.io/","html","Letture commentate: utile per capire perché i sistemi sono come sono."),
 
 # --- T2  modellazione, qualità, statistica
 ("BIB-08","R for Data Science (2ª ed.)","Wickham, Çetinkaya-Rundel, Grolemund","statistica","T2","CC BY-NC-ND 4.0","https://r4ds.hadley.nz/","html","La pista R: leggere, non scrivere. Ecosistema di Epicentre."),
-("BIB-09","OpenIntro Statistics (4ª ed.)","Diez, Çetinkaya-Rundel, Barr","statistica","T2","CC BY-SA 3.0","https://www.openintro.org/book/os/","pdf","PDF gratuito ufficiale."),
+("BIB-09","OpenIntro Statistics (4ª ed.)","Diez, Çetinkaya-Rundel, Barr","statistica","T2","CC BY-SA 3.0","https://raw.githubusercontent.com/OpenIntroStat/openintro-statistics/b27ac1ac7a01e8690094806392015cec958c9e84/main.pdf","pdf","PDF ufficiale, 422 pagine: indirizzo agganciato allo SHA del commit, non cambia sotto i piedi."),
 ("BIB-10","Introduction to Modern Statistics","Çetinkaya-Rundel & Hardin","statistica","T2","CC BY-SA 4.0","https://openintro-ims.netlify.app/","html","Successore moderno di OpenIntro."),
 ("BIB-11","Think Stats (3ª ed.)","Allen B. Downey","statistica","T2","CC BY-NC-SA 4.0","https://greenteapress.com/wp/think-stats-3e/","html","Statistica attraverso il codice. Adatto al tuo modo di ragionare."),
 ("BIB-12","Think Bayes (2ª ed.)","Allen B. Downey","statistica","T2","CC BY-NC-SA 4.0","https://allendowney.github.io/ThinkBayes2/","html","Inferenza bayesiana applicata."),
@@ -48,7 +48,7 @@ BIBLIOTECA = [
 ("BIB-27","Handbook on Data Protection in Humanitarian Action (2ª ed.)","ICRC / Brussels Privacy Hub","gdpr","T3","Accesso libero ICRC","https://www.cambridge.org/core/services/aop-cambridge-core/content/view/025CE3DFD1FAD908DD1412C20E49F955/9781009414623AR.pdf/Handbook_on_Data_Protection_in_Humanitarian_Action.pdf","pdf","Il testo chiave del tuo dominio. Priorità massima."),
 ("BIB-28","Data Responsibility Guidelines","OCHA Centre for Humanitarian Data","gdpr","T3","Accesso libero OCHA","https://data.humdata.org/dataset/2048a947-5714-4220-905b-e662cbcd14c8/resource/8bc5b848-8ece-4f1f-a78b-18dd972bb21a/download/data-responsibility-guidelines-2025.pdf","pdf","Operativo, non teorico."),
 ("BIB-29","NIST AI Risk Management Framework 1.0","NIST","ia","T3","Pubblico dominio","https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf","pdf","Govern, Map, Measure, Manage."),
-("BIB-30","OWASP Top 10 for LLM Applications","OWASP Foundation","ia","T3","CC BY-SA 4.0","https://owasp.org/www-project-top-10-for-large-language-model-applications/","pdf","Sicurezza dei sistemi basati su LLM."),
+("BIB-30","OWASP Top 10 for LLM Applications","OWASP Foundation","ia","T3","CC BY-SA 4.0","https://genai.owasp.org/llm-top-10/","html","Dichiarata 'pdf' con l'indirizzo della pagina di progetto, che pdf non e'. Il PDF 2025 esiste ma sta in un repository che si dichiara archiviato: da riverificare da una rete non filtrata prima di rimetterlo."),
 ("BIB-31","Software Engineering at Google","Winters, Manshreck, Wright","ia","T3","CC BY-NC-ND 4.0","https://abseil.io/resources/swe-book","html","Pratiche di ingegneria su larga scala, lettura integrale libera."),
 
 # --- T4  architettura dati
@@ -59,7 +59,7 @@ BIBLIOTECA = [
 ("BIB-36","The Site Reliability Workbook","Google","governance","T4","Accesso libero Google","https://sre.google/workbook/table-of-contents/","html","Applicazione pratica del precedente."),
 
 # --- T5  hardware, reti, sicurezza
-("BIB-37","NIST Cybersecurity Framework 2.0","NIST","sicurezza","T5","Pubblico dominio","https://www.nist.gov/cyberframework","pdf","Govern, Identify, Protect, Detect, Respond, Recover."),
+("BIB-37","NIST Cybersecurity Framework 2.0","NIST","sicurezza","T5","Pubblico dominio","https://www.nist.gov/cyberframework","html","Dichiarata 'pdf' su una pagina che pdf non e'. Il file ufficiale dovrebbe essere nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf: non verificabile da qui (host bloccato), da provare prima di dichiararlo."),
 ("BIB-38","NIST SP 800-61 — Incident Handling Guide","NIST","sicurezza","T5","Pubblico dominio","https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-61r2.pdf","pdf","Sequenza di risposta agli incidenti."),
 ("BIB-39","NIST SP 800-34 — Contingency Planning Guide","NIST","hardware","T5","Pubblico dominio","https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-34r1.pdf","pdf","RTO, RPO, continuità operativa."),
 ("BIB-40","NIST SP 800-124 — Mobile Device Security","NIST","hardware","T5","Pubblico dominio","https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-124r2.pdf","pdf","Gestione di flotte di dispositivi sul campo."),
