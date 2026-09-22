@@ -1,8 +1,9 @@
 # NOTE-BUILD — prima sessione, 21 settembre 2026
 
 Estrazione del progetto, APK firmato, test di fumo superato su emulatore
-Android 14. Otto build. Fino al quinto ogni fallimento aveva una causa diversa
-dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
+Android 14. Undici build. Fino al quinto ogni fallimento aveva una causa
+diversa dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
+Gli ultimi due portano le correzioni trovate dal collaudo.
 
 | Build | Esito | Causa del fallimento |
 |---|---|---|
@@ -15,15 +16,29 @@ dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
 | 7 | **annullato** | l'ho cancellato io: vedi sotto |
 | 8 | fumo superato | `HTTP 403` creando la release, cinque volte |
 | 9 | **riuscito** | — release `apk-9` pubblicata |
+| 10 | **annullato** | l'ho cancellato io, di nuovo: un push su `lib/**` |
+| 11 | **riuscito** | — release `apk-11`, con le correzioni del collaudo |
 
-Stato del test di fumo al build 9: schermata Oggi in **6 secondi**, tutte e
+Stato del test di fumo al build 11: schermata Oggi in **3 secondi**, tutte e
 cinque le rotte percorse, lettore PDF che apre il documento di prova e ne conta
 le **2 pagine in 4 secondi**, riavvio a freddo superato. Firma in modalità
 **automatica**, impronta SHA-256
 `CF:5C:B0:6D:24:F6:DE:44:AF:FC:4B:76:AD:09:17:41:A1:26:B3:29:20:6F:18:1E:27:B3:69:78:57:1C:C9:09`.
 
-APK: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-9>
-— `percorso-9.apk`, 58,0 MB, più le otto schermate del test di fumo.
+La schermata Oggi è passata da 6 secondi a 3. Non lo attribuisco alle
+correzioni: è un campione solo, su un emulatore condiviso, e una spiegazione
+plausibile — `caricaContenuti()` che ora passa da `inTransazione()` — resta
+plausibile finché non è misurata su più corse.
+
+**APK da installare: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-11>**
+— `percorso-11.apk`, 58,0 MB, più le otto schermate del test di fumo.
+`apk-9` contiene ancora entrambi i difetti critici: non va installata.
+
+Due build annullati, il 7 e il 10, li ho cancellati io nello stesso modo: un
+push che tocca `app/ lib/ components/ assets/ plugins/ package.json app.json
+metro.config.js` fa ripartire `apk`, e `cancel-in-progress` uccide quello in
+corso. Chi lavora qui lo tenga presente, e sappia che il filtro `paths` guarda
+l'unione dei file di TUTTI i commit di un push, non solo dell'ultimo.
 
 ---
 
