@@ -238,8 +238,8 @@ ok("C3 i valori arrivano con il tipo di SQLite (INTEGER e TEXT)",
 
 const vuoto = await palestra.esegui("SELECT id, nome FROM strutture WHERE id < 0");
 ok("C4 una query senza righe restituisce zero righe", vuoto.righe.length === 0);
-difetto("QRY-03a", "esegui() deduce le colonne da righe[0]: con zero righe dichiara ZERO colonne",
-  vuoto.colonne.length === 0, JSON.stringify(vuoto.colonne));
+corretto("QRY-03a", "una query senza righe dichiara lo stesso le sue colonne: le chiede al motore, non alla prima riga",
+  JSON.stringify(vuoto.colonne) === JSON.stringify(["id", "nome"]), JSON.stringify(vuoto.colonne));
 
 await lancia("C5 tabella inesistente: l'errore grezzo di SQLite risale al chiamante",
   () => palestra.esegui("SELECT * FROM tabella_che_non_esiste"), "no such table");
@@ -260,29 +260,34 @@ ok("C9 ...e la coda scartata non viene eseguita nemmeno se e' distruttiva",
 
 // QRY-06: colonne omonime nella stessa SELECT.
 const duplicata = await palestra.esegui("SELECT id, id FROM strutture ORDER BY id LIMIT 2");
-difetto("QRY-06", "SELECT id, id dichiara UNA sola colonna: Object.keys collassa gli omonimi",
-  duplicata.colonne.length === 1, JSON.stringify(duplicata.colonne));
+corretto("QRY-06", "SELECT id, id dichiara DUE colonne omonime, come le ha scritte l'utente",
+  JSON.stringify(duplicata.colonne) === JSON.stringify(["id", "id"]) && duplicata.righe[0].length === 2,
+  JSON.stringify(duplicata));
 const aliasRipetuto = await palestra.esegui("SELECT nome AS a, tipo AS a FROM strutture LIMIT 1");
-difetto("QRY-06b", "anche un alias ripetuto (nome AS a, tipo AS a) collassa a una colonna",
-  aliasRipetuto.colonne.length === 1);
+corretto("QRY-06b", "anche un alias ripetuto (nome AS a, tipo AS a) resta due colonne, con i due valori distinti",
+  aliasRipetuto.colonne.length === 2 && aliasRipetuto.righe[0].length === 2 &&
+    aliasRipetuto.righe[0][0] !== aliasRipetuto.righe[0][1], JSON.stringify(aliasRipetuto));
 
 // QRY-07: due colonne omonime di tabelle diverse in un JOIN.
 const omonime = await palestra.esegui(
   "SELECT s.id, v.id FROM strutture s JOIN visite v ON v.struttura_id = s.id ORDER BY v.id LIMIT 3");
 const controlloOmonime = await palestra.esegui(
   "SELECT s.id AS sid, v.id AS vid FROM strutture s JOIN visite v ON v.struttura_id = s.id ORDER BY v.id LIMIT 3");
-difetto("QRY-07", "un JOIN con due colonne omonime perde meta' del risultato: resta una colonna sola",
-  omonime.colonne.length === 1 && controlloOmonime.colonne.length === 2);
-difetto("QRY-07b", "...e il valore che sopravvive e' quello dell'ULTIMA colonna, non della prima",
-  omonime.righe.every((r, i) => r[0] === controlloOmonime.righe[i][1]) &&
-    controlloOmonime.righe.some((r) => r[0] !== r[1]));
+corretto("QRY-07", "un JOIN con due colonne omonime non perde piu' meta' del risultato: due colonne, come con gli alias",
+  omonime.colonne.length === 2 && controlloOmonime.colonne.length === 2,
+  JSON.stringify(omonime.colonne));
+corretto("QRY-07b", "...e i valori sono quelli veri: la stessa cosa che si legge dando due alias diversi",
+  JSON.stringify(omonime.righe) === JSON.stringify(controlloOmonime.righe) &&
+    controlloOmonime.righe.some((r) => r[0] !== r[1]),
+  `${JSON.stringify(omonime.righe)} contro ${JSON.stringify(controlloOmonime.righe)}`);
 
 // QRY-08: nomi di colonna che sono stringhe numeriche.
 const numeriche = await palestra.esegui('SELECT 2 AS "2", 1 AS "1", 0.5 AS x');
-difetto("QRY-08", "colonne con nome numerico vengono RIORDINATE: Object.keys mette prima gli interi",
-  JSON.stringify(numeriche.colonne) === JSON.stringify(["1", "2", "x"]), JSON.stringify(numeriche.colonne));
-ok("C10 ...e i valori seguono il riordino delle chiavi, non la SELECT",
-  numeriche.righe[0][0] === 1 && numeriche.righe[0][1] === 2 && numeriche.righe[0][2] === 0.5);
+corretto("QRY-08", "le colonne con nome numerico restano nell'ordine della SELECT, non in quello delle chiavi di un oggetto",
+  JSON.stringify(numeriche.colonne) === JSON.stringify(["2", "1", "x"]), JSON.stringify(numeriche.colonne));
+corretto("QRY-08c", "C10 ...e i valori seguono la SELECT: 2, 1, 0.5",
+  numeriche.righe[0][0] === 2 && numeriche.righe[0][1] === 1 && numeriche.righe[0][2] === 0.5,
+  JSON.stringify(numeriche.righe));
 
 // RO-04 (parte di sola lettura): i PRAGMA di LETTURA servono agli esercizi.
 const info = await palestra.esegui("PRAGMA table_info(visite)");
@@ -352,23 +357,23 @@ ok("D5 VER-01 la soluzione di riferimento non gira: la colpa e' attribuita al co
 const d6 = await V.verifica(palestra.esegui,
   "SELECT id, nome FROM strutture WHERE id < 0",
   "SELECT id, nome FROM strutture ORDER BY id LIMIT 4");
-difetto("QRY-03", "risposta a ZERO righe: la diagnosi parla di colonne, non di righe",
-  d6.motivo === "colonne_diverse" && d6.dettaglio.includes("ottenute 0"), JSON.stringify(d6));
+corretto("QRY-03", "risposta a ZERO righe: la diagnosi parla di RIGHE, che e' dove sta la differenza",
+  d6.motivo === "righe_diverse" && d6.dettaglio.includes("ottenute 0"), JSON.stringify(d6));
 ok("D6b ...e il campo righeOttenute dice comunque 0 su 4 attese",
   d6.righeAttese === 4 && d6.righeOttenute === 0);
 
 const d7 = await V.verifica(palestra.esegui,
   "SELECT id, nome FROM strutture ORDER BY id LIMIT 4",
   "SELECT id, nome FROM strutture WHERE id < 0");
-difetto("QRY-03b", "a parti invertite (riferimento vuoto, risposta piena) la diagnosi e' altrettanto sbagliata",
-  d7.motivo === "colonne_diverse", JSON.stringify(d7));
+corretto("QRY-03b", "a parti invertite (riferimento vuoto, risposta piena) la diagnosi e' altrettanto giusta",
+  d7.motivo === "righe_diverse", JSON.stringify(d7));
 
 // ---- QRY-04: entrambi vuoti
 const d8 = await V.verifica(palestra.esegui,
   "SELECT 1 WHERE 0",
   "SELECT id, nome, tipo, paese FROM strutture WHERE id < 0");
-difetto("QRY-04", "due risultati VUOTI passano come 'identico': 'SELECT 1 WHERE 0' risolve l'esercizio",
-  d8.corretto === true && d8.motivo === "identico", JSON.stringify(d8));
+corretto("QRY-04", "'SELECT 1 WHERE 0' non risolve piu' un esercizio: due risultati vuoti con colonne diverse sono diversi",
+  d8.corretto === false && d8.motivo === "colonne_diverse", JSON.stringify(d8));
 
 // ---- QRY-05: stesse colonne in ordine diverso
 const d9 = await confronta(ris(["paese", "n"], [["IT", 3], ["FR", 5]]), ris(["n", "paese"], [[3, "IT"], [5, "FR"]]));
@@ -382,18 +387,18 @@ difetto("QRY-05b", "se le due colonne scambiate contengono gli stessi valori lo 
 const d11 = await V.verifica(palestra.esegui,
   "SELECT id, id FROM strutture ORDER BY id LIMIT 3",
   "SELECT id FROM strutture ORDER BY id LIMIT 3");
-difetto("QRY-06c", "una risposta con la colonna DUPLICATA passa come 'identico' contro un riferimento a una colonna",
-  d11.corretto === true && d11.motivo === "identico", JSON.stringify(d11));
+corretto("QRY-06c", "una risposta con la colonna DUPLICATA non passa piu' contro un riferimento a una colonna",
+  d11.corretto === false && d11.motivo === "colonne_diverse", JSON.stringify(d11));
 
 const d12 = await V.verifica(palestra.esegui,
   "SELECT s.id, v.id FROM strutture s JOIN visite v ON v.struttura_id = s.id ORDER BY v.id LIMIT 3",
   "SELECT v.id FROM strutture s JOIN visite v ON v.struttura_id = s.id ORDER BY v.id LIMIT 3");
-difetto("QRY-07c", "una risposta a due colonne omonime passa contro un riferimento a una sola colonna",
-  d12.corretto === true, JSON.stringify(d12));
+corretto("QRY-07c", "una risposta a due colonne omonime non passa piu' contro un riferimento a una sola colonna",
+  d12.corretto === false && d12.motivo === "colonne_diverse", JSON.stringify(d12));
 
 const d13 = await V.verifica(palestra.esegui, 'SELECT 2 AS "2", 1 AS "1"', 'SELECT 1 AS "1", 2 AS "2"');
-difetto("QRY-08b", "colonne numeriche: proiettarle in ordine INVERTITO passa come 'identico'",
-  d13.corretto === true && d13.motivo === "identico", JSON.stringify(d13));
+corretto("QRY-08b", "colonne numeriche proiettate in ordine INVERTITO non passano piu': i valori non combaciano",
+  d13.corretto === false && d13.motivo === "valori_diversi", JSON.stringify(d13));
 
 // ---- QRY-09: alias diversi, stessi valori: DEVE passare (invariante 3)
 const d14 = await confronta(ris(["paese", "quanti"], [["IT", 3]]), ris(["nazione", "totale"], [["IT", 3]]));

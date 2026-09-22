@@ -150,11 +150,35 @@ class IstruzioneDoppia {
     return risultatoEsecuzione(this.esegui(argomenti));
   }
 
+  /**
+   * Il risultato GREZZO: i valori in ordine di SELECT, non ricostruiti
+   * dall'oggetto. La differenza conta esattamente dove serve: con due colonne
+   * omonime (`SELECT s.id, v.id`) l'oggetto ne ha UNA sola, e ricomporre le
+   * posizioni leggendo `riga[nome]` restituirebbe due volte lo stesso valore —
+   * cioè il difetto dell'app, riprodotto dentro lo strumento che dovrebbe
+   * misurarlo. node:sqlite ha `setReturnArrays`, che dà i valori veri.
+   */
   executeForRawResultSync(...argomenti) {
-    const esito = this.esegui(argomenti);
+    if (this.finalizzata) throw new Error("Istruzione già finalizzata.");
+    const parametri = normalizzaParametri(argomenti);
+    const colonne = this.nomiColonne();
+    if (colonne.length === 0) {
+      const esito = this.esegui(argomenti);
+      return risultatoEsecuzione({ ...esito, righe: [] });
+    }
+    this.istruzione.setReturnArrays(true);
+    let righe;
+    try {
+      righe = this.istruzione.all(...argomentiBind(parametri)).map((r) => r.slice());
+    } finally {
+      this.istruzione.setReturnArrays(false);
+    }
+    const contatori = this.basedati.contatori();
     return risultatoEsecuzione({
-      ...esito,
-      righe: esito.righe.map((r) => esito.colonne.map((c) => r[c])),
+      colonne,
+      righe,
+      changes: contatori.changes,
+      lastInsertRowId: contatori.lastInsertRowId,
     });
   }
 

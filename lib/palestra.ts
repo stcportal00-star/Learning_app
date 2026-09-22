@@ -117,11 +117,38 @@ export function versioneMotore(): string {
  * che la restituisce come `errore_sql` con il messaggio del motore. L'utente
  * legge perché, e la palestra resta intatta.
  */
+/**
+ * Una query, letta com'è: i nomi delle colonne li dichiara il motore, i valori
+ * arrivano per posizione.
+ *
+ * Prima si faceva `Object.keys(righe[0])`, e un oggetto JavaScript non può
+ * avere due chiavi uguali. Le conseguenze erano tre, tutte silenziose:
+ * `SELECT s.id, v.id` in un JOIN perdeva metà del risultato e teneva il valore
+ * dell'ULTIMA colonna; `SELECT 2 AS "2", 1 AS "1"` veniva RIORDINATO, perché
+ * le chiavi intere di un oggetto vengono prima; e con zero righe si
+ * dichiaravano zero colonne, così un risultato vuoto sembrava avere la forma
+ * di qualunque altro. Su quei risultati falsati girava `verifica()`, cioè
+ * l'invariante 3 — «si confrontano i RISULTATI» — e una risposta sbagliata
+ * poteva passare per giusta.
+ */
+async function interroga(
+  d: SQLite.SQLiteDatabase,
+  sql: string
+): Promise<{ colonne: string[]; righe: Riga[] }> {
+  const istruzione = await d.prepareAsync(sql);
+  try {
+    const risultato = await istruzione.executeForRawResultAsync<Record<string, unknown>>();
+    return {
+      colonne: await istruzione.getColumnNamesAsync(),
+      righe: (await risultato.getAllAsync()) as unknown as Riga[],
+    };
+  } finally {
+    await istruzione.finalizeAsync();
+  }
+}
+
 export async function esegui(sql: string): Promise<{ colonne: string[]; righe: Riga[] }> {
-  const d = await apriPalestra();
-  const righe = await d.getAllAsync<Record<string, unknown>>(sql);
-  const colonne = righe.length ? Object.keys(righe[0]) : [];
-  return { colonne, righe: righe.map((r) => colonne.map((c) => r[c])) };
+  return interroga(await apriPalestra(), sql);
 }
 
 /**
@@ -148,9 +175,10 @@ export async function eseguiConPreparazione(
     // come l'originale. Senza, la risposta dell'utente potrebbe alterare gli
     // indici appena creati e falsare il confronto con la soluzione.
     await d.execAsync("PRAGMA query_only = ON");
-    const righe = await d.getAllAsync<Record<string, unknown>>(sql);
-    const colonne = righe.length ? Object.keys(righe[0]) : [];
-    return { colonne, righe: righe.map((r) => colonne.map((c) => r[c])) };
+    // `await` obbligatorio: senza, il `finally` qui sotto chiuderebbe il
+    // database mentre la query è ancora in volo, e la copia temporanea
+    // sparirebbe sotto i piedi di chi la sta leggendo.
+    return await interroga(d, sql);
   } finally {
     await d.closeAsync();
     if (copia.exists) copia.delete();
