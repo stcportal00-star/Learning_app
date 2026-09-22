@@ -35,6 +35,34 @@ plausibile finché non è misurata su più corse.
 — `percorso-12.apk`, più le otto schermate del test di fumo. È la prima che
 contiene `LIB-06` e `HLC-02` corretti; `apk-11` e `apk-9` no.
 
+### Come si installa, sul telefono e sul tablet
+
+Gli stessi passi sui due dispositivi: è lo stesso APK, ed è la stessa chiave di
+firma, quindi il secondo dispositivo non è un caso a parte.
+
+1. Sul dispositivo, apri la pagina della release qui sopra. Il repository è
+   privato: serve essere entrati in GitHub con il tuo account, altrimenti il
+   collegamento dà 404 e sembra un errore di indirizzo.
+2. Tocca `percorso-12.apk` e scaricalo.
+3. Apri il file scaricato (dalla notifica di download o da File → Download).
+   Android chiede il permesso **«Installa app sconosciute»** per l'app da cui
+   stai aprendo il file — browser o gestore file: concedilo a QUELLA app, una
+   volta sola.
+4. Installa. Al primo avvio l'app carica 381 contenuti nel database locale:
+   sull'emulatore sono 3 secondi, sul telefono conta qualche secondo in più.
+5. Se chiede il permesso per le notifiche, concedilo: servono ai promemoria
+   dei blocchi di studio. Tutto il resto funziona anche senza.
+
+**Gli aggiornamenti si installano sopra**, senza perdere niente, perché la
+chiave di firma è sempre la stessa (è la ragione per cui la release privata
+`firma` non va mai toccata). **Non disinstallare l'app per aggiornarla**:
+disinstallare cancella il registro eventi, cioè tutto quello che hai fatto.
+
+Per la biblioteca aperta: il workflow `biblioteca` (avvio manuale da Actions)
+produce `biblioteca.zip`. Si scarica sul dispositivo, si estrae con l'app File,
+poi nella scheda Libreria si tocca «Importa biblioteca» e si selezionano
+INSIEME `manifesto.json` e i PDF.
+
 ### Il fumo del build 12 è fallito una volta, e non era l'app
 
 Primo tentativo: «la schermata Oggi non è comparsa in 90 secondi». Secondo
