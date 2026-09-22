@@ -26,11 +26,20 @@ export default function Biblioteca() {
    * volume è comunque già leggibile e sale al primo rientro.
    */
   async function aggiungi() {
-    const v = await importaPdf();
-    if (!v) return;
-    await ricarica();
-    Alert.alert("Aggiunto", `${v.titolo}\nOra è leggibile offline. La copia remota parte da sé.`);
-    void caricaVolumeInNuvola(v.id).then(ricarica).catch(() => undefined);
+    // LIB-07: senza questo catch un guasto dell'importazione — selettore che
+    // non risponde, copia che non riesce, disco pieno — non produceva NIENTE
+    // sullo schermo. L'utente tocca «Aggiungi PDF», non succede niente, e non
+    // c'è modo di sapere se il file è troppo grande o se l'app è rotta.
+    try {
+      const v = await importaPdf();
+      if (!v) return;
+      await ricarica();
+      Alert.alert("Aggiunto", `${v.titolo}\nOra è leggibile offline. La copia remota parte da sé.`);
+      void caricaVolumeInNuvola(v.id).then(ricarica).catch(() => undefined);
+    } catch (e) {
+      Alert.alert("Non aggiunto",
+        "Il file non è entrato nella biblioteca: " + String(e));
+    }
   }
 
   async function scarica(v: Volume) {

@@ -419,7 +419,14 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
   ok("H20 LIB-08 l'annullamento produce comunque il messaggio di successo", contiene("lib/palestra.ts", "if (scelta.canceled || !scelta.assets?.length) return { collegati: 0, senzaFile: 0 };") && contiene("app/(tabs)/libreria.tsx", "volumi ora disponibili offline."));
   ok("H21 LIB-08 collegati++ non guarda le righe toccate dall'UPDATE", /await registra\("biblioteca", v\.codice, "aggiorna",[\s\S]*?collegati\+\+;/.test(sorgente("lib/palestra.ts")));
   ok("H22 LIB-08 JSON.parse del manifesto non e' protetto", contiene("lib/palestra.ts", "const voci = JSON.parse(await new File(manifesto.uri).text())"));
-  ok("H23 LIB-07 aggiungi() non ha catch", !/async function aggiungi\(\)[\s\S]*?catch/.test(sorgente("app/(tabs)/libreria.tsx").split("async function daRelease")[0]));
+  // Era "H23 LIB-07 aggiungi() non ha catch". Corretto: verdetto rovesciato.
+  // Un rosso qui adesso vuol dire che il catch e' stato tolto, e con lui
+  // l'unico segnale che l'utente riceve quando l'importazione non riesce.
+  {
+    const corpo = sorgente("app/(tabs)/libreria.tsx").split("async function scarica")[0];
+    ok("H23 LIB-07 (corretto) aggiungi() intercetta il guasto e lo dice",
+      /async function aggiungi\(\)[\s\S]*?catch \(e\)[\s\S]*?Alert\.alert\("Non aggiunto"/.test(corpo));
+  }
 
   // STU-04: due definizioni diverse di "aperto".
   ok("H24 STU-04 Studio esclude ogni esercizio mai risolto", contiene("app/(tabs)/studio.tsx", "AND NOT EXISTS (SELECT 1 FROM tentativi t WHERE t.esercizio_id=e.id AND t.esito='corretto')"));
