@@ -112,7 +112,7 @@
  * Subito dopo lib/db.ts e' stato riportato com'era (`git checkout --`).
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -1083,6 +1083,7 @@ ancora("LIB chiave della lista", "app/(tabs)/libreria.tsx", "key={colonne}");
 ancora("LIB avviso non scaricato", "app/(tabs)/libreria.tsx", '"Non ancora sul dispositivo"');
 ancora("LIB esito di apriVolume ignorato", "app/(tabs)/libreria.tsx", "onPress: () => { void apriVolume(item); }");
 ancora("LIB conteggio annunciato", "app/(tabs)/libreria.tsx", "`${r.collegati} volumi ora disponibili offline.`");
+ancora("LIB rimozione solo del file per la biblioteca aperta", "app/(tabs)/libreria.tsx", '{ text: "Rimuovi il file scaricato", style: "destructive" as const, onPress: togli }');
 ancora("LIB ricarica dipende dal filtro", "app/(tabs)/libreria.tsx", "}, [filtro]);");
 
 /** Copia della macchina a stati di app/(tabs)/libreria.tsx. */
@@ -1154,7 +1155,11 @@ function ModelloLibreria(p) {
               "Non ancora sul dispositivo",
               "Importa la biblioteca dalla release di GitHub, oppure aggiungi il PDF a mano."
             ),
-      pressioneLunga: () =>
+      pressioneLunga: () => {
+        const togli = async () => {
+          await p.rimuoviVolume(item.id);
+          await ricarica();
+        };
         Avviso.alert(item.titolo, undefined, [
           ...(item.file_locale
             ? [
@@ -1166,16 +1171,17 @@ function ModelloLibreria(p) {
                 },
               ]
             : []),
-          {
-            text: "Rimuovi",
-            style: "destructive",
-            onPress: async () => {
-              await p.rimuoviVolume(item.id);
-              await ricarica();
-            },
-          },
+          // Un volume della biblioteca aperta non si cancella: la sua voce di
+          // catalogo nasce una volta sola e non tornerebbe. Qui si puo' solo
+          // liberare il file scaricato, e se non c'e' non si offre niente.
+          ...(item.origine === "manuale"
+            ? [{ text: "Rimuovi", style: "destructive", onPress: togli }]
+            : item.file_locale
+              ? [{ text: "Rimuovi il file scaricato", style: "destructive", onPress: togli }]
+              : []),
           { text: "Annulla", style: "cancel" },
-        ]),
+        ]);
+      },
     })),
   };
 }
@@ -1211,7 +1217,7 @@ ok("E7 toccare un volume non scaricato apre l'avviso e NON naviga", ultimoAvviso
 
 // --- pressione lunga su un volume non scaricato: due soli pulsanti
 await tocca(libreriaPrima, () => primo.pressioneLunga());
-ok("E8 la pressione lunga su un volume non scaricato offre solo Rimuovi e Annulla", ultimoAvviso().pulsanti.map((b) => b.text).join(",") === "Rimuovi,Annulla");
+corretto("LIB-06", "E8 la pressione lunga su un volume 'aperta' non scaricato non offre nessuna rimozione: solo Annulla", ultimoAvviso().pulsanti.map((b) => b.text).join(",") === "Annulla", ultimoAvviso().pulsanti.map((b) => b.text).join(","));
 const volumiPrimaDellAnnulla = libreriaPrima.schermo.volumi.length;
 ok("E9 'Annulla' non ha nessun gestore: non cambia nulla", pulsante(ultimoAvviso(), "Annulla").onPress === undefined && libreriaPrima.schermo.volumi.length === volumiPrimaDellAnnulla);
 
@@ -1277,22 +1283,31 @@ const volumiT4 = libreriaPrima.schermo.volumi.length;
 ok("E22 i volumi di T4 sono i 5 del contenuto", volumiT4 === 5, String(volumiT4));
 ok("E23 il PDF aggiunto a mano (trimestre nullo) non compare sotto nessun filtro", !libreriaPrima.schermo.volumi.some((v) => v.badge === "tuo file"));
 
-// --- LIB-06: rimuovere un volume della biblioteca APERTA lo cancella per sempre
+// --- LIB-06 (corretto): "Rimuovi" su un volume della biblioteca APERTA non
+// cancella piu' la voce di catalogo. Prima la cancellava, e il volume non
+// tornava piu': caricaContenuti() salta al secondo avvio, e "Importa
+// biblioteca" AGGIORNA righe esistenti, non le crea.
 const daRimuovere = libreriaPrima.schermo.volumi[0];
 await tocca(libreriaPrima, () => daRimuovere.pressioneLunga());
-await tocca(libreriaPrima, () => pulsante(ultimoAvviso(), "Rimuovi").onPress());
-ok("E24 'Rimuovi' toglie subito il volume dall'elenco", libreriaPrima.schermo.volumi.length === volumiT4 - 1);
-const eventoElimina = await base.getFirstAsync("SELECT * FROM eventi WHERE entita_id = ? AND tipo = 'elimina'", [daRimuovere.id]);
-ok("E25 la rimozione passa dal registro eventi con un evento 'elimina'", eventoElimina !== null && eventoElimina.entita === "biblioteca");
-const ricarico = await Contenuti.caricaContenuti();
-const tornato = await base.getFirstAsync("SELECT id FROM biblioteca WHERE id = ?", [daRimuovere.id]);
-difetto("LIB-06", "E26 la voce di catalogo non torna piu': caricaContenuti salta e l'eliminazione e' definitiva", ricarico.saltato === true && tornato === null);
+corretto("LIB-06", "E24 su un volume 'aperta' non scaricato la schermata non offre nessuna rimozione", pulsante(ultimoAvviso(), "Rimuovi") === undefined && pulsante(ultimoAvviso(), "Rimuovi il file scaricato") === undefined, ultimoAvviso().pulsanti.map((b) => b.text).join(","));
+ok("E24b l'elenco non e' cambiato: i volumi di T4 sono ancora tutti li'", libreriaPrima.schermo.volumi.length === volumiT4, String(libreriaPrima.schermo.volumi.length));
 
-// --- LIB-02: svuotato un trimestre, lo stato vuoto sotto filtro parla di importazione
-for (const v of [...libreriaPrima.schermo.volumi]) {
-  await tocca(libreriaPrima, () => v.pressioneLunga());
-  await tocca(libreriaPrima, () => pulsante(ultimoAvviso(), "Rimuovi").onPress());
-}
+// E se la funzione venisse chiamata lo stesso — da un altro punto dell'app o da
+// una versione futura della schermata — non deve cancellare niente lo stesso.
+const esitoSenzaFile = await Palestra.rimuoviVolume(daRimuovere.id);
+const rimastaInCatalogo = await base.getFirstAsync("SELECT id FROM biblioteca WHERE id = ?", [daRimuovere.id]);
+corretto("LIB-06", "E25 rimuoviVolume su un volume 'aperta' senza file risponde 'gia_libero' e lascia la voce in catalogo", esitoSenzaFile === "gia_libero" && rimastaInCatalogo !== null, String(esitoSenzaFile));
+const eventoElimina = await base.getFirstAsync("SELECT * FROM eventi WHERE entita_id = ? AND tipo = 'elimina'", [daRimuovere.id]);
+const ricarico = await Contenuti.caricaContenuti();
+corretto("LIB-06", "E26 nessun evento 'elimina': la voce non dipende piu' da caricaContenuti(), che infatti salta", eventoElimina === null && ricarico.saltato === true, `elimina ${JSON.stringify(eventoElimina)}, saltato ${ricarico.saltato}`);
+
+// --- LIB-02: sotto un filtro senza volumi lo stato vuoto parla di importazione.
+// Il trimestre non si svuota piu' dalla schermata (i volumi della biblioteca
+// aperta non si cancellano), quindi si svuota qui dal database: per la
+// schermata conta solo che l'elenco filtrato torni vuoto.
+await base.runAsync("DELETE FROM biblioteca WHERE trimestre = 'T4'");
+await tocca(libreriaPrima, () => libreriaPrima.schermo.chip.find((c) => c.etichetta === "Tutti").premi());
+await tocca(libreriaPrima, () => libreriaPrima.schermo.chip.find((c) => c.etichetta === "T4").premi());
 difetto("LIB-02", "E27 con il filtro T4 ormai vuoto compare il testo che invita a importare, fuorviante sotto un filtro", libreriaPrima.schermo.vuoto === true && libreriaPrima.schermo.testoVuoto.includes("Importa biblioteca"));
 await tocca(libreriaPrima, () => libreriaPrima.schermo.chip.find((c) => c.etichetta === "Tutti").premi());
 ok("E28 tornando su 'Tutti' l'elenco si ripopola", libreriaPrima.schermo.volumi.length > 40);
@@ -1331,6 +1346,31 @@ const collegatoDavvero = await base.getFirstAsync("SELECT file_locale FROM bibli
 ok("E32 il volume esistente risulta ora scaricato", collegatoDavvero.file_locale !== null);
 const fantasma = await base.getFirstAsync("SELECT id FROM biblioteca WHERE id = 'BIB-INESISTENTE'");
 difetto("LIB-08b", "E33 il conteggio annuncia 2 collegati ma uno dei due codici non esiste in biblioteca: l'UPDATE non ha toccato nulla", fantasma === null && ultimoAvviso().messaggio.startsWith("2 volumi"));
+
+// --- LIB-06: ora che un volume 'aperta' un file ce l'ha, si puo' liberare —
+// ed e' reversibile, che e' tutta la differenza con la cancellazione di prima.
+const fileDaLiberare = (await base.getFirstAsync("SELECT file_locale FROM biblioteca WHERE id = ?", [codiceEsistente])).file_locale;
+const esitoConFile = await Palestra.rimuoviVolume(codiceEsistente);
+const dopoLiberazione = await base.getFirstAsync("SELECT id, file_locale FROM biblioteca WHERE id = ?", [codiceEsistente]);
+corretto("LIB-06", "E33b liberare il file di un volume 'aperta' cancella il file dal disco ma lascia la voce in catalogo, pronta a riscaricarsi", esitoConFile === "file_liberato" && dopoLiberazione !== null && dopoLiberazione.file_locale === null && existsSync(fileURLToPath(fileDaLiberare)) === false, `${esitoConFile}, riga ${JSON.stringify(dopoLiberazione)}`);
+const ultimoEventoVolume = await base.getFirstAsync("SELECT tipo FROM eventi WHERE entita = 'biblioteca' AND entita_id = ? ORDER BY hlc DESC LIMIT 1", [codiceEsistente]);
+corretto("LIB-06", "E33c la liberazione passa dal registro eventi come 'aggiorna', non come 'elimina' (invariante 1)", ultimoEventoVolume?.tipo === "aggiorna", JSON.stringify(ultimoEventoVolume));
+
+// La prova che conta: il volume liberato TORNA. Bastano il manifesto e il PDF,
+// cioe' esattamente il gesto che con la riga cancellata non serviva a niente.
+SelettoreFile.azzera();
+avvisi.length = 0;
+SelettoreFile.programma({ percorsi: [manifesto, pdfRelease] });
+await tocca(libreriaPrima, () => libreriaPrima.schermo.daRelease());
+const riscaricato = await base.getFirstAsync("SELECT file_locale FROM biblioteca WHERE id = ?", [codiceEsistente]);
+corretto("LIB-06", "E33d il volume liberato si riscarica: 'Importa biblioteca' lo ricollega, cosa impossibile con la riga cancellata", riscaricato !== null && riscaricato.file_locale !== null, JSON.stringify(riscaricato));
+
+// il PDF aggiunto a mano invece se ne va per davvero: la sua riga non e'
+// ricostruibile da nessuna parte, e' l'unica cosa che rappresenta quel file.
+const esitoManuale = await Palestra.rimuoviVolume(importato.id);
+const manualeDopo = await base.getFirstAsync("SELECT id FROM biblioteca WHERE id = ?", [importato.id]);
+corretto("LIB-06", "E33e un PDF aggiunto a mano viene invece eliminato del tutto, riga compresa", esitoManuale === "eliminato" && manualeDopo === null, String(esitoManuale));
+corretto("LIB-06", "E33f rimuoviVolume su un id che non esiste risponde 'assente' senza scrivere niente", (await Palestra.rimuoviVolume("BIB-MAI-ESISTITO")) === "assente");
 
 // --- LIB-08c: manifesto illeggibile
 const manifestoRotto = join(radiceFinta, "manifesto-rotto.json");

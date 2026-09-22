@@ -78,14 +78,21 @@ export default function Biblioteca() {
               ? router.push({ pathname: "/lettore", params: { id: item.id } })
               : Alert.alert("Non ancora sul dispositivo",
                   "Importa la biblioteca dalla release di GitHub, oppure aggiungi il PDF a mano.")}
-            onLongPress={() =>
+            onLongPress={() => {
+              const togli = async () => { await rimuoviVolume(item.id); await ricarica(); };
               Alert.alert(item.titolo, undefined, [
                 ...(item.file_locale ? [{ text: "Apri con il visore del sistema", onPress: () => { void apriVolume(item); } }] : []),
-                { text: "Rimuovi", style: "destructive" as const,
-                  onPress: async () => { await rimuoviVolume(item.id); await ricarica(); } },
+                // Un volume della biblioteca aperta non si cancella: la sua voce di
+                // catalogo nasce una volta sola e non tornerebbe. Qui si può solo
+                // liberare il file scaricato, e se non c'è non si offre niente.
+                ...(item.origine === "manuale"
+                  ? [{ text: "Rimuovi", style: "destructive" as const, onPress: togli }]
+                  : item.file_locale
+                    ? [{ text: "Rimuovi il file scaricato", style: "destructive" as const, onPress: togli }]
+                    : []),
                 { text: "Annulla", style: "cancel" as const },
-              ])
-            }
+              ]);
+            }}
             style={{ flex: 1, borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 13 }}>
             <View style={{ flexDirection: "row", gap: 6, marginBottom: 5 }}>
               <Text style={{ fontSize: 10, fontWeight: "600",

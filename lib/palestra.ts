@@ -318,14 +318,44 @@ export async function salvaPagina(id: string, pagina: number) {
   });
 }
 
-export async function rimuoviVolume(id: string) {
+/**
+ * "Rimuovi" deve liberare spazio, non far sparire un volume per sempre.
+ *
+ * La riga di catalogo di un volume della biblioteca aperta nasce una volta
+ * sola, dentro caricaContenuti(), che al secondo avvio salta tutto perché gli
+ * esercizi ci sono già; e "Importa biblioteca" AGGIORNA righe esistenti, non
+ * le crea. Cancellare quella riga significava quindi perdere il volume per
+ * sempre, anche senza averlo mai scaricato. Per l'origine "aperta" si cancella
+ * il file e si azzera `file_locale`: il volume torna "non scaricato" e la
+ * prossima importazione lo ricollega. Un PDF aggiunto a mano invece esiste
+ * solo lì: la sua riga se ne va con lui.
+ *
+ * `ultima_pagina` resta: se il volume si riscarica, la lettura riprende da dove
+ * era. È l'unica informazione che non si potrebbe ricostruire.
+ */
+export async function rimuoviVolume(
+  id: string
+): Promise<"eliminato" | "file_liberato" | "gia_libero" | "assente"> {
   const d = database();
   const v = await d.getFirstAsync<Volume>("SELECT * FROM biblioteca WHERE id = ?", [id]);
-  if (v?.file_locale) {
+  if (!v) return "assente";
+
+  if (v.file_locale) {
     const f = new File(v.file_locale);
     if (f.exists) f.delete();
   }
+
+  if (v.origine === "aperta") {
+    if (!v.file_locale) return "gia_libero";
+    await registra("biblioteca", id, "aggiorna", { file_locale: null }, async (dd, hlc) => {
+      await dd.runAsync(
+        "UPDATE biblioteca SET file_locale = NULL, hlc = ? WHERE id = ?", [hlc, id]);
+    });
+    return "file_liberato";
+  }
+
   await registra("biblioteca", id, "elimina", {}, async (dd) => {
     await dd.runAsync("DELETE FROM biblioteca WHERE id = ?", [id]);
   });
+  return "eliminato";
 }

@@ -403,8 +403,11 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
   ok("H14 LIB-09 le altre schermate rompono a 600dp", ["app/(tabs)/note.tsx", "app/esercizi.tsx", "app/codice.tsx"].every((f) => contiene(f, "width >= 600")));
   ok("H15 LIB-09 CLAUDE.md impone un solo punto di rottura a 600dp", contiene("CLAUDE.md", "un solo punto di rottura: `useWindowDimensions()`, 600dp"));
 
-  // LIB-06: rimuovere un volume 'aperta' non si recupera piu'.
-  ok("H16 LIB-06 rimuoviVolume cancella la riga e scrive un evento 'elimina'", contiene("lib/palestra.ts", 'await registra("biblioteca", id, "elimina", {}, async (dd) => {'));
+  // LIB-06 (corretto dopo questo triage): rimuovere un volume 'aperta' non si
+  // recuperava piu'. H17 e H18 restano veri, e sono la ragione per cui la riga
+  // non si puo' cancellare; H16 ora vale solo per i PDF aggiunti a mano.
+  ok("H16 LIB-06 l'evento 'elimina' e il DELETE esistono ancora, ma solo sul ramo dei volumi aggiunti a mano", contiene("lib/palestra.ts", 'await registra("biblioteca", id, "elimina", {}, async (dd) => {') && contiene("lib/palestra.ts", 'if (v.origine === "aperta") {'));
+  ok("H16b LIB-06 il ramo 'aperta' azzera file_locale invece di cancellare la riga", contiene("lib/palestra.ts", 'UPDATE biblioteca SET file_locale = NULL, hlc = ? WHERE id = ?'));
   ok("H17 LIB-06 caricaContenuti() salta tutto se esistono gia' esercizi", contiene("lib/contenuti.ts", 'SELECT count(*) AS n FROM esercizi') && contiene("lib/contenuti.ts", "saltato: true"));
   ok("H18 LIB-06 la voce di catalogo si reinserisce solo dentro caricaContenuti()", (sorgente("lib/palestra.ts") + sorgente("app/(tabs)/libreria.tsx")).indexOf("INSERT OR IGNORE INTO biblioteca") === -1);
   ok("H19 LIB-05 l'esito di apriVolume e' scartato", contiene("app/(tabs)/libreria.tsx", "onPress: () => { void apriVolume(item); }"));

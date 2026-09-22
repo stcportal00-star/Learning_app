@@ -1200,11 +1200,14 @@ ok("N05 il payload dell'evento 'elimina' è vuoto",
   eventiRimozione.find((e) => e.tipo === "elimina").payload === "{}");
 
 const eventiPrimaN = await contaEventi();
-await P.rimuoviVolume("MAI-ESISTITO");
-difetto(
-  "IMP-32",
-  "rimuovere un id inesistente scrive comunque un evento 'elimina': il registro racconta un'eliminazione mai avvenuta",
-  (await contaEventi()) === eventiPrimaN + 1 && (await eventiDi("MAI-ESISTITO")).length === 1
+const esitoInesistente = await P.rimuoviVolume("MAI-ESISTITO");
+corretto(
+  "IMP-32/LIB-06",
+  "rimuovere un id inesistente non scrive più niente: risponde 'assente' e il registro tace",
+  esitoInesistente === "assente" &&
+    (await contaEventi()) === eventiPrimaN &&
+    (await eventiDi("MAI-ESISTITO")).length === 0,
+  `esito ${esitoInesistente}, eventi ${(await contaEventi()) - eventiPrimaN}`
 );
 
 // Il file viene cancellato PRIMA della transazione: se la transazione fallisce,
@@ -1227,14 +1230,39 @@ difetto(
 );
 await base.execAsync("DROP TRIGGER blocca_delete");
 
-// Rimuovere un volume della biblioteca APERTA cancella la voce di catalogo:
-// caricaContenuti() non la ripopolerà mai più (salta se ci sono esercizi).
-await P.rimuoviVolume("BIB-05");
-difetto(
-  "IMP-34",
-  "rimuovere un volume di dotazione ('aperta') cancella la voce di catalogo per sempre, e l'eliminazione viaggia anche verso l'altro dispositivo",
-  (await riga("BIB-05")) === null &&
-    (await eventiDi("BIB-05")).some((e) => e.tipo === "elimina")
+// Rimuovere un volume della biblioteca APERTA cancellava la voce di catalogo,
+// e caricaContenuti() non l'avrebbe ripopolata mai più (salta se ci sono già
+// esercizi): il volume era perso per sempre, sull'altro dispositivo compreso.
+// Ora "Rimuovi" su un volume di dotazione libera solo il file scaricato.
+const bib05Prima = await riga("BIB-05");
+const esitoBib05 = await P.rimuoviVolume("BIB-05");
+const bib05Dopo = await riga("BIB-05");
+corretto(
+  "IMP-34/LIB-06",
+  "rimuovere un volume di dotazione ('aperta') lascia la voce in catalogo con file_locale azzerato, e nessun 'elimina' viaggia verso l'altro dispositivo",
+  bib05Dopo !== null &&
+    bib05Dopo.file_locale === null &&
+    !(await eventiDi("BIB-05")).some((e) => e.tipo === "elimina"),
+  `esito ${esitoBib05}, riga ${JSON.stringify(bib05Dopo)}`
+);
+corretto(
+  "IMP-34b/LIB-06",
+  "l'esito dichiara che cosa è stato fatto: 'file_liberato' con un file da liberare, 'gia_libero' senza",
+  esitoBib05 === (bib05Prima.file_locale ? "file_liberato" : "gia_libero"),
+  `${esitoBib05} con file_locale ${bib05Prima.file_locale}`
+);
+corretto(
+  "IMP-34c/LIB-06",
+  "il file liberato non è più sul disco: liberare vuol dire liberare spazio",
+  !bib05Prima.file_locale || !existsSync(FS.percorsoDa(bib05Prima.file_locale)),
+  String(bib05Prima.file_locale)
+);
+const bib05Ricollegabile = await eventiDi("BIB-05");
+corretto(
+  "IMP-34d/LIB-06",
+  "la liberazione passa dal registro come 'aggiorna' (invariante 1): l'altro dispositivo vede un volume da riscaricare, non un volume sparito",
+  bib05Ricollegabile.at(-1).tipo === "aggiorna",
+  JSON.stringify(bib05Ricollegabile.map((e) => e.tipo))
 );
 
 // ================ O. COSA SUCCEDE AL FILE IMPORTATO QUANDO LO SI APRE
