@@ -693,21 +693,37 @@ function figlio(scenario, doppiAggiuntivi = {}) {
   return riportato;
 }
 
-// AVV-01, limite: palestra.db presente ma a ZERO byte (copia interrotta).
+// AVV-01 / AVV-02 (corretti): una palestra inservibile viene riconosciuta e
+// ricopiata dall'asset. Prima si guardava solo `dest.exists`, e allora un file
+// a zero byte apriva un database VUOTO e restava cosi' per sempre: il motore
+// degli esercizi moriva senza modo di ripartire dal telefono, in viaggio.
+// I tre modi in cui un file puo' esserci ed essere inutile sono provati tutti
+// e tre, in un processo figlio ciascuno, perche' la connessione di
+// lib/palestra.ts e' una variabile di modulo e vale per sempre.
 const gVuota = figlio("palestra-vuota");
-difetto("AVV-01", "palestra.db a zero byte: dest.exists e' vero, la copia non si ripete e l'apertura RIESCE su un database vuoto",
-  gVuota.apertura === "riuscita" && String(gVuota.primaQuery).includes("no such table"),
+corretto("AVV-01", "palestra.db a zero byte: il database vuoto viene riconosciuto, l'asset ricopiato, e gli esercizi girano",
+  gVuota.apertura === "riuscita" && String(gVuota.primaQuery).startsWith("riuscita") && gVuota.fileRicopiato === true,
   JSON.stringify(gVuota));
-difetto("AVV-01b", "...e lo stato e' definitivo: nessuna ricopia, nessun PRAGMA integrity_check, il secondo tentativo fallisce uguale",
-  String(gVuota.secondoTentativo).includes("no such table") && gVuota.fileRicopiato === false);
+corretto("AVV-01b", "...e il recupero regge: anche la seconda apertura trova i dati",
+  String(gVuota.secondoTentativo).startsWith("riuscito"), JSON.stringify(gVuota.secondoTentativo));
 
-// AVV-02: copia troncata a meta' e file che non e' un database.
 const gTroncata = figlio("palestra-troncata");
-difetto("AVV-02", `palestra.db troncata: l'apertura fallisce e non esiste nessun percorso di ricopia ("${gTroncata.apertura}")`,
-  String(gTroncata.apertura).includes("malformed"), JSON.stringify(gTroncata));
+corretto("AVV-02", "palestra.db troncata: l'apertura non muore piu' con 'malformed', si ricopia e riparte",
+  gTroncata.apertura === "riuscita" && String(gTroncata.primaQuery).startsWith("riuscita") && gTroncata.fileRicopiato === true,
+  JSON.stringify(gTroncata));
 const gSpazzatura = figlio("palestra-spazzatura");
-difetto("AVV-02b", `palestra.db sostituita da spazzatura: "${gSpazzatura.apertura}", e l'app non ha modo di ripartire`,
-  String(gSpazzatura.apertura).includes("not a database"), JSON.stringify(gSpazzatura));
+corretto("AVV-02b", "palestra.db sostituita da spazzatura: nemmeno 'not a database' e' piu' definitivo",
+  gSpazzatura.apertura === "riuscita" && String(gSpazzatura.primaQuery).startsWith("riuscita") && gSpazzatura.fileRicopiato === true,
+  JSON.stringify(gSpazzatura));
+
+// AVV-03: il caso che distingue una verifica vera da una che si accontenta.
+// Un database SQLite valido ma che non e' la palestra si APRE senza errori:
+// solo chi guarda dentro se ne accorge. Senza questo scenario, controllare la
+// tabella `visite` o contare `sqlite_master` sarebbe indistinguibile.
+const gAltro = figlio("palestra-altro-database");
+corretto("AVV-03", "un database valido che non e' la palestra viene riconosciuto e sostituito, non usato",
+  gAltro.apertura === "riuscita" && String(gAltro.primaQuery).startsWith("riuscita") && gAltro.fileRicopiato === true,
+  JSON.stringify(gAltro));
 
 // PRE-02: la copia e l'apertura stanno FUORI dal try di eseguiConPreparazione.
 const gOrfana = figlio("copia-orfana", {

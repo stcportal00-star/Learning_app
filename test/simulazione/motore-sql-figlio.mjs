@@ -10,6 +10,7 @@
  *   node --import ./test/banco/carica.mjs test/simulazione/motore-sql-figlio.mjs <scenario> <radice>
  */
 import { mkdirSync, writeFileSync, copyFileSync, readdirSync, truncateSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as FS from "../banco/expo-file-system.mjs";
@@ -75,6 +76,18 @@ if (scenario === "palestra-vuota") {
   // AVV-02b: non e' proprio un database.
   await conPalestraPreparata((percorso) =>
     writeFileSync(percorso, Buffer.alloc(4096, 0x41)));
+} else if (scenario === "palestra-altro-database") {
+  // AVV-03: un database SQLite VALIDO che pero' non e' la palestra. E' il caso
+  // che distingue una verifica vera ("ci sono i dati degli esercizi") da una
+  // che si accontenta ("il file si apre"): qui si apre benissimo, e non serve
+  // a niente. Senza questo scenario, controllare `visite` o `sqlite_master`
+  // sarebbe la stessa cosa, e la guardia non saprebbe dirlo.
+  await conPalestraPreparata((percorso) => {
+    const d = new DatabaseSync(percorso);
+    d.exec("CREATE TABLE appunti (id INTEGER PRIMARY KEY, testo TEXT)");
+    d.exec("INSERT INTO appunti (testo) VALUES ('non sono la palestra')");
+    d.close();
+  });
 } else if (scenario === "copia-orfana") {
   // PRE-02: la copia e l'apertura stanno fuori dal try. Se l'apertura
   // fallisce, la copia temporanea resta sul disco per sempre.

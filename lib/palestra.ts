@@ -30,24 +30,72 @@ let versioneSqlite: string | null = null;
  * È una proprietà della connessione e non del file: va richiesta a ogni
  * apertura, e questa funzione apre una volta sola per avvio.
  */
+function copiaPalestraDallAsset(dest: File): Promise<void> {
+  const asset = Asset.fromModule(require("../assets/contenuti/palestra.db"));
+  return asset.downloadAsync().then(() => {
+    if (dest.exists) dest.delete();
+    new File(asset.localUri!).copy(dest);
+  });
+}
+
+/**
+ * Il file c'è: contiene davvero la palestra?
+ *
+ * `visite` è la tabella più grande dell'asset (7217 righe) e nessun esercizio
+ * la modifica: se manca o è vuota, quel file non è la palestra, qualunque cosa
+ * dica il suo nome.
+ */
+async function palestraUsabile(d: SQLite.SQLiteDatabase): Promise<boolean> {
+  try {
+    const r = await d.getFirstAsync<{ n: number }>("SELECT count(*) AS n FROM visite");
+    return (r?.n ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function apriPalestra(): Promise<SQLite.SQLiteDatabase> {
   if (palestra) return palestra;
 
   const dir = new Directory(Paths.document, "SQLite");
   if (!dir.exists) dir.create({ intermediates: true });
   const dest = new File(dir, "palestra.db");
-  if (!dest.exists) {
-    const asset = Asset.fromModule(require("../assets/contenuti/palestra.db"));
-    await asset.downloadAsync();
-    new File(asset.localUri!).copy(dest);
+  if (!dest.exists) await copiaPalestraDallAsset(dest);
+
+  // Il file può esserci ed essere inservibile: copia interrotta al primo
+  // avvio, memoria piena, app chiusa a metà. Prima si guardava solo
+  // `dest.exists`, e allora un file a zero byte apriva un database VUOTO e
+  // restava così per sempre — il motore degli esercizi, che è la priorità di
+  // questo progetto, moriva senza modo di ripartire dal telefono, in viaggio,
+  // senza PC. Ora si apre, si verifica che i dati ci siano, e se non ci sono
+  // si ricopia l'asset e si riprova UNA volta sola: se anche la copia fresca
+  // non regge, il guasto non è del file e insistere non serve.
+  for (let tentativo = 0; tentativo < 2; tentativo++) {
+    let aperta: SQLite.SQLiteDatabase | null = null;
+    try {
+      aperta = await SQLite.openDatabaseAsync("palestra.db");
+      // Prima di qualunque altra cosa: da qui in poi la connessione non scrive più.
+      await aperta.execAsync("PRAGMA query_only = ON");
+      if (await palestraUsabile(aperta)) {
+        palestra = aperta;
+        const v = await palestra.getFirstAsync<{ v: string }>("SELECT sqlite_version() AS v");
+        versioneSqlite = v?.v ?? null;
+        return palestra;
+      }
+    } catch {
+      // "file is not a database", "database disk image is malformed": sono
+      // esattamente i casi che la ricopia ripara.
+    }
+    if (aperta) {
+      try { await aperta.closeAsync(); } catch { /* già chiusa dall'errore */ }
+    }
+    if (tentativo === 0) await copiaPalestraDallAsset(dest);
   }
 
-  palestra = await SQLite.openDatabaseAsync("palestra.db");
-  // Prima di qualunque altra cosa: da qui in poi la connessione non scrive più.
-  await palestra.execAsync("PRAGMA query_only = ON");
-  const v = await palestra.getFirstAsync<{ v: string }>("SELECT sqlite_version() AS v");
-  versioneSqlite = v?.v ?? null;
-  return palestra;
+  throw new Error(
+    "palestra.db non è utilizzabile e la copia dall'asset non l'ha riparata: " +
+    "gli esercizi SQL non possono partire."
+  );
 }
 
 /** Window functions richiedono SQLite 3.25. Va verificato sul dispositivo reale. */
