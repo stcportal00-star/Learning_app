@@ -1796,15 +1796,31 @@ await scenario("I11 CORRETTO (HLC-02): l'orologio locale assorbe il tempo del pa
     return /assorbiRemoto\s*\(/.test(readFileSync(p, "utf8"));
   });
   ok("almeno trenta sorgenti esaminate", sorgenti.length >= 30, String(sorgenti.length));
-  uguali("il chiamante e' uno solo, ed e' l'hook di sincronizzazione",
-    chiamanti.map((p) => p.replace(RADICE_PROGETTO + "/", "")), ["lib/sync/useAutoSync.ts"]);
+  // I chiamanti sono DUE, uno per ogni porta da cui entrano eventi di un altro
+  // dispositivo: i tre trasporti locali (useAutoSync) e la copia remota su
+  // Supabase (lib/nuvola/sincronia.ts). L'elenco resta esatto di proposito: un
+  // TERZO chiamante e' quasi sempre una quarta porta aperta senza accorgersene,
+  // e una porta che non assorbe l'orologio fa nascere ogni modifica successiva
+  // piu' vecchia di quelle appena ricevute (invariante 2).
+  uguali("i chiamanti sono le due sole porte da cui entrano eventi altrui",
+    chiamanti.map((p) => p.replace(RADICE_PROGETTO + "/", "")).sort(),
+    ["lib/nuvola/sincronia.ts", "lib/sync/useAutoSync.ts"]);
   ok("e assorbiRemoto passa da Orologio.ricevi, non da una copia sua",
      /orologio\.ricevi\(/.test(readFileSync(join(RADICE_PROGETTO, "lib", "db.ts"), "utf8")));
-  ok("l'assorbimento avviene PRIMA di applicare il pacchetto",
-     (() => {
-       const hook = readFileSync(join(RADICE_PROGETTO, "lib", "sync", "useAutoSync.ts"), "utf8");
-       return hook.indexOf("assorbiRemoto(") < hook.indexOf("inTransazione(");
-     })());
+  // Il confronto e' con l'INSERIMENTO degli eventi ricevuti, non con la prima
+  // inTransazione( del file: lib/nuvola/sincronia.ts ne apre una prima, per
+  // scrivere lo stato dello scambio, e un confronto con quella misurerebbe
+  // l'ordine sbagliato. Cio che deve venire dopo l'assorbimento e' l'uso degli
+  // eventi altrui, ed e' li' che si guarda.
+  for (const porta of [join("lib", "sync", "useAutoSync.ts"), join("lib", "nuvola", "sincronia.ts")]) {
+    ok(`l'assorbimento avviene PRIMA di applicare gli eventi ricevuti (${porta})`,
+       (() => {
+         const testo = readFileSync(join(RADICE_PROGETTO, porta), "utf8");
+         const assorbe = testo.indexOf("assorbiRemoto(");
+         const applica = testo.indexOf("INSERT OR IGNORE INTO eventi");
+         return assorbe >= 0 && applica >= 0 && assorbe < applica;
+       })());
+  }
 
   // Lo stesso scenario di prima, ma sul CODICE VERO: il pari ha l'ora avanti
   // di due ore, si fonde, poi si scrive in locale. Prima la scrittura locale,

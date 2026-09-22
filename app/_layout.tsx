@@ -7,11 +7,18 @@ import { apri } from "../lib/db";
 import { caricaContenuti } from "../lib/contenuti";
 import { apriPalestra, versioneMotore, supportaWindowFunctions } from "../lib/palestra";
 import { ripristina as ripristinaPromemoria } from "../lib/notifiche";
+import { useNuvola } from "../lib/nuvola/useNuvola";
 
 export default function Radice() {
   const [pronto, setPronto] = useState(false);
   const [errore, setErrore] = useState<string | null>(null);
   const [avviso, setAvviso] = useState<string | null>(null);
+  const [dispositivo, setDispositivo] = useState("");
+
+  // Lo scambio con Supabase parte da qui, appena il database è aperto: è
+  // l'unico posto montato per tutta la vita dell'app. Con la stringa vuota
+  // l'effetto dentro il gancio gira a vuoto e non tocca la rete.
+  useNuvola(pronto ? dispositivo : "");
 
   useEffect(() => {
     (async () => {
@@ -22,6 +29,7 @@ export default function Radice() {
           id = (Crypto.randomUUID()).slice(0, 8);
           await AsyncStorageLike.setItem("dispositivo_id", id);
         }
+        setDispositivo(id);
         await apri(id);
         await caricaContenuti();
         await apriPalestra();
