@@ -1,7 +1,7 @@
 # NOTE-BUILD — prima sessione, 21 settembre 2026
 
 Estrazione del progetto, APK firmato, test di fumo superato su emulatore
-Android 14. Dodici build. Fino al quinto ogni fallimento aveva una causa
+Android 14. Tredici build. Fino al quinto ogni fallimento aveva una causa
 diversa dal precedente; dal sesto la stessa causa si ripete e non è nell'app.
 Gli ultimi portano le correzioni trovate dal collaudo.
 
@@ -19,10 +19,11 @@ Gli ultimi portano le correzioni trovate dal collaudo.
 | 10 | **annullato** | l'ho cancellato io, di nuovo: un push su `lib/**` |
 | 11 | **riuscito** | — release `apk-11`, con le correzioni del collaudo |
 | 12 | fumo fallito, poi **riuscito** al secondo tentativo | l'emulatore, non l'app: vedi sotto — release `apk-12` |
+| 13 | **riuscito** al primo tentativo | — release `apk-13`, con `NOT-07` corretto e le prove dentro `verifica.sh` |
 
-Stato del test di fumo al build 12: schermata Oggi in **3 secondi**, tutte e
+Stato del test di fumo al build 13: schermata Oggi in **3 secondi**, tutte e
 cinque le rotte percorse, lettore PDF che apre il documento di prova e ne conta
-le **2 pagine in 4 secondi**, riavvio a freddo superato. Firma in modalità
+le **2 pagine in 2 secondi**, riavvio a freddo superato. Firma in modalità
 **automatica**, impronta SHA-256
 `CF:5C:B0:6D:24:F6:DE:44:AF:FC:4B:76:AD:09:17:41:A1:26:B3:29:20:6F:18:1E:27:B3:69:78:57:1C:C9:09`.
 
@@ -31,9 +32,10 @@ correzioni: è un campione solo, su un emulatore condiviso, e una spiegazione
 plausibile — `caricaContenuti()` che ora passa da `inTransazione()` — resta
 plausibile finché non è misurata su più corse.
 
-**APK da installare: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-12>**
-— `percorso-12.apk`, più le otto schermate del test di fumo. È la prima che
-contiene `LIB-06` e `HLC-02` corretti; `apk-11` e `apk-9` no.
+**APK da installare: <https://github.com/stcportal00-star/Learning_app/releases/tag/apk-13>**
+— `percorso-13.apk`, più le otto schermate del test di fumo. È la prima che
+contiene tutti e tre i difetti critici corretti — `LIB-06`, `HLC-02`, `NOT-07`.
+`apk-12` ha i primi due, `apk-11` e `apk-9` nessuno.
 
 ### Come si installa, sul telefono e sul tablet
 
@@ -43,7 +45,7 @@ firma, quindi il secondo dispositivo non è un caso a parte.
 1. Sul dispositivo, apri la pagina della release qui sopra. Il repository è
    privato: serve essere entrati in GitHub con il tuo account, altrimenti il
    collegamento dà 404 e sembra un errore di indirizzo.
-2. Tocca `percorso-12.apk` e scaricalo.
+2. Tocca `percorso-13.apk` e scaricalo.
 3. Apri il file scaricato (dalla notifica di download o da File → Download).
    Android chiede il permesso **«Installa app sconosciute»** per l'app da cui
    stai aprendo il file — browser o gestore file: concedilo a QUELLA app, una
