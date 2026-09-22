@@ -213,6 +213,40 @@ for rilevanza, atteso in ((0, 0), (1, 17), (5, 50), (11.2, 69), (10_000, 100), (
         riga["rilevanza"] == float(rilevanza),
         "atteso %r, ottenuto %r" % (float(rilevanza), riga["rilevanza"]))
 
+# ------------------------------------------- 5ter. doppioni per titolo
+
+# Nella prima corsa vera erano 17 su 80: lo stesso articolo da due archivi ha
+# due `chiave` diverse, e la setacciatura della rassegna deduplica per chiave.
+# Sullo schermo si vedrebbe due volte.
+prova("titoli uguali a meno di punteggiatura e maiuscole",
+      pubblica.titolo_normale("DuckDB: A Deep Dive!"),
+      pubblica.titolo_normale("duckdb  a deep  dive"))
+prova_vero("titoli diversi restano diversi",
+           pubblica.titolo_normale("Studio A") != pubblica.titolo_normale("Studio B"))
+prova("un titolo vuoto si riduce a niente", pubblica.titolo_normale(None), "")
+
+_voci = [
+    {"chiave": "a", "titolo": "DuckDB: A Deep Dive", "abstract": "corto", "rilevanza": 3},
+    {"chiave": "b", "titolo": "duckdb  a deep  dive!", "abstract": "molto piu lungo", "rilevanza": 2},
+    {"chiave": "c", "titolo": "Altro studio", "rilevanza": 5},
+    {"chiave": "d", "titolo": "DuckDB: A Deep Dive", "url_pdf": "x", "abstract": "", "rilevanza": 1},
+    {"chiave": "e", "titolo": "", "rilevanza": 1},
+]
+_r = {}
+_tenute = pubblica.senza_doppioni(_voci, _r)
+prova("fra tre copie ne resta una", [v["chiave"] for v in _tenute], ["c", "d", "e"])
+prova("e il conto dei doppioni è esatto", _r.get("doppioni"), 2)
+prova_vero("vince chi ha il PDF, non chi ha il sommario più lungo",
+           any(v["chiave"] == "d" for v in _tenute),
+           "il criterio è: prima il PDF, poi il sommario, poi la rilevanza")
+prova_vero("una voce senza titolo non viene buttata",
+           any(v["chiave"] == "e" for v in _tenute),
+           "senza titolo non si può confrontare: buttarla sarebbe peggio del doppione")
+prova("l'ordine di partenza non si perde",
+      [v["chiave"] for v in pubblica.senza_doppioni(
+          [{"chiave": "z", "titolo": "Z"}, {"chiave": "y", "titolo": "Y"}], {})],
+      ["z", "y"])
+
 # ------------------------------------- 5bis. il cancello dell'orario
 
 # È la verifica che protegge il requisito vero: «alle otto, ora mia». Un

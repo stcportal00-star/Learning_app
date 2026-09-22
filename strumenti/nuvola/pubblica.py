@@ -135,6 +135,49 @@ def punteggio_da(rilevanza):
     return int(round(100.0 * r / (r + MEZZO_PUNTO)))
 
 
+def titolo_normale(titolo):
+    """
+    Il titolo ridotto all'osso per confrontarlo: minuscole, senza punteggiatura
+    e senza spazi doppi. Serve perché lo stesso articolo arriva da archivi
+    diversi con la stessa forma ma non con gli stessi byte — un'entità HTML,
+    un trattino lungo al posto di uno corto, due spazi.
+    """
+    return re.sub(r"[^a-z0-9]+", " ", (titolo or "").lower()).strip()
+
+
+def senza_doppioni(voci, rapporto):
+    """
+    Lo stesso articolo pubblicato da due archivi ha due `chiave` diverse, e la
+    setacciatura della rassegna deduplica per chiave: i doppioni le passano
+    sotto. Nella prima corsa vera erano diciassette su ottanta, e sullo schermo
+    si vedrebbero due volte.
+
+    Fra due copie vince quella con più da leggere: prima chi ha un PDF, poi chi
+    ha il sommario più lungo, poi la più rilevante. È lo stesso criterio che
+    `catalogo.py` usa quando le chiavi coincidono, applicato al titolo.
+    """
+    def pregio(v):
+        return (bool(v.get("url_pdf")), len(v.get("abstract") or ""),
+                float(v.get("rilevanza") or 0))
+
+    migliori = {}
+    for v in voci:
+        chiave = titolo_normale(v.get("titolo"))
+        if not chiave:
+            # Senza titolo non si può confrontare: passa, e ci penserà la
+            # chiave della rassegna. Buttarla sarebbe peggio del doppione.
+            migliori[("senza-titolo", v["chiave"])] = v
+            continue
+        if chiave not in migliori or pregio(v) > pregio(migliori[chiave]):
+            migliori[chiave] = v
+    scartati = len(voci) - len(migliori)
+    if scartati:
+        rapporto["doppioni"] = rapporto.get("doppioni", 0) + scartati
+    # L'ordine di partenza non si perde: si rimettono in fila come erano.
+    tenute = set(id(v) for v in migliori.values())
+    return [v for v in voci if id(v) in tenute]
+
+
 def riga_articolo(v, testo, rapporto):
     """Da una voce del catalogo alla riga di `percorso.articoli`."""
     autori = [a for a in (v.get("autori") or []) if a][:12]
@@ -308,6 +351,9 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     nuove = [v for v in catalogo if isinstance(v, dict) and v.get("chiave") not in gia]
     # Le più rilevanti per prime: se il tetto taglia, taglia le ultime.
     nuove.sort(key=lambda v: -float(v.get("rilevanza") or 0))
+    # I doppioni si tolgono PRIMA del tetto: altrimenti il tetto conta due
+    # volte la stessa voce e lascia fuori qualcosa che non c'è ancora.
+    nuove = senza_doppioni(nuove, rapporto)
     nuove = nuove[: tetti["articoli"]]
     rapporto["candidate"] = len(nuove)
 
@@ -448,6 +494,7 @@ def scrivi_rapporto(cartella, rapporto):
         "",
         "Già in archivio  : %d" % rapporto["gia_in_archivio"],
         "Candidate        : %d" % rapporto["candidate"],
+        "Doppioni tolti   : %d" % rapporto.get("doppioni", 0),
         "Articoli scritti : %d" % rapporto["articoli"],
         "  con testo      : %d" % rapporto["con_testo"],
         "PDF depositati   : %d" % rapporto["pdf"],
@@ -486,6 +533,7 @@ def principale(argv=None):
         "manuali": 0,
         "volumi": 0,
         "eventi": 0,
+        "doppioni": 0,
         "falliti": [],
         "tempo_scaduto": False,
     }
