@@ -1,0 +1,477 @@
+#!/usr/bin/env python3
+"""
+Porta la rassegna del giorno dentro Supabase, nella forma che l'app sa leggere.
+
+Questo è il punto in cui un catalogo di collegamenti diventa qualcosa da
+studiare. La differenza sta tutta in due colonne: `articoli.testo`, che tiene
+il TESTO e non l'indirizzo, e `biblioteca.pdf_path`, che dice dove stanno i
+byte nel deposito. Senza la prima, in metropolitana non si legge niente; senza
+la seconda, un PDF trovato stanotte resta su un server che domani risponde 404.
+
+Tre uscite, tutte nella stessa corsa:
+  1. le righe di `percorso.articoli` e `percorso.biblioteca` (la proiezione,
+     che serve a questa conduttura per sapere cosa ha già pubblicato);
+  2. i byte dei PDF nel bucket `biblioteca`;
+  3. le righe di `percorso.eventi` — ed è questa la parte che conta. L'app non
+     legge le tabelle: legge il registro e proietta. Scrivere gli eventi
+     significa che la rassegna arriva sul telefono dalla stessa porta da cui
+     arriva una nota scritta sul tablet, senza una seconda strada da mantenere.
+
+Lo stato «cosa ho già pubblicato» NON è un file: è Supabase stesso. Si chiede
+l'elenco delle chiavi già presenti e si pubblica la differenza. Un file di
+stato in più sarebbe una cosa in più che può disallinearsi.
+"""
+import argparse
+import json
+import os
+import re
+import sys
+import time
+import hashlib
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from cliente import Nuvola, ErroreNuvola, UTENTE  # noqa: E402
+from estrattore import (  # noqa: E402
+    scarica,
+    e_pdf,
+    impronta,
+    testo_da_html,
+    riassunto,
+    ErroreEstrazione,
+)
+
+# L'identificativo di dispositivo della conduttura. Deve stare nel formato
+# dell'HLC dell'app, che divide la stringa sui trattini: niente trattini qui.
+DISPOSITIVO = "rassegna"
+
+# Tetti. Esistono perché una corsa senza limiti si mangia il job: il passo di
+# ricerca delle copie accessibili l'ha già fatto una volta, e con
+# continue-on-error non se n'era accorto nessuno.
+MASSIMO_ARTICOLI = 80
+MASSIMO_PDF = 8
+MINUTI = 20
+BYTE_PER_FILE = 60 * 1024 * 1024
+
+
+class Orologio:
+    """
+    L'HLC della conduttura, nello stesso formato di lib/hlc.ts:
+    <12 esadecimali di millisecondi>-<4 esadecimali di contatore>-<dispositivo>
+
+    Serve un orologio vero e non un contatore qualunque: l'app risolve i
+    conflitti confrontando gli HLC, e un timbro inventato più basso di quelli
+    del telefono perderebbe ogni confronto pur essendo successivo.
+    """
+
+    def __init__(self, dispositivo=DISPOSITIVO, ms=None):
+        self.dispositivo = dispositivo
+        self.ms = ms if ms is not None else int(time.time() * 1000)
+        self.contatore = 0
+
+    def adesso(self):
+        ora = int(time.time() * 1000)
+        if ora > self.ms:
+            self.ms, self.contatore = ora, 0
+        else:
+            self.contatore += 1
+        return "%012x-%04x-%s" % (self.ms, self.contatore, self.dispositivo)
+
+
+def codice_stabile(prefisso, seme):
+    """
+    Una chiave corta, deterministica e sicura da usare come nome di file.
+    Deterministica perché la stessa voce, ritrovata domani da un altro
+    archivio, deve aggiornare la riga di ieri invece di crearne una seconda.
+    """
+    return "%s-%s" % (prefisso, hashlib.sha1(seme.encode("utf-8")).hexdigest()[:16])
+
+
+def adesso_iso():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def data_iso(valore):
+    """Le fonti danno 2026-09-21, a volte con l'ora, a volte niente."""
+    if not valore:
+        return None
+    testo = str(valore).strip()
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", testo):
+        return testo + "T00:00:00+00:00"
+    try:
+        return datetime.fromisoformat(testo.replace("Z", "+00:00")).isoformat()
+    except ValueError:
+        return None
+
+
+def carica_json(percorso, difetto):
+    try:
+        with open(percorso, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return difetto
+
+
+# --------------------------------------------------------------- articoli
+
+
+def riga_articolo(v, testo, rapporto):
+    """Da una voce del catalogo alla riga di `percorso.articoli`."""
+    autori = [a for a in (v.get("autori") or []) if a][:12]
+    return {
+        "chiave": v["chiave"],
+        "titolo": (v.get("titolo") or "(senza titolo)")[:2000],
+        "url": v.get("url") or v.get("url_pdf") or ("chiave:" + v["chiave"]),
+        "url_pdf": v.get("url_pdf"),
+        "autori": autori,
+        "fonte": v.get("fonte"),
+        "abstract": (v.get("abstract") or None),
+        "testo": testo,
+        "tema_slug": v.get("tema_slug"),
+        "trimestre": v.get("trimestre"),
+        "licenza": v.get("licenza"),
+        "pubblicato_a": data_iso(v.get("data")),
+        # `rilevanza` è un numero fra 0 e qualche unità; la colonna è smallint.
+        "punteggio": max(0, min(32000, int(round(float(v.get("rilevanza") or 0) * 100)))),
+        "raccolto_a": rapporto["adesso"],
+    }
+
+
+def payload_articolo(riga):
+    """
+    Il payload dell'evento porta le colonne della tabella LOCALE dell'app, che
+    non è identica a quella remota: `autori` lì è testo, non un elenco.
+
+    Porta TUTTI i campi, non solo quelli nuovi: con un payload parziale la
+    proiezione sul telefono non può creare la riga (mancano le colonne
+    obbligatorie) e la salta in silenzio.
+    """
+    return {
+        "titolo": riga["titolo"],
+        "autori": ", ".join(riga["autori"]) or None,
+        "fonte": riga["fonte"],
+        "url": riga["url"],
+        "url_pdf": riga["url_pdf"],
+        "abstract": riga["abstract"],
+        "testo": riga["testo"],
+        "tema_slug": riga["tema_slug"],
+        "trimestre": riga["trimestre"],
+        "licenza": riga["licenza"],
+        "pubblicato_a": riga["pubblicato_a"],
+        "raccolto_a": riga["raccolto_a"],
+        "letto": 0,
+        "salvato": 0,
+    }
+
+
+def payload_volume(riga):
+    """Le colonne della tabella `biblioteca` locale. `file_locale` MAI: è un
+    percorso del telefono e su un altro dispositivo non significa niente."""
+    return {
+        "titolo": riga["titolo"],
+        "autore": riga.get("autore"),
+        "tema_slug": riga.get("tema_slug"),
+        "trimestre": riga.get("trimestre"),
+        "origine": riga.get("origine", "aperta"),
+        "licenza": riga.get("licenza"),
+        "url": riga.get("url"),
+        "formato": riga.get("formato", "pdf"),
+        "byte": riga.get("byte"),
+        "sha256": riga.get("sha256"),
+        "aggiunto_a": riga["aggiunto_a"],
+        "codice": riga["codice"],
+        "pdf_path": riga["pdf_path"],
+        "nota": riga.get("nota"),
+    }
+
+
+def evento(orologio, entita, entita_id, tipo, payload):
+    hlc = orologio.adesso()
+    return {
+        # Stessa forma dell'id costruito da lib/db.ts: è ciò che permette la
+        # deduplicazione fra conduttura e telefono senza un accordo in più.
+        "id": hlc + ":" + entita_id,
+        "hlc": hlc,
+        "dispositivo_id": DISPOSITIVO,
+        "entita": entita,
+        "entita_id": entita_id,
+        "tipo": tipo,
+        "payload": payload,
+        "sorgente": "conduttura",
+    }
+
+
+# ------------------------------------------------------------------- testo
+
+
+def testo_della_voce(v, vie, rapporto, scadenza):
+    """
+    Prova a portare a casa il testo. In ordine: la via d'accesso trovata dal
+    ricercatore, poi l'url_pdf, poi la pagina della voce.
+
+    Restituisce (testo, pdf) dove `pdf` è (dati, url) se ciò che è arrivato è
+    davvero un PDF. Il Content-Type non decide niente: diversi archivi
+    rispondono application/pdf con dentro una pagina di login.
+    """
+    candidati = []
+    via = vie.get(v["chiave"])
+    if via and via.get("url"):
+        candidati.append(via["url"])
+    if v.get("url_pdf"):
+        candidati.append(v["url_pdf"])
+    if v.get("url"):
+        candidati.append(v["url"])
+
+    visti = set()
+    for url in candidati:
+        if not url or url in visti:
+            continue
+        visti.add(url)
+        if time.time() > scadenza:
+            rapporto["tempo_scaduto"] = True
+            return None, None
+        try:
+            dati, _tipo = scarica(url, massimo_byte=BYTE_PER_FILE, timeout=25)
+        except ErroreEstrazione as e:
+            rapporto["falliti"].append("%s: %s" % (url[:90], str(e)[:120]))
+            continue
+        if e_pdf(dati):
+            return None, (dati, url)
+        try:
+            testo = testo_da_html(dati)
+        except Exception as e:  # noqa: BLE001 — un parser che esplode su una
+            # pagina malformata non deve poter fermare l'intera rassegna.
+            rapporto["falliti"].append("%s: estrazione fallita (%s)" % (url[:90], str(e)[:80]))
+            continue
+        # Sotto i quattrocento caratteri non è un articolo: è un muro di
+        # cookie, o una pagina che dice «abilita JavaScript».
+        if len(testo) >= 400:
+            return testo, None
+    return None, None
+
+
+# ------------------------------------------------------------------ corsa
+
+
+def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
+    catalogo = carica_json(os.path.join(cartella, "catalogo.json"), [])
+    trovati = carica_json(os.path.join(cartella, "trovati.json"), [])
+    vie = {}
+    for t in trovati if isinstance(trovati, list) else []:
+        if isinstance(t, dict) and t.get("chiave"):
+            vie[t["chiave"]] = t
+
+    orologio = Orologio()
+    scadenza = time.time() + tetti["minuti"] * 60
+
+    # Lo stato: le chiavi già pubblicate. Una colonna sola, qualche migliaio di
+    # righe: costa meno di qualunque file di stato da tenere allineato.
+    gia = set()
+    for r in nuvola.seleziona("articoli", "select=chiave", massimo=20000):
+        if r.get("chiave"):
+            gia.add(r["chiave"])
+    rapporto["gia_in_archivio"] = len(gia)
+
+    nuove = [v for v in catalogo if isinstance(v, dict) and v.get("chiave") not in gia]
+    # Le più rilevanti per prime: se il tetto taglia, taglia le ultime.
+    nuove.sort(key=lambda v: -float(v.get("rilevanza") or 0))
+    nuove = nuove[: tetti["articoli"]]
+    rapporto["candidate"] = len(nuove)
+
+    righe_articoli, righe_volumi, eventi = [], [], []
+    pdf_presi = 0
+
+    for v in nuove:
+        if time.time() > scadenza:
+            rapporto["tempo_scaduto"] = True
+            break
+
+        testo, pdf = (None, None)
+        if pdf_presi < tetti["pdf"] or not v.get("url_pdf"):
+            testo, pdf = testo_della_voce(v, vie, rapporto, scadenza)
+
+        if pdf and pdf_presi < tetti["pdf"]:
+            dati, url = pdf
+            codice = codice_stabile("RAS", v["chiave"])
+            percorso = "rassegna/%s.pdf" % codice
+            try:
+                nuvola.carica_file(percorso, dati, "application/pdf")
+            except ErroreNuvola as e:
+                rapporto["falliti"].append("deposito %s: %s" % (codice, str(e)[:140]))
+                percorso = None
+            if percorso:
+                pdf_presi += 1
+                riga = {
+                    "codice": codice,
+                    "titolo": (v.get("titolo") or "(senza titolo)")[:2000],
+                    "autore": ", ".join((v.get("autori") or [])[:3]) or v.get("editore"),
+                    "tema_slug": v.get("tema_slug"),
+                    "trimestre": v.get("trimestre"),
+                    "origine": "aperta",
+                    "licenza": v.get("licenza") or "da verificare sulla scheda",
+                    "url": url,
+                    "formato": "pdf",
+                    "byte": len(dati),
+                    "sha256": impronta(dati),
+                    "pdf_path": percorso,
+                    "nota": riassunto(v.get("abstract") or "", 280) or None,
+                    "aggiunto_a": rapporto["adesso"],
+                }
+                righe_volumi.append(riga)
+                eventi.append(evento(orologio, "biblioteca", codice, "crea", payload_volume(riga)))
+                rapporto["pdf"] += 1
+
+        riga = riga_articolo(v, testo, rapporto)
+        righe_articoli.append(riga)
+        eventi.append(evento(orologio, "articoli", v["chiave"], "crea", payload_articolo(riga)))
+        if testo:
+            rapporto["con_testo"] += 1
+
+    # I file lasciati a mano nel repository seguono la STESSA strada: stesso
+    # deposito, stessa tabella, stesso evento. È il requisito, e anche l'unico
+    # modo perché non esistano due percorsi da tenere allineati.
+    if cartella_manuale and os.path.isdir(cartella_manuale):
+        for riga in manuali(cartella_manuale, nuvola, rapporto):
+            righe_volumi.append(riga)
+            eventi.append(
+                evento(orologio, "biblioteca", riga["codice"], "crea", payload_volume(riga))
+            )
+
+    rapporto["articoli"] = len(righe_articoli)
+    rapporto["volumi"] = len(righe_volumi)
+
+    # L'ordine conta: prima le proiezioni, poi gli eventi. Se la corsa muore in
+    # mezzo, restano righe senza evento — inerti — invece di eventi che
+    # promettono righe che non ci sono.
+    nuvola.innesta("articoli", righe_articoli, "utente_id,chiave")
+    nuvola.innesta("biblioteca", righe_volumi, "utente_id,codice")
+    nuvola.innesta("eventi", eventi, "id")
+    rapporto["eventi"] = len(eventi)
+
+
+def manuali(cartella, nuvola, rapporto):
+    """
+    Ogni PDF o EPUB lasciato in `biblioteca-manuale/`. Un file `<nome>.json`
+    accanto, se c'è, dà i dati veri invece di quelli indovinati dal nome.
+    """
+    fuori = []
+    for nome in sorted(os.listdir(cartella)):
+        base, punto, estensione = nome.rpartition(".")
+        estensione = estensione.lower()
+        if estensione not in ("pdf", "epub"):
+            continue
+        percorso_locale = os.path.join(cartella, nome)
+        try:
+            with open(percorso_locale, "rb") as f:
+                dati = f.read(BYTE_PER_FILE + 1)
+        except OSError as e:
+            rapporto["falliti"].append("%s: %s" % (nome, e))
+            continue
+        if len(dati) > BYTE_PER_FILE:
+            rapporto["falliti"].append("%s: oltre il tetto di %d byte" % (nome, BYTE_PER_FILE))
+            continue
+        if estensione == "pdf" and not e_pdf(dati):
+            rapporto["falliti"].append("%s: si chiama .pdf ma non lo è" % nome)
+            continue
+
+        scheda = carica_json(os.path.join(cartella, base + ".json"), {})
+        codice = codice_stabile("MAN", nome)
+        percorso = "manuale/%s.%s" % (codice, estensione)
+        try:
+            nuvola.carica_file(
+                percorso,
+                dati,
+                "application/epub+zip" if estensione == "epub" else "application/pdf",
+            )
+        except ErroreNuvola as e:
+            rapporto["falliti"].append("deposito %s: %s" % (nome, str(e)[:140]))
+            continue
+
+        fuori.append(
+            {
+                "codice": codice,
+                "titolo": scheda.get("titolo") or base.replace("_", " ").strip(),
+                "autore": scheda.get("autore"),
+                "tema_slug": scheda.get("tema_slug"),
+                "trimestre": scheda.get("trimestre"),
+                "origine": "manuale",
+                "licenza": scheda.get("licenza"),
+                "url": scheda.get("url"),
+                "formato": estensione,
+                "byte": len(dati),
+                "sha256": impronta(dati),
+                "pdf_path": percorso,
+                "nota": scheda.get("nota"),
+                "aggiunto_a": rapporto["adesso"],
+            }
+        )
+        rapporto["manuali"] += 1
+    return fuori
+
+
+def scrivi_rapporto(cartella, rapporto):
+    righe = [
+        "Nuvola — %s" % rapporto["adesso"],
+        "",
+        "Già in archivio  : %d" % rapporto["gia_in_archivio"],
+        "Candidate        : %d" % rapporto["candidate"],
+        "Articoli scritti : %d" % rapporto["articoli"],
+        "  con testo      : %d" % rapporto["con_testo"],
+        "PDF depositati   : %d" % rapporto["pdf"],
+        "File a mano      : %d" % rapporto["manuali"],
+        "Volumi scritti   : %d" % rapporto["volumi"],
+        "Eventi scritti   : %d" % rapporto["eventi"],
+    ]
+    if rapporto["tempo_scaduto"]:
+        righe += ["", "TEMPO SCADUTO: il resto va al prossimo giro."]
+    if rapporto["falliti"]:
+        righe += ["", "NON RIUSCITI (%d):" % len(rapporto["falliti"])]
+        righe += ["  " + f for f in rapporto["falliti"][:40]]
+    testo = "\n".join(righe) + "\n"
+    os.makedirs(cartella, exist_ok=True)
+    with open(os.path.join(cartella, "nuvola.txt"), "w", encoding="utf-8") as f:
+        f.write(testo)
+    return testo
+
+
+def principale(argv=None):
+    p = argparse.ArgumentParser(description="Porta la rassegna su Supabase.")
+    p.add_argument("--cartella", default="rassegna")
+    p.add_argument("--manuale", default="biblioteca-manuale")
+    p.add_argument("--massimo-articoli", type=int, default=MASSIMO_ARTICOLI)
+    p.add_argument("--massimo-pdf", type=int, default=MASSIMO_PDF)
+    p.add_argument("--minuti", type=int, default=MINUTI)
+    a = p.parse_args(argv)
+
+    rapporto = {
+        "adesso": adesso_iso(),
+        "gia_in_archivio": 0,
+        "candidate": 0,
+        "articoli": 0,
+        "con_testo": 0,
+        "pdf": 0,
+        "manuali": 0,
+        "volumi": 0,
+        "eventi": 0,
+        "falliti": [],
+        "tempo_scaduto": False,
+    }
+    nuvola = Nuvola()
+    if not nuvola.raggiungibile():
+        print("Supabase non risponde o la chiave non è più buona: niente da fare.", file=sys.stderr)
+        return 1
+    try:
+        pubblica(a.cartella, a.manuale, nuvola, {
+            "articoli": a.massimo_articoli, "pdf": a.massimo_pdf, "minuti": a.minuti,
+        }, rapporto)
+    except ErroreNuvola as e:
+        print(scrivi_rapporto(a.cartella, rapporto))
+        print("Scrittura interrotta: %s" % e, file=sys.stderr)
+        return 1
+    print(scrivi_rapporto(a.cartella, rapporto))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(principale())

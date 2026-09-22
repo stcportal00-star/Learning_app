@@ -14,8 +14,13 @@
 name: rassegna
 
 on:
-  schedule:
-    - cron: "0 5 * * *"
+  # Lo schedule quotidiano è passato a `nuvola.yml`, che fa questo lavoro E lo
+  # deposita su Supabase, all'ora locale dell'utente invece che a un'ora UTC
+  # qualunque. Lasciare due corse al giorno significava interrogare gli archivi
+  # aperti il doppio delle volte necessarie e, peggio, due workflow che
+  # riscrivono lo stesso `stato.tar` sulla stessa release: chi arriva secondo
+  # cancella il lavoro del primo. Qui resta l'avvio a mano, che serve a
+  # rifare il catalogo su una finestra lunga senza aspettare domattina.
   workflow_dispatch:
     inputs:
       giorni:
