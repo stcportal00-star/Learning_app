@@ -995,12 +995,27 @@ await scenario("G5 · righe_attese coincide con il numero di righe che la soluzi
 
 await scenario("G6 · colonne_attese coincide per NOMI e ORDINE con quelle restituite", async () => {
   const d = new DatabaseSync(palestraCopia, { readOnly: true });
+  // Il `catch { continue; }` di prima inghiottiva in silenzio gli esercizi non
+  // eseguibili: lo scenario era verde con 143 esercizi controllati E con zero,
+  // e i due casi non si distinguevano dall'esito. Una lente del revisore l'ha
+  // dimostrato rendendo inseguibili tutte e 143 le soluzioni: G4, G5 e G7
+  // diventano rosse, G6 restava verde avendo controllato niente.
+  // Le tre sorelle l'errore lo REGISTRANO. Ora anche questa, e in piu' conta
+  // quanti esercizi ha davvero guardato: e' l'unico modo perche' "zero
+  // divergenze" significhi qualcosa.
   const nomi = [], ordine = [];
+  let controllati = 0;
   for (const e of veriSql) {
     if (e.preparazione) continue;
     let righe;
-    try { righe = d.prepare(e.soluzione).all(); } catch { continue; }
+    try {
+      righe = d.prepare(e.soluzione).all();
+    } catch (errore) {
+      nomi.push(`${e.id}: non eseguibile — ${String(errore.message).slice(0, 60)}`);
+      continue;
+    }
     if (!righe.length) continue;
+    controllati++;
     const col = Object.keys(righe[0]);
     if (col.length !== e.colonne_attese.length) nomi.push(`${e.id}: ${col.length} contro ${e.colonne_attese.length}`);
     else if (col.join("\u001f") !== e.colonne_attese.join("\u001f")) ordine.push(`${e.id}: ${col.join(",")} contro ${e.colonne_attese.join(",")}`);
@@ -1008,6 +1023,8 @@ await scenario("G6 · colonne_attese coincide per NOMI e ORDINE con quelle resti
   d.close();
   uguale("numero di colonne sbagliato", nomi.length, 0, nomi.slice(0, 3).join(" | "));
   uguale("nomi o ordine delle colonne sbagliati", ordine.length, 0, ordine.slice(0, 3).join(" | "));
+  ok(`esercizi con le colonne davvero controllate: ${controllati}`, controllati >= 140,
+     `controllati ${controllati} su ${veriSql.filter((e) => !e.preparazione).length} senza preparazione`);
 });
 
 await scenario("G7 · i 7 esercizi con preparazione: la preparazione si applica e la soluzione combacia", async () => {
