@@ -55,6 +55,49 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
    Prima di aggiungere qualunque dipendenza, verifica che sia in
    `node_modules/expo/bundledNativeModules.json`. Se non c'è, non si aggiunge.
 
+9. **La nuvola è un pari, non un servizio.** `lib/nuvola/` parla con Supabase
+   via `fetch` su PostgREST e Storage: nessuna libreria, nessuna dipendenza
+   (invariante 8). Viaggia lo stesso registro di eventi degli altri tre
+   trasporti, con la stessa deduplicazione per id. L'app non legge mai le
+   tabelle remote: legge il registro e proietta.
+   - `lib/nuvola/proiezione.ts` applica gli eventi ricevuti con la connessione
+     che riceve. Mai `registra()` o `inTransazione()` annidate lì dentro: si
+     metterebbero in coda dietro quella che le contiene e nessuna delle due
+     finirebbe più.
+   - Gli eventi ricevuti non generano eventi nuovi.
+   - `file_locale` è l'UNICA scrittura che di proposito non genera un evento:
+     è un percorso di questo telefono e altrove non significa niente.
+   - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
+     che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
+     schema `percorso`, legate a un identificativo utente fisso.
+
+## La conduttura quotidiana
+
+`.github/workflows/nuvola.yml` gira ogni mattina alle **08:00 locali**: Città
+del Messico fino al 2 ottobre 2026, Roma da lì in poi. Tre cron UTC accesi e un
+cancello con `zoneinfo` che ne lascia passare esattamente uno; il cambio d'ora
+di Roma del 25 ottobre si sistema da sé. **Non contare le ore a mano in quel
+file.**
+
+Fa, in una corsa: catalogo delle nuove uscite → ricerca delle copie
+accessibili → `strumenti/nuvola/pubblica.py`, che estrae il testo, deposita i
+PDF nel bucket `biblioteca`, scrive le righe di `percorso.articoli` e
+`percorso.biblioteca` e soprattutto gli **eventi**, che sono ciò che l'app
+legge davvero.
+
+`rassegna.yml` non ha più un cron: questo lo comprende. Condividono il gruppo
+di concorrenza perché toccano lo stesso `stato.tar`.
+
+Per caricare un PDF a mano senza l'app: lasciarlo cadere in
+`biblioteca-manuale/`, con un `<nome>.json` accanto se servono titolo e autore
+veri. Il push fa il resto, per la stessa strada di un PDF trovato dalla
+rassegna.
+
+Due verifiche girano **prima di qualunque scrittura**, e senza rete:
+`strumenti/nuvola/verifica_nuvola.py` (confronta il payload degli eventi con lo
+schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
+(alza un finto PostgREST in locale e ci fa passare l'intera `pubblica.py`).
+
 ## Convenzioni
 
 - Identificatori, commenti e testo dell'interfaccia in italiano.
