@@ -484,4 +484,26 @@ WEB['https://itunes.apple.com/search?media=podcast&limit=20&term=data%20quality&
 ok(S.podcast('data quality', 'it') == [('https://pod.example/rss', 'Dati e qualità', None)],
    f"S22 dalla ricerca podcast solo i feedUrl veri: {S.podcast('data quality', 'it')}")
 
+# Sin esto p7 rechaza todos los canales, y con razón mientras se guarde el
+# texto. La declaración vale porque el pipeline la cumple: `feed.solo_metadati`
+# marca la voz y `pubblica.py` no le extrae nada.
+ok(V.licencia_plataforma('https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv')
+   and V.licencia_plataforma('https://mastodon.social/@tizio.rss')
+   and V.licencia_plataforma('https://blog.ejemplo.org/feed.xml') is None
+   and V.licencia_plataforma('https://youtube.com.evil.example/feeds/videos.xml?channel_id=UCx') is None,
+   'S23 la licenza di piattaforma vale solo per le forme dichiarate')
+
+reset()
+WEB['https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv'] = (
+    b'<html><title>Chi parla</title>niente licenza qui dentro</html>')
+WEB['https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv'] = rss(
+    BUENOS, link='https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv')
+for i in range(10):
+    WEB[f'https://blog.ejemplo.org/p{i}'] = ART
+r = V.verifica('Chi parla',
+               'https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv',
+               'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv', 'ia')
+ok(r['motivo'] == 'ACEPTADA' and 'solo metadati' in r['p7_licencia'],
+   f"S24 un canale senza licenza sul sito passa p7 come «solo metadati»: {r['motivo']} · {r['p7_licencia'][:44]}")
+
 print(f'\n{sum(R)}/{len(R)} adversariales OK')

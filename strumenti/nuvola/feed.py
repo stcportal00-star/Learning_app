@@ -616,6 +616,7 @@ def voci_da(fonte, dati):
     # "../articolo" risolverebbe altrimenti una cartella più in là.
     url_base = (fonte.get("url_sito") or fonte.get("url_feed") or "").strip()
 
+    metadati = solo_metadati((fonte.get("url_feed") or "").strip())
     uscite = []
     for elemento in analizza(dati, url_base):
         v = fonti.voce(
@@ -644,6 +645,8 @@ def voci_da(fonte, dati):
             v["byte_media"] = elemento["byte_media"]
         if elemento["trascrizione"]:
             v["url_trascrizione"] = elemento["trascrizione"]
+        if metadati:
+            v["solo_metadati"] = True
         uscite.append(v)
     return uscite
 
@@ -699,6 +702,25 @@ def classifica_voce(v):
     if categoria and any(_coincide(t, categoria) for t in v["temi"]):
         v["rilevanza"] = round(v["rilevanza"] * MAGGIORAZIONE_CATEGORIA, 3)
     return v
+
+
+def solo_metadati(url_feed):
+    """Questa fonte è una piattaforma dove la licenza è di chi pubblica?
+
+    Da un canale YouTube o da un profilo Mastodon si tiene il titolo, la
+    descrizione, la data e il collegamento — e mai il testo scaricato. Non è una
+    finezza: è la licenza che la fonte dichiara, ed è ciò che le permette di
+    passare p7. Dichiararla e poi estrarre il testo lo stesso sarebbe dire una
+    cosa e farne un'altra.
+
+    L'elenco vive in `consegna_code/temi_config.py`. Se quella cartella non c'è,
+    nessuna fonte è di questo tipo: nessuna di esse sarebbe potuta entrare in
+    tabella senza passare da lì.
+    """
+    for patron, _ in getattr(_CONF, "PIATTAFORME_METADATI", ()) or ():
+        if re.match(patron, url_feed or ""):
+            return True
+    return False
 
 
 def quota_esplorazione():
@@ -1275,6 +1297,20 @@ def _autoverifica():
               "url_sito": "https://www.youtube.com/channel/UCx",
               "categoria": "ottimizzazione", "lingua": "en", "peso": 0.5,
               "metodo": "rss", "attiva": True}
+    # Da un canale si tiene il metadato e mai il testo: è la licenza con cui
+    # quella fonte è potuta entrare in tabella, e `pubblica.py` la rispetta
+    # saltando l'estrazione. Senza questo marchio la dichiarazione sarebbe una
+    # bugia scritta in `informe.csv`.
+    _prova("una fonte YouTube è dichiarata «solo metadati»",
+           (solo_metadati("https://www.youtube.com/feeds/videos.xml?channel_id=UCx"),
+            solo_metadati("https://mastodon.social/@tizio.rss"),
+            solo_metadati("https://blog.ejemplo.org/feed.xml")),
+           (True, True, False))
+    _prova("e il marchio viaggia su ogni sua voce",
+           voci_da(canale, _FEED_YOUTUBE)[0].get("solo_metadati"), True)
+    _prova("mentre una voce di un blog normale non lo porta",
+           "solo_metadati" in voci_da(motori, _FEED_RSS2)[0], False)
+
     video = classifica_voce(voci_da(canale, _FEED_YOUTUBE)[0])
     _prova("la descrizione di un video YouTube non si perde",
            (video["abstract"][:40], video["rilevanza"]),

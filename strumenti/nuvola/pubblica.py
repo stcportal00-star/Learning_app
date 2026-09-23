@@ -482,7 +482,14 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
             break
 
         testo, pdf = (None, None)
-        if pdf_presi < tetti["pdf"] or not v.get("url_pdf"):
+        # Le fonti che dichiarano «solo metadati» non si scaricano, mai. È la
+        # licenza con cui sono entrate in tabella — su YouTube e su Mastodon la
+        # licenza è di chi pubblica, voce per voce — e dichiararla per poi
+        # estrarre il testo lo stesso sarebbe dire una cosa e farne un'altra.
+        # Di quelle voci restano titolo, descrizione, data e collegamento.
+        if v.get("solo_metadati"):
+            rapporto["solo_metadati"] = rapporto.get("solo_metadati", 0) + 1
+        elif pdf_presi < tetti["pdf"] or not v.get("url_pdf"):
             testo, pdf = testo_della_voce(v, vie, rapporto, scadenza)
 
         if pdf and pdf_presi < tetti["pdf"]:
@@ -613,6 +620,7 @@ def scrivi_rapporto(cartella, rapporto):
         "Voci dai feed    : %d" % rapporto.get("voci_da_feed", 0),
         "  rumore tolto   : %d" % rapporto.get("rumore_feed", 0),
         "  fuori tema     : %d" % rapporto.get("esplorazione", 0),
+        "  solo metadati  : %d" % rapporto.get("solo_metadati", 0),
         "Candidate        : %d" % rapporto["candidate"],
         "Doppioni tolti   : %d" % rapporto.get("doppioni", 0),
         "Url ripetuti     : %d" % rapporto.get("url_ripetuti", 0),
@@ -658,6 +666,7 @@ def principale(argv=None):
         "voci_da_feed": 0,
         "rumore_feed": 0,
         "esplorazione": 0,
+        "solo_metadati": 0,
         "articoli": 0,
         "con_testo": 0,
         "pdf": 0,

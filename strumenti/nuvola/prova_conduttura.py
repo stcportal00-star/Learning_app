@@ -429,6 +429,17 @@ def principale():
             "url": "https://esempio.invalid/due", "data": "2026-09-20",
             "fonte": "zenodo", "tema_slug": "gdpr", "trimestre": "T2", "rilevanza": 1.0,
         },
+        {
+            # Una voce di una piattaforma dove la licenza è di chi pubblica. È
+            # entrata in tabella dichiarando «solo metadati», e l'estrazione del
+            # testo non deve nemmeno essere tentata: `niente_rete` la farebbe
+            # fallire, e un fallimento nei «non riusciti» sarebbe il segno che
+            # la dichiarazione non viene rispettata.
+            "chiave": "rss:Y1", "titolo": "Cardinality estimation, explained",
+            "autori": ["Chi parla"], "url": "https://www.youtube.com/watch?v=AbCdEf",
+            "data": "2026-09-20", "fonte": "rss[Chi parla]", "tema_slug": "ottimizzazione",
+            "trimestre": "T1", "rilevanza": 2.0, "solo_metadati": True,
+        },
     ]
     with open(os.path.join(cartella, "rassegna", "catalogo.json"), "w", encoding="utf-8") as f:
         json.dump(catalogo, f)
@@ -516,8 +527,8 @@ def principale():
     # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
     # una strada propria questo numero resterebbe due e le righe comparirebbero
     # da un'altra parte.
-    prova("otto articoli: tre dal catalogo, due dal feed, tre dal sitemap",
-          len(articoli), 8)
+    prova("nove articoli: tre dal catalogo, uno solo-metadati, due dal feed, tre dal sitemap",
+          len(articoli), 9)
     prova_vero(
         "il NUL e' stato tolto invece di far cadere il lotto",
         all("\x00" not in (r.get("abstract") or "") for r in articoli),
@@ -554,7 +565,28 @@ def principale():
         "esclusioni redazionali non viene applicato alle voci RSS",
     )
     da_feed = [r for r in articoli if (r.get("fonte") or "").startswith("rss[")]
-    prova("cinque articoli dalle fonti sono arrivati in tabella", len(da_feed), 5)
+    prova("sei articoli dalle fonti sono arrivati in tabella", len(da_feed), 6)
+
+    # La voce che dichiara «solo metadati» non si scarica, e non perché la rete
+    # manchi: `niente_rete` solleverebbe, e quel fallimento finirebbe fra i «non
+    # riusciti». Non c'è, perché l'estrazione non viene nemmeno tentata.
+    # `.get` e non `[...]`: se un giorno la dichiarazione smettesse di essere
+    # rispettata, questa riga deve diventare rossa con un numero, non morire di
+    # KeyError — un test che esplode si legge come un difetto del test.
+    prova("la voce «solo metadati» non è stata scaricata",
+          rapporto.get("solo_metadati", 0), 1)
+    solo_meta = [r for r in articoli if r.get("chiave") == "rss:Y1"]
+    prova_vero(
+        "e in tabella ha titolo e collegamento, senza testo",
+        len(solo_meta) == 1 and not solo_meta[0].get("testo")
+        and solo_meta[0].get("url") == "https://www.youtube.com/watch?v=AbCdEf",
+        repr(solo_meta),
+    )
+    prova_vero(
+        "nessun fallimento di rete per lei",
+        not any("youtube" in f for f in rapporto["falliti"]),
+        repr(rapporto["falliti"]),
+    )
 
     # Il sito senza feed non ha un XML: queste tre righe esistono solo se il
     # sitemap è stato letto, le pagine scaricate e il feed costruito. Contarle

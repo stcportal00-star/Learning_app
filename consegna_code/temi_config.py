@@ -98,6 +98,24 @@ PLATAFORMAS = ['substack.com', 'blogspot.com', 'github.io', 'wordpress.com', 'gh
 HOSTS_FEED_ADMITIDOS = ['feeds.feedburner.com', 'feedpress.me', 'raw.githubusercontent.com']
 MIN_SUMARIO_SIN_ARTICULO = 500   # si no se puede descargar ningún artículo, el sumario debe tener al menos esto
 
+# --- Plataformas donde la licencia NO es del sitio, sino de cada voz -----------
+# Un canal de YouTube o un perfil de Mastodon no declaran una licencia de sitio:
+# la decide quien publica, vídeo por vídeo. p7 los rechazaría a todos, y con
+# razón mientras se guarde el texto.
+#
+# De estas fuentes se guarda SOLO el metadato -título, descripción, fecha,
+# enlace- y nunca el texto descargado. Eso sí es una licencia declarada y
+# citable, y no es una promesa: `feed.py` marca esas voces y `pubblica.py` no
+# les extrae el texto. Quitar una entrada de aquí significa que sus fuentes
+# vuelven a caer en p7; quitarla del pipeline sin quitarla de aquí sería
+# declarar una cosa y hacer otra.
+PIATTAFORME_METADATI = [
+    (r'(?i)^https?://(?:www\.)?youtube\.com/feeds/videos\.xml\?channel_id=UC',
+     'solo metadati e collegamento; su YouTube la licenza è di chi pubblica, voce per voce'),
+    (r'(?i)^https?://[^/]+/@[A-Za-z0-9_]+\.rss$',
+     'solo metadati e collegamento; su Mastodon la licenza è di chi pubblica, voce per voce'),
+]
+
 # --- Producción ------------------------------------------------------------------------------
 LICENCIA_AMPLIA = True      # decisión A aplicada: licencia declarada = CC/OGL/rel=license O aviso de copyright del sitio.
                             # Revertir: False, o ejecutar con --licencia-estricta.

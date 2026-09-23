@@ -25,6 +25,20 @@ def filas(sql):  # (nome, url_feed, url_sito, categoria)
 
 DESDE_NUBE = '--da-nuvola'
 
+def licencia_plataforma(url_feed):
+    """Las plataformas donde la licencia es de cada voz, no del sitio. -> (texto, url) o None.
+
+    Un canal de YouTube no declara una licencia de sitio: la decide quien sube
+    cada vídeo. p7 lo rechazaría, y con razón mientras se guarde el texto. De
+    estas fuentes se guarda SOLO el metadato, y eso es una licencia declarada y
+    citable — siempre que el pipeline lo cumpla, que es lo que hacen
+    `feed.solo_metadati()` y el paso de extracción de `pubblica.py`.
+    """
+    for patron, texto in getattr(C, 'PIATTAFORME_METADATI', ()):
+        if re.match(patron, url_feed or ''):
+            return texto, url_feed
+    return None
+
 def filas_de_nuvola(massimo=500):
     """Las fuentes tal como están HOY en percorso.fonti, activas y apagadas.
 
@@ -99,7 +113,7 @@ def verifica(nome, url, url_sito, cat, amplia=False, con_muro=True):
     r['p8_canonico'] = canon
     p8_ok = ((not canal) or not url_sito.startswith('http') or K.mismo_sitio(canal, url_sito)
              or (pag is not None and K.mismo_sitio(canal, pag.url)) or K.mismo_sitio(canal, canon))   # dominio propio declarado por el sitio
-    lic = LICENCIAS.get(url) or LICENCIAS.get(ef)
+    lic = LICENCIAS.get(url) or LICENCIAS.get(ef) or licencia_plataforma(ef)
     if not lic and pag and pag.body:
         # prioridad: licencia abierta (pie -> páginas de términos) antes que el mero aviso de copyright
         cache = {}
