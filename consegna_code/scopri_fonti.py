@@ -168,6 +168,20 @@ def proponer_sql(rows):
     return ('insert into percorso.fonti (nome, url_feed, url_sito, metodo, categoria, lingua, peso, attiva)\nvalues\n'
             + '\n'.join(body) + '\non conflict (utente_id, url_feed) do nothing;\n')
 
+def _guardar(todas):
+    """Los tres ficheros de salida, escritos tras cada tema.
+
+    '/dev/null' también para el JSON de `escribir`: por defecto escribe
+    `activar.json`, que es el fichero que el programador APLICA. Meter ahí las
+    candidatas del scouting significaría encender fuentes nunca verificadas.
+    """
+    V.escribir(todas, 'candidatas.csv', '/dev/null', '/dev/null')
+    with open('proponer.sql', 'w', encoding='utf-8') as fh:
+        fh.write(proponer_sql(todas))
+    with open('proponer.json', 'w', encoding='utf-8') as fh:
+        json.dump(proponer_json(todas), fh, ensure_ascii=False, indent=1)
+
+
 if __name__ == '__main__':
     a = sys.argv
     K.configurar(parche='--sin-parche' not in a)
@@ -192,12 +206,13 @@ if __name__ == '__main__':
         props = explorar(slug, doms, por, '--licencia-amplia' in a, sueltos[:12])
         todas += props; known |= {K.base(K.host(p['url_sito'])) for p in props}
         print(f"{slug:18} dominios {len(doms):3} · podcast {len(sueltos):3} · evaluados {len(props):2} · con ≥{C.UMBRAL_VOCES}/10: {sum(p['p3_utiles'] >= C.UMBRAL_VOCES for p in props)}")
-    # '/dev/null' anche per il JSON: `escribir` scrive `activar.json` per
-    # difetto, e quello è il file che il programmatore applica. Scriverci dentro
-    # le candidate dello scouting significherebbe accendere fonti mai verificate.
-    V.escribir(todas, 'candidatas.csv', '/dev/null', '/dev/null')
+        # Se escribe DESPUÉS DE CADA TEMA, no solo al final. Con diecisiete
+        # temas y cuatro lenguas esta pasada roza el tope del paso, y un
+        # tope alcanzado mataba el proceso antes de la única escritura: una
+        # hora y media de red tirada, y el fichero vacío no se distingue de
+        # «no había nada». Así lo que se ha encontrado hasta aquí ya está en
+        # disco, y el paso siguiente lo propone igual.
+        _guardar(todas)
+    _guardar(todas)
     for w in dict.fromkeys(AVISOS): print('AVISO', w)   # una API caída no debe parecer 'cero dominios'
-    open('proponer.sql', 'w').write(proponer_sql(todas))
-    with open('proponer.json', 'w', encoding='utf-8') as fh:
-        json.dump(proponer_json(todas), fh, ensure_ascii=False, indent=1)
     print('-> candidatas.csv, proponer.sql, proponer.json (attiva=false; activar solo vía verifica_fonti.py)')

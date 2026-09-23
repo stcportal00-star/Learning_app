@@ -119,12 +119,17 @@ jobs:
       - name: Scouting
         if: github.event.schedule == '0 3 1 * *' || (github.event.inputs.scouting || 'no') != 'no'
         continue-on-error: true
-        # La prima pasada ancha tardó 59,4 minutos con un tope de 60: pasó por
-        # treinta y seis segundos. Con los términos en cuatro lenguas son 340
-        # preguntas al catálogo en vez de 136, y un tope rozado no es un tope.
-        # La verificación de 160 fuentes son unos 38 minutos (medidos: 14,6 con
-        # 62), así que 90 caben de sobra en los 150 del trabajo.
-        timeout-minutes: 90
+        # Medido, no estimado. Primera pasada ancha: 59,4 minutos con tope de
+        # 60 — pasó por treinta y seis segundos. Segunda, con los términos en
+        # cuatro lenguas: agotó los 90. Me equivoqué al decir que solo crecían
+        # las preguntas al catálogo: 340 en vez de 136 devuelven muchos más
+        # programas NUEVOS, y cada uno se evalúa de verdad.
+        #
+        # La verificación de 160 fuentes son 12,3 minutos (medidos), así que en
+        # los 150 del trabajo caben 130 aquí. Y si aun así no llega, el paso
+        # siguiente propone lo encontrado: `scopri_fonti.py` guarda tras cada
+        # tema, y proponer vive en un paso aparte con `if: always()`.
+        timeout-minutes: 130
         env:
           AMPIEZZA: ${{ github.event.inputs.scouting || 'scoperti' }}
         run: |
@@ -148,12 +153,28 @@ jobs:
           fi
           cd lavoro-fonti
           python3 ../consegna_code/scopri_fonti.py "${argomenti[@]}"
-          cd ..
-          # Le candidate entrano nella tabella SPENTE. Accenderle non è cosa di
-          # questo passo: lo decide la verifica del lunedì dopo, che è l'unica
-          # che le guarda davvero. Senza questa riga `proponer.json` resterebbe
-          # un file, e la lista delle fonti smetterebbe di migliorare il giorno
-          # in cui nessuno apre più il repository.
+
+      # Passo a parte, e `if: always()` non è pigrizia. Lo scouting può finire
+      # per tetto di tempo: allora il processo muore, e se la proposta stesse
+      # nello stesso passo non girerebbe mai — un'ora e mezza di rete buttata,
+      # con `proponer.json` scritto e nessuno che lo legge. `scopri_fonti.py`
+      # salva dopo OGNI tema apposta, quindi quel file porta sempre ciò che si
+      # è trovato fin lì.
+      #
+      # Le candidate entrano nella tabella SPENTE. Accenderle non è cosa di
+      # questo passo: lo decide la verifica, che è l'unica che le guarda
+      # davvero. Senza questa riga `proponer.json` resterebbe un file, e la
+      # lista delle fonti smetterebbe di migliorare il giorno in cui nessuno
+      # apre più il repository.
+      - name: Proposta delle candidate
+        if: always() && (github.event.schedule == '0 3 1 * *' || (github.event.inputs.scouting || 'no') != 'no')
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ ! -s lavoro-fonti/proponer.json ]; then
+            echo "Nessun proponer.json: lo scouting non ha prodotto niente da proporre."
+            exit 0
+          fi
           python3 consegna_code/programma_fonti.py --proponi lavoro-fonti
 
       - name: Stato aggiornato nella release
