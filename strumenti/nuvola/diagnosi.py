@@ -33,7 +33,8 @@ import urllib.request
 QUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, QUI)
 
-from cliente import BASE, CHIAVE, SCHEMA, DEPOSITO, UTENTE  # noqa: E402
+from cliente import BASE, CHIAVE, SCHEMA, DEPOSITO, UTENTE, Nuvola  # noqa: E402
+from estrattore import scarica  # noqa: E402
 
 # Una riga di prova riconoscibile e cancellabile: se una diagnosi muore a
 # meta', chi guarda l'archivio deve capire in un colpo d'occhio cos'e'.
@@ -114,10 +115,62 @@ def spiega(stato, corpo):
     return "risposta inattesa%s" % ((": " + messaggio) if messaggio else ".")
 
 
+def prova_fonti():
+    """Ogni `url_feed` di `percorso.fonti`: risponde, ed e' davvero un feed?
+
+    Non basta lo stato 200: meta' degli indirizzi sbagliati sono la pagina del
+    sito invece del feed, e quella risponde 200 benissimo. Si conta quante voci
+    ne escono, perche' zero voci da un feed vivo e' un guasto quanto un 404.
+    """
+    import feed  # qui e non in testa: serve solo con --fonti
+
+    try:
+        righe = feed.leggi_fonti(Nuvola())
+    except Exception as e:  # noqa: BLE001
+        print("5 fonti RSS                        ---  NO")
+        print("    non si riesce a leggere percorso.fonti: %s" % e)
+        return ["lettura di percorso.fonti"]
+
+    print("5 fonti RSS (%d attive)" % len(righe))
+    if not righe:
+        print("    nessuna riga con metodo='rss' e attiva=true: la conduttura")
+        print("    girera' sui soli archivi aperti. Non e' un guasto.")
+        return []
+
+    guasti = []
+    for r in righe:
+        nome = str(r.get("nome") or "(senza nome)")[:28]
+        url = (r.get("url_feed") or "").strip()
+        if not url:
+            print("  %-28s ---  NO  manca url_feed" % nome)
+            guasti.append("fonte %s" % nome)
+            continue
+        try:
+            dati, _ = scarica(url, massimo_byte=feed.MASSIMO_BYTE, timeout=15)
+            voci = feed.analizza(dati, r.get("url_sito") or url)
+        except Exception as e:  # noqa: BLE001
+            print("  %-28s ---  NO  %s" % (nome, str(e)[:110]))
+            guasti.append("fonte %s" % nome)
+            continue
+        if not voci:
+            print("  %-28s 200  NO  risponde ma non contiene voci" % nome)
+            guasti.append("fonte %s" % nome)
+            continue
+        con_tema = sum(1 for v in feed.voci_da(r, dati)
+                       if feed.classifica_voce(v) is not None)
+        print("  %-28s 200  ok  %d voci, %d con un tema" % (nome, len(voci), con_tema))
+        if not con_tema:
+            print("      nessuna voce ha preso un tema: la fonte risponde ma non")
+            print("      porta niente in biblioteca. Categoria sbagliata, o fuori campo.")
+    return guasti
+
+
 def principale(argv=None):
     p = argparse.ArgumentParser(description="Dice perche' Supabase non risponde.")
     p.add_argument("--severo", action="store_true",
                    help="esce 1 se una prova non passa, invece di limitarsi a dirlo")
+    p.add_argument("--fonti", action="store_true",
+                   help="prova anche i feed RSS di percorso.fonti, uno per uno")
     a = p.parse_args(argv)
 
     print("Diagnosi della conduttura")
@@ -180,6 +233,15 @@ def principale(argv=None):
               "%s/storage/v1/object/%s/%s" % (BASE, DEPOSITO, FILE_PROVA), base())
         chiama("DELETE",
                "%s/storage/v1/object/%s/%s" % (BASE, DEPOSITO, FILE_PROVA), base())
+
+    # 5. le fonti RSS. Non e' un permesso, ed e' fuori dalle quattro apposta:
+    #    e' l'unica parte della conduttura che dipende da server di terzi, e un
+    #    indirizzo sbagliato nella tabella `fonti` si paga con una riga nel
+    #    rapporto ogni mattina finche' qualcuno non va a guardare. Meglio
+    #    saperlo qui, in mezzo minuto, quando la fonte la si sta aggiungendo.
+    if a.fonti:
+        print()
+        guasti += prova_fonti()
 
     print()
     if guasti:
