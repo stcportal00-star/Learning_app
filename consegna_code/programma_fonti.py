@@ -1,6 +1,7 @@
 """Programador de la verificación de fuentes: decide qué hacer con cada código de salida.
 
-    python3 programma_fonti.py fonti_v4.sql [--lavoro DIR] [--senza-applicare]
+    python3 programma_fonti.py --da-nuvola [--lavoro DIR] [--senza-applicare]
+    python3 programma_fonti.py fonti_v4.sql [--lavoro DIR]      # desde la semilla
 
 `verifica_fonti.py` mira y escribe un informe; NO toca la base. Quien decide es
 esto, y decide poco a propósito:
@@ -69,17 +70,22 @@ def _texto(path):
         return ''
 
 
+def _fuente(sql):
+    """`--da-nuvola` es una bandera, no una ruta: no se le pone prefijo."""
+    return sql if sql.startswith('-') else os.path.abspath(sql)
+
+
 def verificar_real(sql, lavoro):
     """Ejecuta verifica_fonti.py en la carpeta de trabajo y devuelve su código."""
     return subprocess.run(
-        [sys.executable, os.path.join(QUI, 'verifica_fonti.py'), os.path.abspath(sql)],
+        [sys.executable, os.path.join(QUI, 'verifica_fonti.py'), _fuente(sql)],
         cwd=lavoro, check=False).returncode
 
 
 def descubrir_real(temas, sql, lavoro):
-    """Scouting por keyword para los temas sin ninguna fuente. Escribe proponer.sql."""
+    """Scouting por keyword para los temas sin ninguna fuente. Escribe proponer.*."""
     return subprocess.run(
-        [sys.executable, os.path.join(QUI, 'scopri_fonti.py'), os.path.abspath(sql),
+        [sys.executable, os.path.join(QUI, 'scopri_fonti.py'), _fuente(sql),
          '--temi', ','.join(temas)],
         cwd=lavoro, check=False).returncode
 
@@ -207,7 +213,7 @@ if __name__ == '__main__':
         n = _proponer(destino, _en_seco if '--senza-applicare' in argv else proponer_real)
         print('proposte inserite (spente): %d' % n)
         sys.exit(0)
-    if not argv or argv[0].startswith('-'):
+    if not argv or (argv[0].startswith('-') and argv[0] != '--da-nuvola'):
         sys.exit(__doc__)
     sql = argv[0]
     lavoro = argv[argv.index('--lavoro') + 1] if '--lavoro' in argv else os.getcwd()

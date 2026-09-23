@@ -91,7 +91,12 @@ jobs:
             secco=(--senza-applicare)
             echo "Marcia a secco chiesta a mano: nessuna scrittura."
           fi
-          python3 consegna_code/programma_fonti.py consegna_code/fonti_v4.sql \
+          # `--da-nuvola` e non il file: `fonti_v4.sql` è la semenza, già
+          # applicata una volta; la verità è la tabella. Se questa riga leggesse
+          # il file, le candidate che lo scouting propone ogni mese non
+          # verrebbero mai verificate — resterebbero spente per sempre, e la
+          # lista smetterebbe di migliorare senza che si veda.
+          python3 consegna_code/programma_fonti.py --da-nuvola \
             --lavoro lavoro-fonti "${secco[@]}"
 
       # Solo il primo del mese. Il programmatore lancia già lo scouting quando la
@@ -113,8 +118,7 @@ jobs:
           fi
           echo "Temi senza fonti: $temi"
           cd lavoro-fonti
-          python3 ../consegna_code/scopri_fonti.py \
-            ../consegna_code/fonti_v4.sql --temi "$temi"
+          python3 ../consegna_code/scopri_fonti.py --da-nuvola --temi "$temi"
           cd ..
           # Le candidate entrano nella tabella SPENTE. Accenderle non è cosa di
           # questo passo: lo decide la verifica del lunedì dopo, che è l'unica

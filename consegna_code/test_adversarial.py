@@ -346,6 +346,23 @@ try:
     h, ap, av, bu = _programa(2, _trabajo, CAMBIO, SALUD_AVISO)
     ok(h['propuestas'] == 0 and PROPUESTAS == [],
        f"S11 sin candidatas no se propone nada · {h['propuestas']}")
+
+    # El anillo se cierra en la TABLA, no en el archivo. Si la verificación
+    # siguiera leyendo fonti_v4.sql, lo que el scouting propone el día 1 no se
+    # verificaría nunca: quedaría apagado para siempre y la lista dejaría de
+    # mejorar sin que se vea.
+    ok(PR._fuente(V.DESDE_NUBE) == V.DESDE_NUBE
+       and PR._fuente('fonti_v4.sql').endswith('/fonti_v4.sql'),
+       "S12 --da-nuvola es una bandera, no una ruta")
+    _vera = V.filas_de_nuvola
+    V.filas_de_nuvola = lambda *a, **k: [('N', 'https://nueva.example/f',
+                                          'https://nueva.example/', 'ia')]
+    try:
+        ok(S.conocidos(V.DESDE_NUBE) == {'nueva.example'},
+           f"S13 el scouting sabe qué hay en la tabla, no en la semilla: "
+           f"{S.conocidos(V.DESDE_NUBE)}")
+    finally:
+        V.filas_de_nuvola = _vera
 finally:
     shutil.rmtree(_trabajo, ignore_errors=True)
 

@@ -1,5 +1,8 @@
 """Verifica §8 (p0-p9) con AUTORREPARACIÓN de url_feed.
-Uso: python3 verifica_fonti.py fonti.sql [--sin-parche] [--licencia-estricta] [--sin-muro]
+Uso: python3 verifica_fonti.py (fonti.sql | --da-nuvola) [--sin-parche] [--licencia-estricta] [--sin-muro]
+  --da-nuvola lee las fuentes de percorso.fonti en vez del .sql. Es el modo de la
+              corrida semanal: el archivo es la semilla, la tabla es la verdad, y
+              ahí están las candidatas que el scouting propuso el mes pasado.
 Salidas: informe.csv, activar.sql (reparar -> activar -> desactivar), activar.json
 (los mismos cambios para percorso.applica_fonti), estado_verifica.json, salud.md
 Códigos de salida: 0 ok · 2 ok con avisos (tema sin fuentes / REVISAR) · 3 DISYUNTOR (no se escribió activar.sql) · 1 error de uso
@@ -19,6 +22,30 @@ def filas(sql):  # (nome, url_feed, url_sito, categoria)
     S = r"\s*,\s*"
     return [tuple(x.replace("''", "'") for x in m)
             for m in re.findall(r"\(\s*" + Q + S + Q + S + Q + S + r"'(?:rss|sitemap)'" + S + Q, sql)]
+
+DESDE_NUBE = '--da-nuvola'
+
+def filas_de_nuvola(massimo=500):
+    """Las fuentes tal como están HOY en percorso.fonti, activas y apagadas.
+
+    El .sql es la semilla, no la verdad. Quien manda es la tabla: ahí están las
+    que el scouting mensual acaba de proponer, y si la verificación siguiera
+    leyendo el archivo esas candidatas no se verificarían nunca -se quedarían
+    apagadas para siempre, y la lista dejaría de mejorar sin que se note.
+
+    Se leen también las apagadas: una fuente que cayó hace tres semanas puede
+    haber resucitado, y si no se mira no se entera nadie.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), 'strumenti', 'nuvola'))
+    import cliente
+    righe = cliente.Nuvola().seleziona(
+        'fonti', 'select=nome,url_feed,url_sito,categoria&order=peso.desc,nome.asc',
+        massimo=massimo)
+    return [(r.get('nome') or '', (r.get('url_feed') or '').strip(),
+             (r.get('url_sito') or '').strip(), r.get('categoria') or '')
+            for r in righe if (r.get('url_feed') or '').strip()]
+
 
 def verifica(nome, url, url_sito, cat, amplia=False, con_muro=True):
     r = dict(nome=nome, url_feed=url, url_sito=url_sito, categoria=cat, url_nuevo='', reparacion='')
@@ -247,10 +274,16 @@ def verifica_segura(*a, **kw):
 if __name__ == '__main__':
     K.configurar(parche='--sin-parche' not in sys.argv)
     amplia = C.LICENCIA_AMPLIA and '--licencia-estricta' not in sys.argv
-    sql = open(sys.argv[1]).read(); fs = filas(sql)
-    esperadas = len(re.findall(r"'(?:rss|sitemap)'", sql))
-    if len(fs) != esperadas:
-        sys.exit(f'ERROR: leídas {len(fs)} filas de {esperadas} con metodo rss; formato no reconocido. No se genera activar.sql.')
+    if sys.argv[1] == DESDE_NUBE:
+        fs = filas_de_nuvola()
+        if not fs:
+            sys.exit('ERROR: percorso.fonti no ha devuelto ninguna fila con url_feed. '
+                     'No se genera activar.sql.')
+    else:
+        sql = open(sys.argv[1]).read(); fs = filas(sql)
+        esperadas = len(re.findall(r"'(?:rss|sitemap)'", sql))
+        if len(fs) != esperadas:
+            sys.exit(f'ERROR: leídas {len(fs)} filas de {esperadas} con metodo rss; formato no reconocido. No se genera activar.sql.')
     rows = [verifica_segura(n, u, s, c, amplia, '--sin-muro' not in sys.argv) for n, u, s, c in fs]
     previo = (json.load(open(ESTADO)).get('__aceptadas__') if os.path.exists(ESTADO) else None)
     corte = disyuntor(rows, previo)
