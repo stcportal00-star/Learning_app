@@ -29,12 +29,21 @@ insert into percorso.fonti (nome, url_feed, url_sito, metodo, categoria, lingua,
 values
   ('Planet PostgreSQL', 'https://planet.postgresql.org/rss20.xml',
    'https://planet.postgresql.org/', 'rss', 'sql_base', 'en', 0.7, true),
+  -- Spente, e il motivo resta scritto: `catalogo.py:42` interroga gia' l'API
+  -- di arXiv su cs.DB, cs.LG, cs.CR, cs.CY, cs.SE, stat.ME, stat.AP, stat.ML,
+  -- ordinata per data di deposito. Queste tre erano doppioni puri: mangiavano
+  -- il tetto di dodici voci per fonte e il tetto di ottanta articoli per
+  -- consegnare cio' che l'archivio consegna gia'. Restano qui perche' il
+  -- giorno in cui quelle categorie uscissero da CATEGORIE_ARXIV, riaccenderle
+  -- e' cambiare una parola.
   ('arXiv cs.DB', 'https://rss.arxiv.org/rss/cs.DB',
-   'https://arxiv.org/list/cs.DB/recent', 'rss', 'modellazione', 'en', 0.5, true),
-  ('arXiv cs.AI', 'https://rss.arxiv.org/rss/cs.AI',
-   'https://arxiv.org/list/cs.AI/recent', 'rss', 'ia', 'en', 0.5, true),
+   'https://arxiv.org/list/cs.DB/recent', 'rss', 'modellazione', 'en', 0.5, false),
   ('arXiv stat.AP', 'https://rss.arxiv.org/rss/stat.AP',
-   'https://arxiv.org/list/stat.AP/recent', 'rss', 'statistica', 'en', 0.5, true),
+   'https://arxiv.org/list/stat.AP/recent', 'rss', 'statistica', 'en', 0.5, false),
   ('arXiv cs.CR', 'https://rss.arxiv.org/rss/cs.CR',
-   'https://arxiv.org/list/cs.CR/recent', 'rss', 'sicurezza', 'en', 0.5, true)
+   'https://arxiv.org/list/cs.CR/recent', 'rss', 'sicurezza', 'en', 0.5, false),
+  -- cs.AI NON e' in CATEGORIE_ARXIV: questa porta qualcosa che l'archivio non
+  -- porta, ed e' l'unica delle quattro che lo faccia.
+  ('arXiv cs.AI', 'https://rss.arxiv.org/rss/cs.AI',
+   'https://arxiv.org/list/cs.AI/recent', 'rss', 'ia', 'en', 0.5, true)
 on conflict (utente_id, url_feed) do nothing;
