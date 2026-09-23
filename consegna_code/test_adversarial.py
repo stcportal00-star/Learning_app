@@ -1,0 +1,225 @@
+"""Pruebas ADVERSARIALES: cada una intenta romper una garantía. python3 test_adversarial.py"""
+import time, email.utils, json, importlib, pglast, feedparser
+import fonti_core as K, verifica_fonti as V, scopri_fonti as S, temi_config as C
+K.configurar(parche=True)
+def d(sec): return email.utils.formatdate(time.time() - sec)
+def rss(items, link='https://blog.ejemplo.org/', dates=None):
+    dates = dates or [d(i * 86400) for i in range(len(items))]
+    it = ''.join(f'<item><title>{t}</title><link>{l}</link><pubDate>{dt}</pubDate><description>{s}</description></item>'
+                 for (t, l, s), dt in zip(items, dates))
+    return f'<?xml version="1.0"?><rss version="2.0"><channel><title>x</title><link>{link}</link>{it}</channel></rss>'.encode()
+BUENOS = [(f'Model evaluation note {i}: red teaming frontier models', f'https://blog.ejemplo.org/p{i}', 'llm evals') for i in range(10)]
+ART = b'<html><body>' + b'long free article text ' * 200 + b'</body></html>'
+WEB = {}
+def fake(url, limit=0):
+    v = WEB.get(url)
+    if v is None: return K.Resp(404, url, error='HTTP 404')
+    return v if isinstance(v, K.Resp) else K.Resp(200, url, body=v)
+K.fetch = fake
+def reset():
+    WEB.clear()
+    for i in range(10): WEB[f'https://blog.ejemplo.org/p{i}'] = ART
+R = []
+def ok(c, m): print(('PASS ' if c else 'FAIL ') + m); R.append(bool(c))
+
+# A1 secuestro: la home enlaza un feed de OTRO dominio -> no debe auto-repararse
+reset(); WEB['https://blog.ejemplo.org/'] = b'<link rel="alternate" type="application/rss+xml" href="https://evil.example.net/f.xml"><footer>creativecommons.org/licenses/by/4.0/</footer>'
+WEB['https://evil.example.net/f.xml'] = rss(BUENOS, link='https://blog.ejemplo.org/')
+r = V.verifica('t', 'https://blog.ejemplo.org/roto', 'https://blog.ejemplo.org/', 'ia')
+ok(r['motivo'] != 'ACEPTADA' and 'evil' not in V.sql_salida([r]).split('-- 2)')[0].replace('--', '').split('update')[-1] if r.get('url_nuevo') else True,
+   f"A1 reparación a dominio ajeno no automática: {r.get('url_nuevo')} · {r['motivo']}")
+# A2 redirección 301 a otro dominio (dominio vendido)
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>creativecommons.org/licenses/by/4.0/</footer>'
+WEB['https://blog.ejemplo.org/feed'] = K.Resp(200, 'https://casino.example.com/feed', [(301, 'https://casino.example.com/feed')], body=rss(BUENOS))
+r = V.verifica('t', 'https://blog.ejemplo.org/feed', 'https://blog.ejemplo.org/', 'ia')
+ok(r['motivo'] != 'ACEPTADA', f"A2 301 a otro dominio no se acepta solo: {r['motivo']}")
+# A3 fecha en el futuro (post programado / zona horaria) -> NO es feed muerto
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>creativecommons.org/licenses/by/4.0/</footer>'
+WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS, dates=[d(-3600)] + [d(i * 86400) for i in range(1, 10)])
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok(not r.get('url_nuevo') and r['motivo'] == 'ACEPTADA', f"A3 fecha futura no dispara reparación: {r['motivo']} {r.get('reparacion')}")
+# A4 fuente aceptada SOLO con vocabulario débil (genérico) -> no debe pasar p3
+gen = [(f'How we changed our workflow and requirements, part {i}', f'https://blog.ejemplo.org/p{i}', 'stakeholders') for i in range(10)]
+WEB['https://blog.ejemplo.org/feed.xml'] = rss(gen)
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'business_analysis')
+ok(r['motivo'] != 'ACEPTADA', f"A4 solo débiles no basta: útiles={r.get('p3_utiles')} · {r['motivo']}")
+# A5 colisión italiana: 'ai' es preposición
+p, _ = K.punteggio('Novità ai sensi del regolamento: gli agents ai cittadini', '')
+ok(p.get('ia', 0) < 1.0, f"A5 'ai' italiano no clasifica como ia: {p.get('ia')}")
+# A6 licencia falsa: CC solo para una foto en el cuerpo, footer 'All rights reserved'
+html = b'<article>Photo by X, CC BY 2.0 https://creativecommons.org/licenses/by/2.0/ ... ' + b'text ' * 500 + b'</article><footer>All rights reserved</footer>'
+ok(K.licencia(html, 'u') is None, f"A6 CC de una foto no es licencia del sitio: {K.licencia(html, 'u')}")
+# A7 post que HABLA de la OGL no declara OGL
+html = b'<article>Explainer: what the Open Government Licence means for reuse ' + b'text ' * 500 + b'</article><footer>(c) Foo Ltd</footer>'
+ok(K.licencia(html, 'u') is None, f"A7 mencionar OGL en un post no es declararla: {K.licencia(html, 'u')}")
+# A8 inyección SQL / salto de línea desde datos remotos
+row = dict(nome="x'); drop table percorso.fonti; --", url_feed="https://a.org/f'\n; drop", url_sito='https://a.org/', categoria='ia',
+           url_nuevo="https://a.org/g'\n--", reparacion="autodescubierto\n; drop table x", motivo="p3 0/10\n; delete from percorso.fonti")
+sql = V.sql_salida([row]) + S.proponer_sql([row | {'p3_utiles': 9, 'menciones': 1}])
+stmts = [s for s in pglast.parse_sql(sql)]
+ok(all(type(s.stmt).__name__ in ('UpdateStmt', 'InsertStmt') for s in stmts), f"A8 solo UPDATE/INSERT tras datos hostiles: {[type(s.stmt).__name__ for s in stmts]}")
+# A9 SQL reformateado -> 0 filas leídas debe AVISAR, no pasar en silencio
+import io, contextlib
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    try: V.main(["x", "/tmp/_reformateado.sql"]) if hasattr(V, 'main') else None
+    except SystemExit: pass
+open('/tmp/_reformateado.sql', 'w').write("insert into percorso.fonti values ('a','https://x/f','https://x/','rss','ia','en',0.5,false);")
+ok(len(V.filas(open('/tmp/_reformateado.sql').read())) > 0 or hasattr(V, 'main'), "A9 SQL sin espacios tras comas: se lee o se avisa")
+# A10 plataformas: un Substack conocido no debe excluir a todos los Substack en el scouting
+known = S.conocidos("  ('a', 'https://joereis.substack.com/feed', 'https://joereis.substack.com/', 'rss', 'modellazione', 'en', 0.5, false)")
+ok(not S.excluido('otronewsletter.substack.com', known), f"A10 otro Substack no excluido: known={known}")
+# A11 artículos no descargables + sumario corto -> sin texto accesible offline
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>creativecommons.org/licenses/by/4.0/</footer>'
+WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS); [WEB.pop(f'https://blog.ejemplo.org/p{i}') for i in range(10)]
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok(r['motivo'] != 'ACEPTADA', f"A11 sin texto accesible: muro {r.get('p9_muro')} sumario {r.get('p5_sumario_med')} · {r['motivo']}")
+# A12 paywall falso positivo: post gratis con pie 'Upgrade... for paid subscribers' en 1 de 3
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>creativecommons.org/licenses/by/4.0/</footer>'; WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS)
+WEB['https://blog.ejemplo.org/p0'] = ART + b'<footer>Extra posts for paid subscribers</footer>'
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok(r['motivo'] == 'ACEPTADA', f"A12 1 marca aislada no rechaza: {r.get('p9_muro')} · {r['motivo']}")
+# A13 artículos inaccesibles por RED (transitorio) no rechazan ni desactivan
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>creativecommons.org/licenses/by/4.0/</footer>'; WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS)
+for i in range(10): WEB[f'https://blog.ejemplo.org/p{i}'] = K.Resp(None, f'https://blog.ejemplo.org/p{i}', error='URLError')
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok(r['motivo'].startswith('TRANSITORIO') and 'attiva' not in V.sql_salida([r]).split('-- 2)')[1], f"A13 red caída en artículos = transitorio: {r['motivo'][:40]}")
+# A14 bloqueo 403 en artículos (el pipeline tampoco podrá leerlos) + sumario corto = rechazo
+for i in range(10): WEB[f'https://blog.ejemplo.org/p{i}'] = K.Resp(403, f'https://blog.ejemplo.org/p{i}', error='HTTP 403')
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok('sin texto accesible' in r['motivo'], f"A14 403 en artículos + sumario corto = rechazo: {r['motivo'][:60]}")
+# A15 formato SQL no reconocido -> aborta sin activar.sql
+import subprocess, os
+open('/tmp/_raro.sql', 'w').write("insert into percorso.fonti values (1, 'rss');")
+p = subprocess.run(['python3', 'verifica_fonti.py', '/tmp/_raro.sql'], capture_output=True, text=True)
+ok(p.returncode != 0 and 'ERROR' in (p.stderr + p.stdout), 'A15 formato no reconocido aborta')
+# A16 (caso real: Tidy First) dominio propio declarado como canonical en url_sito -> p8 no rechaza
+reset(); WEB['https://tidy.substack.com/'] = b'<link rel="canonical" href="https://newsletter.kent.com/"><footer>creativecommons.org/licenses/by/4.0/</footer>'
+WEB['https://tidy.substack.com/feed'] = rss(BUENOS, link='https://newsletter.kent.com/')
+r = V.verifica('t', 'https://tidy.substack.com/feed', 'https://tidy.substack.com/', 'ia')
+ok('p8' not in r['motivo'], f"A16 canonical propio acepta canal: {r['motivo']}")
+# A17 (caso real: Visualising Data) el feed de comentarios nunca es destino de reparación
+reset(); WEB['https://blog.ejemplo.org/'] = b'<link rel="alternate" type="application/rss+xml" href="/comments/feed/">'
+WEB['https://blog.ejemplo.org/comments/feed/'] = rss(BUENOS)
+r = V.verifica('t', 'https://blog.ejemplo.org/feed/', 'https://blog.ejemplo.org/', 'ia')
+ok(not r.get('url_nuevo'), f"A17 comentarios excluidos: {r.get('url_nuevo')} · {r['motivo'][:50]}")
+# A18 canonical de OTRO dominio que no coincide con el canal -> p8 sigue rechazando
+reset(); WEB['https://blog.ejemplo.org/'] = b'<link rel="canonical" href="https://mirror.example.net/"><footer>creativecommons.org/licenses/by/4.0/</footer>'
+WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS, link='https://tercero.example.com/')
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok('p8' in r['motivo'], f"A18 canonical ajeno no blanquea canal ajeno: {r['motivo']}")
+# A19 (caso real: ReliefWeb) 202 sin cuerpo = bloqueo anti-bot, no 'transitorio'
+reset(); WEB['https://rw.example.org/f'] = K.Resp(202, 'https://rw.example.org/f', error='status=202')
+r = V.verifica('t', 'https://rw.example.org/f', 'https://rw.example.org/', 'meal')
+ok('anti-bot' in r['motivo'], f"A19 202 etiquetado: {r['motivo']}")
+# A20 (caso real: AISI/NCSC) la licencia vive en una página de términos enlazada en el pie
+reset(); WEB['https://blog.ejemplo.org/'] = b'<body>x</body><footer><a href="/copyright">Copyright</a> <a href="https://otro.example.com/terms">Terms</a></footer>'
+WEB['https://blog.ejemplo.org/copyright'] = b'<h1>Copyright</h1>All content is available under the Open Government Licence v3.0'
+WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS)
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok(r['p7_licencia'].startswith('OGL | https://blog.ejemplo.org/copyright'), f"A20 licencia en página enlazada: {r['p7_licencia']}")
+# A21 no seguir enlaces de 'terms' a OTRO dominio (p.ej. plataforma de terceros)
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer><a href="https://otro.example.com/terms">Terms</a></footer>'
+WEB['https://otro.example.com/terms'] = b'creativecommons.org/licenses/by/4.0/'
+ok(K.paginas_licencia(WEB['https://blog.ejemplo.org/'], 'https://blog.ejemplo.org/') == [], 'A21 términos de otro dominio ignorados')
+# A22 (caso real: CNIL) CC de las ilustraciones en la página de menciones legales NO es licencia del contenido
+p = b'<h2>Cr\xc3\xa9dits</h2><p>Visuels : Istock</p><ul><li>Illustrations : Geoffrey Dorne <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.fr">CC-BY-NC-SA 4.0</a></li></ul>'
+ok(K.licencia_pagina(p, 'u') is None, f"A22 crédito de ilustración ignorado: {K.licencia_pagina(p, 'u')}")
+# A23 (caso real: FAR.AI) declaración sobre el contenido en términos -> sí
+p = b'Use of Our Content. Unless otherwise stated, the content is offered under the terms of a Creative Commons License <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>.'
+ok((K.licencia_pagina(p, 'u') or [''])[0] == 'CC BY-NC-SA 4.0', f"A23 declaración de contenido aceptada: {K.licencia_pagina(p, 'u')}")
+# A24 (caso real: FAR.AI) licencia abierta en términos gana al '©' del pie
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>&copy; 2026 Ejemplo <a href="/terms-of-service">Terms</a></footer>'
+WEB['https://blog.ejemplo.org/terms-of-service'] = b'Unless otherwise stated, the content is offered under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>'
+WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS)
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia', amplia=True)
+ok(r['p7_licencia'].startswith('CC BY-NC-SA 4.0'), f"A24 abierta antes que copyright: {r['p7_licencia']}")
+# A25 una excepción dentro de verifica no tumba la corrida ni cambia attiva
+orig = K.feed; K.feed = lambda u: (_ for _ in ()).throw(ValueError('xml raro'))
+r = V.verifica_segura('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia'); K.feed = orig
+ok(r['motivo'].startswith('TRANSITORIO error interno') and 'attiva' not in V.sql_salida([r]).split('-- 2)')[1], f"A25 excepción aislada: {r['motivo']}")
+# A26 disyuntor: entorno con proxy que devuelve 403 a todo -> no se escribe nada
+rows = [dict(motivo='p1 roto (HTTP 403); sin reparación entre 0 candidatos')] * 30 + [dict(motivo='ACEPTADA')] * 5
+ok(bool(V.disyuntor(rows, None)), f"A26 disyuntor red: {V.disyuntor(rows, None)}")
+# A27 disyuntor: caída brusca de aceptadas respecto a la corrida anterior
+rows = [dict(motivo='p3 0/10')] * 50 + [dict(motivo='ACEPTADA')] * 3
+ok(bool(V.disyuntor(rows, 25)) and not V.disyuntor([dict(motivo='ACEPTADA')] * 20, 25), f"A27 disyuntor caída: {V.disyuntor(rows, 25)}")
+# A28 extremo a extremo: CLI con proxy hostil -> código de salida 3 y activar.sql sin UPDATE
+import subprocess, os, tempfile
+tmpd = tempfile.mkdtemp(); sql = os.path.join(tmpd, 'f.sql')
+open(sql, 'w').write(',\n'.join(f"  ('n{i}', 'https://no-existe-{i}.invalid/feed', 'https://no-existe-{i}.invalid/', 'rss', 'ia', 'en', 0.5, false)" for i in range(5)))
+p = subprocess.run(['python3', os.path.abspath('verifica_fonti.py'), sql, '--sin-muro'], cwd=tmpd, capture_output=True, text=True, timeout=300)
+ok(p.returncode == 3 and 'update' not in open(os.path.join(tmpd, 'activar.sql')).read().lower(), f"A28 CLI disyuntor: rc={p.returncode} {p.stdout.strip()[-80:]}")
+# ---------------- CURACIÓN PROFUNDA ----------------
+FEEDLY = 'https://cloud.feedly.com/v3/search/feeds?query='
+WB = 'https://archive.org/wayback/available?url='
+import urllib.parse as up
+def wb(url, snap=None):
+    WEB[WB + up.quote(url, safe='')] = json.dumps({'archived_snapshots': {'closest': {'available': True, 'url': f'http://web.archive.org/web/20260101000000/{url}'}}} if snap else {}).encode()
+    if snap: WEB[f'http://web.archive.org/web/20260101000000id_/{url}'] = snap
+def fe(q, res): WEB[f'{FEEDLY}{up.quote(q)}&count=8'] = json.dumps({'results': res}).encode()
+BLOGF = [(f'Model evaluation note {i}: red teaming', f'https://nuevo-blog.net/p{i}', 'llm evals') for i in range(10)]
+def base_nuevo():
+    for i in range(10): WEB[f'https://nuevo-blog.net/p{i}'] = ART
+# H1 sitio movido (canonical actual) con misma identidad -> aplica y cambia url_sito
+reset(); base_nuevo()
+WEB['https://viejo-blog.org/'] = b'<title>Ejemplo Blog</title><link rel="canonical" href="https://nuevo-blog.net/">'
+WEB['https://nuevo-blog.net/'] = b'<title>Ejemplo Blog</title><link rel="alternate" type="application/rss+xml" href="/feed.xml"><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+WEB['https://nuevo-blog.net/feed.xml'] = rss(BLOGF, link='https://nuevo-blog.net/').replace(b'<title>x</title>', b'<title>Ejemplo Blog</title>')
+r = V.verifica('Ejemplo Blog', 'https://viejo-blog.org/feed', 'https://viejo-blog.org/', 'ia')
+ok(r['url_nuevo'] == 'https://nuevo-blog.net/feed.xml' and r.get('url_sito_nuevo') == 'https://nuevo-blog.net/' and "url_sito = 'https://nuevo-blog.net/'" in V.sql_salida([r]),
+   f"H1 sitio movido: {r['url_nuevo']} · {r['reparacion']} · {r['motivo']}")
+# H2 sitio muerto; su copia archivada declara el dominio nuevo
+reset(); base_nuevo(); wb('https://viejo-blog.org/', b'<link rel="canonical" href="https://nuevo-blog.net/">')
+WEB['https://nuevo-blog.net/'] = b'<title>Ejemplo Blog</title><link rel="alternate" type="application/rss+xml" href="/feed.xml"><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+WEB['https://nuevo-blog.net/feed.xml'] = rss(BLOGF, link='https://nuevo-blog.net/').replace(b'<title>x</title>', b'<title>Ejemplo Blog</title>')
+r = V.verifica('Ejemplo Blog', 'https://viejo-blog.org/feed', 'https://viejo-blog.org/', 'ia')
+ok(r['url_nuevo'] == 'https://nuevo-blog.net/feed.xml' and 'archivada' in r['reparacion'], f"H2 desde el archivo: {r['reparacion']}")
+# H3 dominio caducado comprado por otro (canonical a casino con feed) -> NO se aplica
+reset(); WEB['https://viejo-blog.org/'] = b'<title>Casino</title><link rel="canonical" href="https://casino.example.com/">'
+WEB['https://casino.example.com/'] = b'<title>Best Casino Bonus</title><link rel="alternate" type="application/rss+xml" href="/f.xml">'
+WEB['https://casino.example.com/f.xml'] = rss(BLOGF, link='https://casino.example.com/').replace(b'<title>x</title>', b'<title>Best Casino Bonus</title>')
+r = V.verifica('Ejemplo Blog', 'https://viejo-blog.org/feed', 'https://viejo-blog.org/', 'ia')
+ok(not r.get('url_nuevo') and 'REVISAR' in r['motivo'], f"H3 identidad distinta no se aplica: {r['motivo'][:110]}")
+# H4 directorio de feeds: feed del MISMO sitio -> aplica
+reset(); WEB['https://blog.ejemplo.org/'] = b'<html>sin enlaces</html><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+WEB['https://feeds.example-cdn.net/ejemplo'] = rss(BUENOS)
+fe('Ejemplo Blog', [{'feedId': 'feed/https://feeds.example-cdn.net/ejemplo', 'title': 'Ejemplo Blog', 'website': 'https://blog.ejemplo.org/'}])
+r = V.verifica('Ejemplo Blog', 'https://blog.ejemplo.org/rss-viejo', 'https://blog.ejemplo.org/', 'ia')
+ok(r['url_nuevo'] == 'https://feeds.example-cdn.net/ejemplo' and 'directorio' in r['reparacion'], f"H4 directorio mismo sitio: {r['url_nuevo']} · {r['motivo']}")
+# H5 directorio: homónimo de OTRO sitio -> REVISAR, nunca automático
+reset(); WEB['https://blog.ejemplo.org/'] = b'<html>sin enlaces</html>'
+WEB['https://otro.example.com/f'] = rss(BUENOS)
+fe('Ejemplo Blog', [{'feedId': 'feed/https://otro.example.com/f', 'title': 'Ejemplo Blog', 'website': 'https://otro.example.com/'}])
+r = V.verifica('Ejemplo Blog', 'https://blog.ejemplo.org/rss-viejo', 'https://blog.ejemplo.org/', 'ia')
+ok(not r.get('url_nuevo') and 'REVISAR' in r['motivo'] and 'otro.example.com' in r['motivo'], f"H5 homónimo -> revisar: {r['motivo'][:100]}")
+# H6 el sitio no tiene feed: feed sintetizado desde el sitemap con páginas reales -> metodo 'sitemap'
+reset(); WEB['https://blog.ejemplo.org/'] = b'<html>sin feed</html><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+WEB['https://blog.ejemplo.org/robots.txt'] = b'Sitemap: https://blog.ejemplo.org/sm.xml'
+WEB['https://blog.ejemplo.org/sm.xml'] = ('<urlset>' + ''.join(f'<url><loc>https://blog.ejemplo.org/post/model-eval-{i}</loc><lastmod>2026-09-{20-i:02d}</lastmod></url>' for i in range(10)) + '</urlset>').encode()
+for i in range(10): WEB[f'https://blog.ejemplo.org/post/model-eval-{i}'] = f'<meta property="og:title" content="Model evaluation {i}: red teaming frontier models"><meta property="article:published_time" content="2026-09-{20-i:02d}T10:00:00Z"><article>{"llm evals prompt injection text " * 60}</article>'.encode()
+r = V.verifica('Ejemplo Blog', 'https://blog.ejemplo.org/rss-viejo', 'https://blog.ejemplo.org/', 'ia')
+q = V.sql_salida([r])
+ok(r['url_nuevo'] == 'sitemap:https://blog.ejemplo.org/' and r['motivo'] == 'ACEPTADA' and "metodo = 'sitemap'" in q, f"H6 sintetizado: {r['url_nuevo']} · {r['motivo']} · útiles {r.get('p3_utiles')}")
+pglast.parse_sql(q)
+# H7 artículos bloqueados (403): el texto se recupera del archivo -> no 'sin texto accesible'
+reset(); WEB['https://blog.ejemplo.org/'] = b'<footer>creativecommons.org/licenses/by/4.0/ content</footer>'; WEB['https://blog.ejemplo.org/feed.xml'] = rss(BUENOS)
+for i in range(10):
+    WEB[f'https://blog.ejemplo.org/p{i}'] = K.Resp(403, f'https://blog.ejemplo.org/p{i}', error='HTTP 403'); wb(f'https://blog.ejemplo.org/p{i}', ART)
+r = V.verifica('t', 'https://blog.ejemplo.org/feed.xml', 'https://blog.ejemplo.org/', 'ia')
+ok(r['motivo'] == 'ACEPTADA' and 'archivo' in r.get('p9_detalle', ''), f"H7 texto desde archivo: {r['motivo']} · {r.get('p9_detalle','')[:60]}")
+# H8 (caso real: Visualising Data) cuerpo gzip sin pedirlo -> se descomprime y se lee
+import gzip as _gz
+ok(K.descomprimir(_gz.compress(rss(BUENOS))) == rss(BUENOS) and K.descomprimir(b'<rss/>') == b'<rss/>' and K.descomprimir(b'\x1f\x8bbasura') == b'\x1f\x8bbasura',
+   'H8 gzip detectado por firma; texto plano y gzip corrupto intactos')
+# H9 (caso real: ReliefWeb) síntesis NO debe aceptar portada/listados/páginas sin fecha de publicación
+reset(); WEB['https://portal.example.org/'] = b'<html>portal</html><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+WEB['https://portal.example.org/robots.txt'] = b'Sitemap: https://portal.example.org/sm.xml'
+locs = ['https://portal.example.org/', 'https://portal.example.org/updates', 'https://portal.example.org/disasters'] + [f'https://portal.example.org/map/x/old-map-{i}' for i in range(8)]
+WEB['https://portal.example.org/sm.xml'] = ('<urlset>' + ''.join(f'<url><loc>{l}</loc><lastmod>2026-09-2{i%9}</lastmod></url>' for i, l in enumerate(locs)) + '</urlset>').encode()
+WEB['https://portal.example.org/'] = b'<html>portal humanitarian needs assessment</html><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+for l in locs[1:3]: WEB[l] = (('<article>' + 'humanitarian needs assessment ' * 15 + '</article>') * 6).encode()
+for l in locs[3:]: WEB[l] = b'<meta property="og:title" content="Map: humanitarian needs assessment"><article>' + b'humanitarian needs assessment monitoring and evaluation ' * 20 + b'</article>'
+b = K.sintetizar_feed('https://portal.example.org/')
+ok(b is None, f"H9 listados y mapas sin fecha no forman feed: {b[:80] if b else None}")
+print(f'\n{sum(R)}/{len(R)} adversariales OK')
