@@ -185,6 +185,14 @@ con `percorso.proponi_fonti(jsonb)`. Accenderle non è cosa sua: lo decide la
 verifica del lunedì dopo. È la gamba per cui la lista migliora da sola invece
 di invecchiare.
 
+Lo stesso passo si lancia a mano, con `scouting: tutti` sull'avvio manuale, e
+allora guarda **tutti** i temi invece dei soli rimasti orfani — è il modo di
+trovare i divulgatori di ogni argomento, su YouTube, nei podcast, su Mastodon.
+Serve perché il cron mensile cade il primo del mese, cioè il giorno della
+scadenza: le fonti trovate lì si accenderebbero il lunedì dopo, a viaggio
+iniziato e senza rete per accorgersene. Ogni mese su tutti i temi sarebbe
+invece un'ora di rete per ritrovare le stesse, e il cron resta stretto apposta.
+
 **Non c'è nessun interruttore da girare a mano, ed è voluto.** Un permesso da
 concedere è proprio la cosa che dal 2 ottobre lascerebbe il sistema fermo senza
 che nessuno lo sappia: la rete non c'è, dal telefono non si aprono le Actions,
