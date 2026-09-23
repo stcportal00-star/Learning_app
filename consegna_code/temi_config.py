@@ -83,7 +83,64 @@ AWESOME = {   # consulta a la API de búsqueda de GitHub; se leen los enlaces de
     'governance': 'awesome sre', 'hardware': 'awesome offline first', 'sicurezza': 'awesome incident response',
     'meal': 'awesome humanitarian', 'salute_digitale': 'awesome digital health',
 }
-KEYWORDS_SCOUT = {}   # slug -> [términos]; vacío = primeros 4 términos fuertes del léxico
+# slug -> [términos de BÚSQUEDA]. Ojo: NO es el léxico del clasificador, que
+# sigue siendo el de `specializzazioni.py` y se queda en inglés. Esto se usa
+# solo para PREGUNTAR al catálogo de iTunes.
+#
+# Estaba vacío, y el resultado se vio en la primera pasada ancha: 159 fuentes
+# en inglés, 1 en francés, 0 en italiano y 0 en español. La lista de países ya
+# estaba —se preguntaba a iTunes Italia, España y Francia— pero con términos
+# ingleses, y iTunes Italia con «data quality» devuelve programas en inglés.
+# Los países sin los términos no sirven de nada: quien divulga en italiano
+# titula su programa en italiano.
+#
+# Dos términos ingleses por tema (los que había) más uno por lengua. El tope
+# `sueltos[:12]` no cambia, así que esto no multiplica la evaluación: solo las
+# preguntas al catálogo, que son baratas.
+KEYWORDS_SCOUT = {
+    'sql_base': ['sql', 'relational database',
+                 'basi di dati', 'bases de datos', 'bases de données'],
+    'ottimizzazione': ['query performance', 'execution plan',
+                       'performance dei database', 'rendimiento de bases de datos',
+                       'performance des bases de données'],
+    'lettura_codice': ['code review', 'code comprehension',
+                       'revisione del codice', 'revisión de código', 'revue de code'],
+    'modellazione': ['data modeling', 'star schema',
+                     'modellazione dei dati', 'modelado de datos',
+                     'modélisation des données'],
+    'statistica': ['causal inference', 'bayesian inference',
+                   'statistica', 'estadística', 'statistiques'],
+    'epidemiologia': ['epidemiology', 'disease surveillance',
+                      'epidemiologia', 'epidemiología', 'épidémiologie'],
+    'kpi': ['data visualization', 'dashboard design',
+            'visualizzazione dei dati', 'visualización de datos',
+            'visualisation de données'],
+    'qualita_dati': ['data quality', 'reproducibility',
+                     'qualità dei dati', 'calidad de datos', 'qualité des données'],
+    'gdpr': ['gdpr', 'data protection',
+             'protezione dei dati', 'protección de datos', 'protection des données'],
+    'ai_act': ['ai act', 'ai governance',
+               'regolamento intelligenza artificiale',
+               'reglamento inteligencia artificial',
+               'règlement intelligence artificielle'],
+    'ia': ['large language model', 'model evaluation',
+           'intelligenza artificiale', 'inteligencia artificial',
+           'intelligence artificielle'],
+    'sicurezza': ['incident response', 'threat modeling',
+                  'cybersicurezza', 'ciberseguridad', 'cybersécurité'],
+    'hardware': ['offline first', 'network latency',
+                 'connettività', 'conectividad', 'connectivité'],
+    'governance': ['site reliability engineering', 'data governance',
+                   'governance dei dati', 'gobernanza de datos',
+                   'gouvernance des données'],
+    'business_analysis': ['requirements elicitation', 'process mining',
+                          'analisi dei processi', 'análisis de procesos',
+                          'analyse des processus'],
+    'meal': ['monitoring and evaluation', 'needs assessment',
+             'aiuto umanitario', 'ayuda humanitaria', 'aide humanitaire'],
+    'salute_digitale': ['health information system', 'electronic health record',
+                        'sanità digitale', 'salud digital', 'santé numérique'],
+}
 
 # Los catálogos de iTunes que se preguntan al buscar podcasts. El mismo término
 # devuelve programas distintos en cada país, y es la vía más corta a quien

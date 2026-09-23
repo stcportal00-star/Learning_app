@@ -119,7 +119,12 @@ jobs:
       - name: Scouting
         if: github.event.schedule == '0 3 1 * *' || (github.event.inputs.scouting || 'no') != 'no'
         continue-on-error: true
-        timeout-minutes: 60
+        # La prima pasada ancha tardó 59,4 minutos con un tope de 60: pasó por
+        # treinta y seis segundos. Con los términos en cuatro lenguas son 340
+        # preguntas al catálogo en vez de 136, y un tope rozado no es un tope.
+        # La verificación de 160 fuentes son unos 38 minutos (medidos: 14,6 con
+        # 62), así que 90 caben de sobra en los 150 del trabajo.
+        timeout-minutes: 90
         env:
           AMPIEZZA: ${{ github.event.inputs.scouting || 'scoperti' }}
         run: |
