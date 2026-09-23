@@ -428,4 +428,60 @@ ok({c['url_feed'] for c in _js} == {f['url_feed'] for f in _FILAS if not f['moti
    and 'https://c/f' not in {c['url_feed'] for c in _js},
    f"S8 activar.sql y activar.json cubren las mismas fuentes: {len(_js)} cambios")
 
+# ------------------------------------------------- perfiles y podcasts
+# Nada de esto INVENTA una dirección: cada candidata sale de una página que
+# acabamos de descargar, o de un `feedUrl` que la API devuelve. PROMPT-FONTI §8:
+# «No inventar un indirizzo: un url_feed finto costa una corsa quotidiana».
+HOME = (b'<html><head>'
+        b'<link rel="me" href="https://mastodon.social/@divulgatore">'
+        b'<link rel="alternate" type="application/rss+xml" href="/feed.xml">'
+        b'</head><body>'
+        b'<a href="https://www.youtube.com/@divulgatore">il canale</a>'
+        b'<a href="https://example.com/altro">un link qualunque</a>'
+        b'<a rel="nofollow" href="https://sponsor.example/">sponsor</a>'
+        b'</body></html>')
+ok(K.perfiles(HOME, 'https://blog.ejemplo.org/') ==
+   ['https://mastodon.social/@divulgatore', 'https://www.youtube.com/@divulgatore'],
+   f"S16 solo i profili che il sito dichiara suoi: {K.perfiles(HOME, 'https://blog.ejemplo.org/')}")
+
+ok(K.feed_de_perfil('https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv') ==
+   ('https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv',
+    'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv'),
+   'S17 da /channel/UC… il feed si deriva per regola, senza scaricare niente')
+
+reset()
+WEB['https://www.youtube.com/@divulgatore'] = (
+    b'<html><script>var x = {"channelId":"UCabcdefghijklmnopqrstuv","other":1};</script></html>')
+ok(K.feed_de_perfil('https://www.youtube.com/@divulgatore')[0] ==
+   'https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv',
+   'S18 da un handle il channelId si LEGGE dalla pagina')
+
+WEB['https://www.youtube.com/@mutolo'] = b'<html>niente channelId qui dentro</html>'
+ok(K.feed_de_perfil('https://www.youtube.com/@mutolo') == (None, None),
+   'S19 e se la pagina non lo dichiara non si inventa: nessun feed')
+
+ok(K.feed_de_perfil('https://mastodon.social/@tizio') ==
+   ('https://mastodon.social/@tizio.rss', 'https://mastodon.social/@tizio'),
+   'S20 un profilo Mastodon ha la sua RSS per regola documentata')
+
+reset()
+WEB['https://blog.ejemplo.org/'] = HOME
+WEB['https://www.youtube.com/@divulgatore'] = (
+    b'<html><script>{"channelId":"UCabcdefghijklmnopqrstuv"}</script></html>')
+cands = S.candidatos_feed('blog.ejemplo.org')
+ok([c[0] for c in cands] == [
+       'https://blog.ejemplo.org/feed.xml',
+       'https://mastodon.social/@divulgatore.rss',
+       'https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv']
+   and cands[2][2] == 'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv',
+   f"S21 il blog e i suoi profili sono tre fonti, ognuna con il SUO sito: {[c[0] for c in cands]}")
+
+reset()
+WEB['https://itunes.apple.com/search?media=podcast&limit=20&term=data%20quality&country=it'] = json.dumps(
+    {'results': [{'feedUrl': 'https://pod.example/rss', 'collectionName': 'Dati e qualità'},
+                 {'collectionName': 'Senza feed'},
+                 {'feedUrl': 'non-un-indirizzo', 'collectionName': 'Rotto'}]}).encode()
+ok(S.podcast('data quality', 'it') == [('https://pod.example/rss', 'Dati e qualità', None)],
+   f"S22 dalla ricerca podcast solo i feedUrl veri: {S.podcast('data quality', 'it')}")
+
 print(f'\n{sum(R)}/{len(R)} adversariales OK')

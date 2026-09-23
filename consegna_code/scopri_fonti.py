@@ -41,6 +41,47 @@ def awesome(slug):
         time.sleep(1)
     return hosts
 
+def podcast(kw, pais=None):
+    """Podcasts que hablan de esta keyword. -> [(url_feed, nombre, None)]
+
+    La API de búsqueda de iTunes no pide clave y devuelve `feedUrl` directamente,
+    que es lo único que necesitamos: el resto lo decide `verifica()`. Es la vía
+    más corta a los divulgadores en otras lenguas, porque el catálogo es por país
+    y el mismo término devuelve cosas distintas en cada uno.
+    """
+    q = urllib.parse.quote(kw)
+    pais = f'&country={pais}' if pais else ''
+    js = _json(f'https://itunes.apple.com/search?media=podcast&limit=20&term={q}{pais}')
+    fuera = []
+    for it in js.get('results', []):
+        url = (it.get('feedUrl') or '').strip()
+        if url.startswith('http'):
+            fuera.append((url, (it.get('collectionName') or K.host(url))[:60], None))
+    return fuera
+
+
+def candidatos_feed(h):
+    """Del dominio a los feeds que vale la pena verificar. -> [(url_feed, nombre, url_sitio)]
+
+    El del sitio, y los de los perfiles que el sitio DECLARA suyos: el mismo
+    divulgador publica en su blog y en YouTube, con ritmos distintos, y son dos
+    fuentes, no una. Ninguna dirección se inventa: salen de la página que
+    acabamos de descargar.
+    """
+    home = f'https://{h}/'
+    feeds, pag = K.descubrir(home)
+    fuera = [(f, h, home) for f in feeds[:1]]
+    if pag is not None and pag.body:
+        for p in K.perfiles(pag.body, home):
+            uf, us = K.feed_de_perfil(p)
+            # url_sitio es el PERFIL, no el blog: p8 compara el canal del feed
+            # con el sitio, y un canal de YouTube nunca vivirá en el dominio
+            # del blog.
+            if uf and all(uf != x[0] for x in fuera):
+                fuera.append((uf, f'{h} · {K.host(us)}', us))
+    return fuera[:3]
+
+
 def conocidos(sql):
     """Dominios que ya tenemos. Si `sql` es --da-nuvola, se leen de la tabla.
 
@@ -63,14 +104,35 @@ def candidatos(slug, known, appname=None, fuentes=(hn, awesome)):
     if awesome in fuentes: cnt.update(awesome(slug))
     return [(h, n) for h, n in cnt.most_common() if not excluido(h, known)]
 
-def explorar(slug, dominios, por_tema, amplia=False):
+def _sitio_del_feed(url_feed):
+    """Para un feed suelto -un podcast de iTunes- el sitio es el que él declara."""
+    _, d = K.feed(url_feed)
+    enlace = (d.feed.get('link') or '').strip() if d.entries or d.feed else ''
+    if enlace.startswith('http'):
+        return enlace
+    u = urllib.parse.urlparse(url_feed)
+    return f'{u.scheme}://{u.netloc}/'
+
+
+def explorar(slug, dominios, por_tema, amplia=False, sueltos=()):
+    """Verifica candidatas y devuelve las que llegaron a puntuarse.
+
+    `sueltos` son feeds que ya conocemos sin pasar por un dominio: los podcasts
+    de la búsqueda de iTunes. Su sitio se pregunta al feed mismo, porque el
+    dominio donde está alojado el mp3 casi nunca es el sitio del programa.
+    """
     props = []
+    cola = [(uf, nom, sit) for uf, nom, sit in sueltos]
     for h, menciones in dominios[:por_tema * 3]:
-        home = f'https://{h}/'
-        feeds, pag = K.descubrir(home)
-        if not feeds: continue
-        row = V.verifica(h, feeds[0], home, slug, amplia, con_muro=True)
-        row['menciones'] = menciones
+        cola += [(uf, nom, sit) for uf, nom, sit in candidatos_feed(h)]
+
+    vistos = set()
+    for url_feed, nombre, url_sitio in cola:
+        if url_feed in vistos: continue
+        vistos.add(url_feed)
+        sitio = url_sitio or _sitio_del_feed(url_feed)
+        row = V.verifica(nombre, url_feed, sitio, slug, amplia, con_muro=True)
+        row['menciones'] = next((n for hh, n in dominios if hh == nombre), 0)
         if row['motivo'].startswith(('TRANSITORIO', 'p1')): continue
         # Sin 'p3_utiles' la fuente no llegó a puntuarse: `verifica()` sale antes
         # de p3 en cada camino de rechazo temprano -REVISAR por redirección a otro
@@ -115,12 +177,21 @@ if __name__ == '__main__':
     por = int(a[a.index('--por-tema') + 1]) if '--por-tema' in a else 5
     app = a[a.index('--reliefweb-appname') + 1] if '--reliefweb-appname' in a else None
     fuentes = (hn, awesome, reliefweb) if app else (hn, awesome)
+    # Los países del catálogo de iTunes: el mismo término devuelve programas
+    # distintos en cada uno, y es la vía más corta a los divulgadores que no
+    # publican en inglés. La lista vive en temi_config, no aquí.
+    paises = list(getattr(C, 'PAESI_PODCAST', ()) or [None])
     todas = []
     for slug in temi:
         doms = candidatos(slug, known, app, fuentes)
-        props = explorar(slug, doms, por, '--licencia-amplia' in a)
+        sueltos = []
+        for kw in (C.KEYWORDS_SCOUT.get(slug) or K.FUERTES[slug][:2]):
+            for pais in paises:
+                sueltos += [x for x in podcast(kw, pais)
+                            if not excluido(K.host(x[0]), known)]
+        props = explorar(slug, doms, por, '--licencia-amplia' in a, sueltos[:12])
         todas += props; known |= {K.base(K.host(p['url_sito'])) for p in props}
-        print(f"{slug:18} dominios {len(doms):3} · evaluados {len(props):2} · con ≥{C.UMBRAL_VOCES}/10: {sum(p['p3_utiles'] >= C.UMBRAL_VOCES for p in props)}")
+        print(f"{slug:18} dominios {len(doms):3} · podcast {len(sueltos):3} · evaluados {len(props):2} · con ≥{C.UMBRAL_VOCES}/10: {sum(p['p3_utiles'] >= C.UMBRAL_VOCES for p in props)}")
     # '/dev/null' anche per il JSON: `escribir` scrive `activar.json` per
     # difetto, e quello è il file che il programmatore applica. Scriverci dentro
     # le candidate dello scouting significherebbe accendere fonti mai verificate.

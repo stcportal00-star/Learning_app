@@ -85,6 +85,12 @@ AWESOME = {   # consulta a la API de búsqueda de GitHub; se leen los enlaces de
 }
 KEYWORDS_SCOUT = {}   # slug -> [términos]; vacío = primeros 4 términos fuertes del léxico
 
+# Los catálogos de iTunes que se preguntan al buscar podcasts. El mismo término
+# devuelve programas distintos en cada país, y es la vía más corta a quien
+# divulga en italiano, español o francés: los archivos abiertos se interrogan
+# solo en inglés y esa gente no la ven nunca (PROMPT-FONTI §7).
+PAESI_PODCAST = ['it', 'us', 'es', 'fr']
+
 # --- Plataformas: el HOST completo identifica la fuente (no el dominio base) ------------------
 PLATAFORMAS = ['substack.com', 'blogspot.com', 'github.io', 'wordpress.com', 'ghost.io', 'medium.com',
                'netlify.app', 'pages.dev', 'hashnode.dev', 'buttondown.email', 'beehiiv.com', 'tumblr.com']
