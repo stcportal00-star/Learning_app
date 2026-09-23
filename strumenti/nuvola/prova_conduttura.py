@@ -73,6 +73,16 @@ FINTO_FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
       <description><![CDATA[<p>An OVER (PARTITION BY) walk-through, with &amp; an entity.</p>]]></description>
     </item>
     <item>
+      <title>Execution plan regressions after a major upgrade</title>
+      <pubDate>Mon, 21 Sep 2026 08:00:00 +0000</pubDate>
+      <description>Cardinality estimation went wrong.</description>
+    </item>
+    <item>
+      <title>Data quality checks for a clinical registry</title>
+      <pubDate>Mon, 21 Sep 2026 08:30:00 +0000</pubDate>
+      <description>Record linkage and missing data.</description>
+    </item>
+    <item>
       <title>Acme announces the launch of a GDPR compliance platform</title>
       <link>http://esempio.invalid/articoli/annuncio</link>
       <pubDate>Mon, 21 Sep 2026 09:30:00 +0000</pubDate>
@@ -87,6 +97,51 @@ FINTO_FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>
 """
+
+
+# I vincoli UNIQUE veri dello schema `percorso`. Stanno qui per lo stesso
+# motivo dei CHECK: un finto server che accetta cio' che Supabase rifiuta non
+# prova niente. `articoli` ne ha DUE, e l'upsert puo' risolverne uno solo —
+# quello che passa in `on_conflict`. L'altro non viene risolto: viola, e
+# PostgREST rifiuta l'INTERO lotto con 23505. E' il difetto che questa tabella
+# esiste per inchiodare.
+UNICI = {
+    "articoli": [("utente_id", "chiave"), ("utente_id", "url")],
+    "biblioteca": [("utente_id", "codice")],
+    "fonti": [("utente_id", "url_feed")],
+    "eventi": [("id",)],
+}
+
+
+class UnicoViolato(Exception):
+    pass
+
+
+def controlla_unici(tabella, righe, deposito, chiavi_upsert):
+    """I vincoli UNIQUE che l'upsert NON sta risolvendo.
+
+    Quello nominato in `on_conflict` e' gestito dalla fusione; ogni altro e'
+    un vincolo come un altro, e va violato sia contro le righe gia' scritte
+    sia contro le altre righe dello stesso lotto — perche' PostgREST scrive
+    il lotto in una transazione sola.
+    """
+    risolto = tuple(chiavi_upsert)
+    for colonne in UNICI.get(tabella, []):
+        if colonne == risolto:
+            continue
+        visti = {}
+        for r in deposito:
+            visti[tuple(r.get(c) for c in colonne)] = "gia in tabella"
+        for r in righe:
+            firma = tuple(r.get(c) for c in colonne)
+            if None in firma:
+                continue
+            if firma in visti:
+                raise UnicoViolato(
+                    "duplicate key value violates unique constraint "
+                    "\"%s_%s_key\" (%s): %s"
+                    % (tabella, "_".join(colonne), visti[firma], firma))
+            visti[firma] = "nello stesso lotto"
 
 
 class FiltroSconosciuto(Exception):
@@ -209,6 +264,13 @@ class FintoSupabase(BaseHTTPRequestHandler):
                     {"code": "23514", "message": str(e)}).encode())
                 return
             deposito = RICEVUTO["tabelle"].setdefault(tabella, [])
+            try:
+                controlla_unici(tabella, righe, deposito, chiavi)
+            except UnicoViolato as e:
+                # Stessa forma di PostgREST: il lotto intero non passa.
+                self._rispondi(409, json.dumps(
+                    {"code": "23505", "message": str(e)}).encode())
+                return
             for r in righe:
                 if chiavi:
                     firma = tuple(r.get(k) for k in chiavi)
@@ -321,7 +383,7 @@ def principale():
         "adesso": "2026-09-22T00:00:00+00:00", "gia_in_archivio": 0, "candidate": 0,
         "articoli": 0, "con_testo": 0, "pdf": 0, "manuali": 0, "volumi": 0,
         "eventi": 0, "falliti": [], "tempo_scaduto": False,
-        "feed_letti": 0, "voci_da_feed": 0,
+        "feed_letti": 0, "voci_da_feed": 0, "url_ripetuti": 0,
     }
     try:
         n = cliente.Nuvola(base=base)
@@ -352,7 +414,7 @@ def principale():
     # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
     # una strada propria questo numero resterebbe due e le righe comparirebbero
     # da un'altra parte.
-    prova("tre articoli pubblicati: due dal catalogo, uno dal feed", len(articoli), 3)
+    prova("quattro articoli: due dal catalogo, due dal feed", len(articoli), 4)
     prova("un volume: il file a mano buono", len(volumi), 1)
     prova("l'impostore è stato scartato", rapporto["manuali"], 1)
     prova_vero(
@@ -369,7 +431,7 @@ def principale():
         not any("spenta" in f for f in rapporto["falliti"]),
         repr(rapporto["falliti"]),
     )
-    prova("una voce sola ha superato la classificazione", rapporto["voci_da_feed"], 1)
+    prova("tre voci hanno superato la classificazione", rapporto["voci_da_feed"], 3)
     prova("e il comunicato stampa è stato tolto come rumore",
           rapporto["rumore_feed"], 1)
     prova_vero(
@@ -379,15 +441,38 @@ def principale():
         "esclusioni redazionali non viene applicato alle voci RSS",
     )
     da_feed = [r for r in articoli if (r.get("fonte") or "").startswith("rss[")]
-    prova("l'articolo del feed è arrivato in tabella", len(da_feed), 1)
+    prova("due articoli del feed sono arrivati in tabella", len(da_feed), 2)
+
+    # Le due voci senza <link> ripiegano entrambe sull'indirizzo del feed e
+    # arrivano qui con lo stesso url e due chiavi diverse. `articoli` ha un
+    # UNIQUE su (utente_id, url) che l'upsert NON risolve — risolve quello
+    # sulla chiave — quindi senza la deduplica per url PostgREST rifiuta il
+    # LOTTO INTERO con 23505, e la mattina si perde tutta: zero articoli, zero
+    # eventi, non una riga in meno.
+    prova("le due voci senza collegamento sono collassate in una",
+          rapporto["url_ripetuti"], 1)
+    prova_vero(
+        "e delle due è rimasta quella con più da leggere",
+        any("Execution plan" in (r.get("titolo") or "") for r in da_feed)
+        and not any("Data quality checks" in (r.get("titolo") or "") for r in da_feed),
+        repr([r.get("titolo") for r in da_feed]),
+    )
+    prova_vero(
+        "nessun url ripetuto è arrivato al servitore",
+        len({r["url"] for r in articoli}) == len(articoli),
+        repr([r["url"] for r in articoli]),
+    )
     prova_vero(
         "il rumore di redazione non passa",
         not any("Top 10" in (r.get("titolo") or "") for r in articoli),
         "un titolo senza tema è entrato lo stesso: il filtro della rassegna "
         "non è stato applicato alle voci RSS",
     )
-    if da_feed:
-        voce = da_feed[0]
+    # La voce con un <link> vero: è su quella che si provano la risoluzione
+    # dell'indirizzo relativo, l'HTML tolto e la data RFC 822.
+    con_link = [r for r in da_feed if "Window functions" in (r.get("titolo") or "")]
+    if con_link:
+        voce = con_link[0]
         prova("la fonte porta il nome della rivista", voce["fonte"], "rss[finta]")
         prova_vero(
             "il collegamento relativo è stato risolto",
@@ -479,7 +564,7 @@ def principale():
     prima = len(RICEVUTO["tabelle"]["articoli"])
     rapporto2 = dict(rapporto, articoli=0, volumi=0, eventi=0, falliti=[],
                      gia_in_archivio=0, candidate=0, manuali=0, pdf=0, con_testo=0,
-                     feed_letti=0, voci_da_feed=0, rumore_feed=0)
+                     feed_letti=0, voci_da_feed=0, rumore_feed=0, url_ripetuti=0)
     pubblica.scarica = niente_rete
     try:
         pubblica.pubblica(
@@ -498,7 +583,7 @@ def principale():
     # meccanismo che ferma gli archivi. Senza questa riga la prova sopra
     # passerebbe anche se il feed non fosse stato letto affatto.
     prova("il feed è stato riletto", rapporto2["feed_letti"], 1)
-    prova("e la stessa voce non si deposita due volte", rapporto2["voci_da_feed"], 1)
+    prova("e le stesse voci non si depositano due volte", rapporto2["voci_da_feed"], 3)
 
     server.shutdown()
     shutil.rmtree(cartella, ignore_errors=True)
