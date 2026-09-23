@@ -222,4 +222,38 @@ for l in locs[1:3]: WEB[l] = (('<article>' + 'humanitarian needs assessment ' * 
 for l in locs[3:]: WEB[l] = b'<meta property="og:title" content="Map: humanitarian needs assessment"><article>' + b'humanitarian needs assessment monitoring and evaluation ' * 20 + b'</article>'
 b = K.sintetizar_feed('https://portal.example.org/')
 ok(b is None, f"H9 listados y mapas sin fecha no forman feed: {b[:80] if b else None}")
+# H10 (caso real: ReliefWeb) <lastmod> NO es fecha de publicación.
+# El sitemap fecha /countries -una página de navegación- en 2026, y los 4 informes
+# reales son de 2007-2009: esa sola voz hacía pasar p0 y la fuente salía ACEPTADA.
+def _iso(dias):
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() - dias * 86400))
+LARGO = 'humanitarian needs assessment monitoring and evaluation report ' * 40
+reset(); WEB['https://relief.example.int/'] = b'<html>portal</html><footer>creativecommons.org/licenses/by/4.0/ content</footer>'
+WEB['https://relief.example.int/robots.txt'] = b'Sitemap: https://relief.example.int/sm.xml'
+VIEJOS = [f'https://relief.example.int/report/sudan/old-report-{i}' for i in range(4)]
+WEB['https://relief.example.int/sm.xml'] = ('<urlset>'
+    + f'<url><loc>https://relief.example.int/countries</loc><lastmod>{time.strftime("%Y-%m-%d")}</lastmod></url>'
+    + ''.join(f'<url><loc>{l}</loc><lastmod>{time.strftime("%Y-%m-%d")}</lastmod></url>' for l in VIEJOS)
+    + '</urlset>').encode()
+WEB['https://relief.example.int/countries'] = ('<title>Countries</title><main>' + LARGO + '</main>').encode()
+for i, l in enumerate(VIEJOS):
+    WEB[l] = (f'<meta property="og:title" content="Sudan situation report {i}">'
+              f'<script type="application/ld+json">{{"datePublished":"200{7 + i % 3}-05-0{i + 1}"}}</script>'
+              f'<article>{LARGO}</article>').encode()
+b = K.sintetizar_feed('https://relief.example.int/')
+ok(b is None, f"H10 lastmod de una página de navegación no da frescura: {b[:90] if b else None}")
+# H11 el mismo sitemap con 3 artículos con fecha de publicación reciente -> sí se acepta
+RECIENTES = [f'https://relief.example.int/report/sudan/fresh-report-{i}' for i in range(3)]
+WEB['https://relief.example.int/sm.xml'] = ('<urlset>'
+    + f'<url><loc>https://relief.example.int/countries</loc><lastmod>{time.strftime("%Y-%m-%d")}</lastmod></url>'
+    + ''.join(f'<url><loc>{l}</loc><lastmod>{time.strftime("%Y-%m-%d")}</lastmod></url>' for l in RECIENTES)
+    + '</urlset>').encode()
+for i, l in enumerate(RECIENTES):
+    WEB[l] = (f'<meta property="og:title" content="Sudan situation report {i}">'
+              f'<meta property="article:published_time" content="{_iso(i + 1)}">'
+              f'<article>{LARGO}</article>').encode()
+b2 = K.sintetizar_feed('https://relief.example.int/')
+n2 = b2.count(b'<item>') if b2 else 0
+ok(b2 is not None and n2 == 3 and b'countries' not in b2,
+   f"H11 3 fechas de publicación recientes forman feed: {n2} voces")
 print(f'\n{sum(R)}/{len(R)} adversariales OK')

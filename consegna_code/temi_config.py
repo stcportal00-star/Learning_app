@@ -58,6 +58,12 @@ MARCAS_PAYWALL = ['this post is for paid subscribers', 'for paid subscribers', '
 PAYWALL_MAX = 1          # de 3 artículos muestreados; más de 1 con muro = fuente rechazada
 UMBRAL_VOCES, UMBRAL, UMBRAL_DISTINTOS = 4, 1.0, 0.8
 MAX_DIAS_SIN_PUBLICAR = 365
+# Un feed sintetizado desde el sitemap se acepta solo si tiene al menos estas
+# voces con fecha FIABLE (meta de publicación, JSON-LD o fecha en la URL) dentro
+# de MAX_DIAS_SIN_PUBLICAR. Caso real (ReliefWeb): el <lastmod> del sitemap decía
+# 2026 para /countries, una página de navegación, y esa sola voz hacía pasar p0
+# mientras los 4 informes reales eran de 2007-2009.
+SINTESIS_MIN_RECIENTES = 3
 MAX_FALLOS_TRANSITORIOS = 3
 
 # --- Descubrimiento por keyword (scopri_fonti.py) ---------------------------------------------

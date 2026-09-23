@@ -301,18 +301,37 @@ def _meta(html, nombre):
         if nombre in (a.get('property', '').lower(), a.get('name', '').lower()): return H.unescape(a.get('content', ''))
     return ''
 
+_FECHA = re.compile(r'(20\d\d)-(\d\d)-(\d\d)')
+def dias_de(fecha):
+    """Días transcurridos desde una fecha ISO; None si no se lee. Fecha futura = 0 días."""
+    m = _FECHA.search(fecha or '')
+    if not m: return None
+    try: t = calendar.timegm((int(m.group(1)), int(m.group(2)), int(m.group(3)), 0, 0, 0, 0, 1, 0))
+    except (ValueError, OverflowError): return None
+    return max(0, int((time.time() - t) // 86400))
+
+def _navegacion(loc):
+    """Portada, o caso real (ReliefWeb) /countries, /updates: un solo segmento y sin
+    guion no es el permalink de un artículo, es navegación que el sitemap fecha hoy."""
+    ruta = [p for p in urllib.parse.urlparse(loc).path.split('/') if p]
+    return not ruta or (len(ruta) == 1 and '-' not in ruta[0])
+
 def sintetizar_feed(url_sito, n=10):
-    """Feed RSS construido con contenido REAL del sitio (sitemap + páginas). -> bytes o None."""
+    """Feed RSS construido con contenido REAL del sitio (sitemap + páginas). -> bytes o None.
+
+    Solo se devuelve si al menos SINTESIS_MIN_RECIENTES voces traen una fecha FIABLE
+    -meta de publicación, JSON-LD o fecha en la URL- dentro de MAX_DIAS_SIN_PUBLICAR.
+    El <lastmod> del sitemap NO es fecha de publicación: dice cuándo cambió la página.
+    """
     items, bajadas = [], 0
     for loc, lm in sitemap_urls(url_sito):
         if len(items) >= n or bajadas >= n + 6: break      # tope de descargas por síntesis
         if re.search(r'(?i)/(tag|category|author|page|feed|wp-content|search)/|\.(jpg|png|pdf|xml)$', loc): continue
+        if _navegacion(loc): continue
         r = fetch(loc); bajadas += 1
         if not r.body: continue
         h = r.body.decode('utf-8', 'ignore')
         titulo = _meta(h, 'og:title') or texto((re.search(r'(?is)<title>(.*?)</title>', h) or [None, ''])[1])
-        ruta = [p for p in urllib.parse.urlparse(loc).path.split('/') if p]
-        if not ruta: continue                                                          # portada
         # página de ARTÍCULO = un bloque de contenido dominante (casos reales: Ada 15k de 15.5k; HPN 16.8k de 17.4k).
         # listados (ReliefWeb /updates: bloques de ~400) y fichas cortas (mapas: 726) no lo son.
         bloques = [texto(a) for a in re.findall(r'(?is)<article\b.*?</article>', h)] or [texto((re.search(r'(?is)<main\b.*?</main>', h) or [''])[0])]
@@ -320,13 +339,20 @@ def sintetizar_feed(url_sito, n=10):
         if len(mayor) < 1500 or len(mayor) < 0.6 * sum(map(len, bloques)): continue
         m_url = re.search(r'/(20\d\d)[-/](\d\d)(?:[-/](\d\d))?', loc)
         fecha = (_meta(h, 'article:published_time') or (re.findall(r'"datePublished"\s*:\s*"([^"]+)"', h) or [''])[0]
-                 or (f'{m_url.group(1)}-{m_url.group(2)}-{m_url.group(3) or "01"}' if m_url else '') or lm)   # lastmod: último recurso
-        if not fecha: continue
+                 or (f'{m_url.group(1)}-{m_url.group(2)}-{m_url.group(3) or "01"}' if m_url else ''))
+        if not fecha and not lm: continue
         txt = mayor[:4000]
+        # fecha débil (solo <lastmod>): la voz se queda -es contenido real- pero sin
+        # <pubDate>, para que no cuente en p0 ni pueda revivir un feed muerto.
         if titulo and len(txt) > 200: items.append((titulo, loc, fecha, txt))
-    if not items: return None
+    def reciente(f):
+        x = dias_de(f) if f else None
+        return x is not None and x <= C.MAX_DIAS_SIN_PUBLICAR
+    recientes = sum(1 for _, _, f, _ in items if reciente(f))
+    if recientes < C.SINTESIS_MIN_RECIENTES: return None
     esc = lambda s: H.escape(s or '', quote=False)
-    xml = ''.join(f'<item><title>{esc(t)}</title><link>{esc(l)}</link><pubDate>{esc(f)}</pubDate><description>{esc(d)}</description></item>'
+    xml = ''.join('<item><title>%s</title><link>%s</link>%s<description>%s</description></item>'
+                  % (esc(t), esc(l), '<pubDate>%s</pubDate>' % esc(f) if f else '', esc(d))
                   for t, l, f, d in items)
     return f'<?xml version="1.0"?><rss version="2.0"><channel><title>sintetizado</title><link>{esc(url_sito)}</link>{xml}</channel></rss>'.encode()
 
