@@ -155,6 +155,12 @@ perché scarica ogni feed, apre tre articoli per fonte per cercare il muro di
 pagamento e legge le pagine dei termini: un'ora di rete, che dentro le 08:00
 sarebbe una rassegna persa ogni mattina.
 
+La lista la legge dalla **tabella**, non dal file: `--da-nuvola`.
+`consegna_code/fonti_v4.sql` è la semenza, applicata una volta sola. Se la
+verifica leggesse il file, le candidate che lo scouting propone ogni mese non
+sarebbero mai verificate — resterebbero spente per sempre, e la lista
+smetterebbe di migliorare senza che si veda.
+
 `consegna_code/verifica_fonti.py` guarda e scrive un rapporto; non tocca la
 base. Decide `programma_fonti.py`, e decide poco: con 0 e 2 applica, con 2
 lancia anche lo scouting per i temi che `salud.md` marca ⚠️, con 3

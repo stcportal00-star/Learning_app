@@ -42,7 +42,14 @@ def awesome(slug):
     return hosts
 
 def conocidos(sql):
-    return {K.base(K.host(u)) for n, f, s, c in V.filas(sql) for u in (f, s) if u.startswith('http')}
+    """Dominios que ya tenemos. Si `sql` es --da-nuvola, se leen de la tabla.
+
+    Importa que venga de la tabla: si no, el scouting volvería a proponer cada
+    mes las mismas candidatas que ya propuso -el `on conflict do nothing` las
+    tragaría en silencio- y gastaría la cuota de las APIs para nada.
+    """
+    filas = V.filas_de_nuvola() if sql == V.DESDE_NUBE else V.filas(sql)
+    return {K.base(K.host(u)) for n, f, s, c in filas for u in (f, s) if u.startswith('http')}
 
 def excluido(h, known):
     return (not h) or K.base(h) in known or any(h == x or h.endswith('.' + x) for x in C.EXCLUIR_DOMINIOS)
@@ -96,7 +103,8 @@ def proponer_sql(rows):
 if __name__ == '__main__':
     a = sys.argv
     K.configurar(parche='--sin-parche' not in a)
-    sql = open(a[1]).read(); known = conocidos(sql)
+    sql = a[1] if a[1] == V.DESDE_NUBE else open(a[1]).read()
+    known = conocidos(sql)
     temi = a[a.index('--temi') + 1].split(',') if '--temi' in a else list(K.FUERTES)
     por = int(a[a.index('--por-tema') + 1]) if '--por-tema' in a else 5
     app = a[a.index('--reliefweb-appname') + 1] if '--reliefweb-appname' in a else None
