@@ -335,53 +335,48 @@ Due strade: chiuderlo (e allora prima va risolta la voce 17, la forma di `file_l
 
 ---
 
-## PRM-01 — i promemoria perdono le sessioni di oggi dopo le 22:00 UTC
+## PRM-01 — RISOLTA il 23 settembre 2026. Il difetto era nella prova, non nell'app.
 
-**Aggiunta il 22 settembre 2026.** Non veniva da nessuno dei sei agenti: si è
-presentata da sé, facendo diventare rosso `npm run verifica` a fine giornata
-dopo essere stato verde la mattina, sullo stesso commit.
+**Cosa sembrava.** Tre verifiche del blocco L3 di
+`test/simulazione/promemoria-notifiche.mjs` passavano prima delle 22:00 UTC e
+fallivano dopo, sullo stesso commit. La prima diagnosi, scritta qui ieri sera,
+diceva: «se la causa è nell'app, un promemoria impostato di sera non riconosce
+il blocco già fatto quel giorno». **Era sbagliata.**
 
-**Cosa si osserva.** Tre verifiche del blocco L3 di
-`test/simulazione/promemoria-notifiche.mjs` — quelle su «il blocco di oggi
-risulta già registrato» — passano prima delle 22:00 UTC e falliscono dopo.
-`giaFattoOggi()` riceve un elenco VUOTO di sessioni odierne, mentre la stessa
-identica interrogazione (`SELECT inizio FROM sessioni WHERE tipo = ?`) eseguita
-una riga prima e una riga dopo il montaggio della schermata le righe le trova.
+**Cos'era davvero.** La simulazione fissa di proposito il fuso a `Europe/Rome`
+(riga 130: «senza, i confronti su mezzanotte e ora legale dipenderebbero da
+dove gira il contenitore»). Fra le 22:00 e le 24:00 UTC a Roma è già il giorno
+dopo. Il blocco L3 registrava la sessione a `Date.now() - 2 * 3600_000` e la
+chiamava «una sessione di oggi»: in quella finestra cade nel giorno
+PRECEDENTE. `giaFattoOggi()` rispondeva correttamente «non è di oggi», e la
+prova lo contava come un errore dell'app.
 
-**Misurato, non dedotto.** Con l'orologio inchiodato da
-`test/banco/orologio-fisso.mjs`:
+L'app non ha mai avuto questo difetto.
 
-| ora UTC | esito |
-|---|---|
-| 02:30 | 408 su 408 |
-| 07:50 | 408 su 408 |
-| 12:00 | 408 su 408 |
-| 18:30 | 408 su 408 |
-| 20:30 | 408 su 408 |
-| 21:30 | 408 su 408 |
-| **22:30** | **405 su 408** |
-| **23:30** | **405 su 408** |
+**La correzione.** Due funzioni nuove nella simulazione: `oggiGiaPassato()`
+restituisce un istante di oggi in ora locale e già passato **a qualunque ora si
+esegua** (mezzanotte locale più metà del tempo trascorso), e
+`ieriAMezzogiorno()` fa lo stesso per il giorno prima, lontano da ogni confine.
+`verifica.sh` esegue ora la simulazione a **quattro ore diverse** — 00:30,
+06:30, 12:30, 23:30 — invece che una: provarla a un'ora sola è ciò che aveva
+lasciato passare il difetto. Misurata verde a undici ore diverse del giorno.
 
-Il confine è netto: le 22:00 UTC.
+**Un secondo difetto, trovato per strada e corretto.** `conFuso()` ripristinava
+il fuso con `process.env.TZ = precedente`: quando `precedente` è `undefined`
+quell'assegnazione scrive la **stringa** `"undefined"`, e la chiave resta
+nell'ambiente con un valore che non è un fuso. Qui non ha fatto danno — la
+simulazione parte sempre con `TZ` impostata, quindi il ramo rotto non veniva
+mai preso, e Node comunque ricade su UTC — ma era una trappola per il primo
+chiamante che l'avesse usata senza. Corretto con `delete process.env.TZ`, e
+questa volta con una guardia che diventa davvero rossa: la prima stesura della
+guardia passava anche col codice rotto, perché misurava lo stato di partenza
+invece del ripristino.
 
-**Non è di questa sessione.** Si riproduce identica al commit `a460bae`, cioè
-prima di qualunque modifica del lavoro sulla nuvola. Non tocca la
-sincronizzazione né la conduttura quotidiana.
+**Lezione, e vale più della correzione.** Per un giorno intero questa prova ha
+accusato l'app di un difetto che non aveva, e la diagnosi sbagliata è finita
+scritta in questo file. Ciò che l'ha smontata non è stato ragionare meglio: è
+stato misurare — inchiodare l'orologio a undici ore diverse, stampare la
+mezzanotte locale calcolata, e falsificare ogni correzione una per una. La
+falsificazione ha anche bocciato la mia prima spiegazione (`conFuso` come
+causa): rimettendo solo quel difetto la prova restava verde.
 
-**Perché conta.** Non è solo rumore nella verifica: se la causa è nell'app e
-non nella prova, allora un promemoria impostato di sera non riconosce il blocco
-già fatto quel giorno, e lo ripropone. L'app va in viaggio il 2 ottobre.
-
-**Riproduzione.**
-
-```bash
-OROLOGIO_FISSO=$(node -e "console.log(Date.parse('2026-09-22T23:00:00Z'))") \
-NODE_OPTIONS="--import=./test/banco/orologio-fisso.mjs" \
-node test/simulazione/promemoria-notifiche.mjs
-```
-
-**Stato.** Aperta, causa non individuata. `verifica.sh` fa girare la
-simulazione a un'ora fissa del mattino — così il rosso torna a significare
-qualcosa — e subito dopo la rifà alle 23:00 come SENTINELLA: se il difetto
-smette di riprodursi, lo dice e chiede di chiudere questa voce. Il difetto non
-è stato nascosto, è stato inchiodato.

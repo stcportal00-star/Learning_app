@@ -356,15 +356,51 @@ async function nonLancia(nome, azione) {
   }
 }
 
-/** Esegue `azione` in un altro fuso orario e rimette quello di prima. */
+/**
+ * Esegue `azione` in un altro fuso orario e rimette quello di prima.
+ *
+ * Il ripristino deve distinguere «TZ non c'era» da «TZ era vuota»:
+ * `process.env.TZ = undefined` scrive la STRINGA "undefined", che non e un
+ * fuso valido e non riporta il processo a UTC — ci lascia dentro l'ultimo
+ * fuso valido impostato, cioe quello che si voleva togliere.
+ *
+ * Costava tre verifiche del blocco L3, ma solo fra le 22:00 e le 24:00 UTC:
+ * con Europe/Rome rimasta addosso, a quell'ora e gia domani a Roma, e una
+ * sessione di due ore prima cade nel giorno PRECEDENTE. La prova accusava
+ * l'app di un difetto che non ha: `giaFattoOggi()` rispondeva giusto.
+ */
 async function conFuso(nome, azione) {
+  const cera = "TZ" in process.env;
   const precedente = process.env.TZ;
   process.env.TZ = nome;
   try {
     return await azione();
   } finally {
-    process.env.TZ = precedente;
+    if (cera) process.env.TZ = precedente;
+    else delete process.env.TZ;
   }
+}
+
+/**
+ * Un istante di OGGI in ora LOCALE, e gia passato, a qualunque ora si esegua.
+ *
+ * `Date.now() - 2 * 3600_000` sembra equivalente e non lo e: nelle due ore
+ * dopo la mezzanotte locale cade nel giorno prima, e una prova che dice
+ * "una sessione di oggi" finisce per registrarne una di ieri. E' il secondo
+ * difetto che rendeva rossa questa simulazione dopo le 22:00 UTC.
+ */
+function oggiGiaPassato() {
+  const mezzanotte = new Date();
+  mezzanotte.setHours(0, 0, 0, 0);
+  return mezzanotte.getTime() + Math.floor((Date.now() - mezzanotte.getTime()) / 2);
+}
+
+/** Un istante di IERI in ora locale, lontano da ogni confine. */
+function ieriAMezzogiorno() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  d.setHours(12, 0, 0, 0);
+  return d.getTime();
 }
 
 /** Una data in ORA LOCALE, senza passare da una stringa ambigua. */
@@ -680,6 +716,36 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
   const nonBisestile = prossimaOccorrenza(acceso(7, 0), locale(2027, 2, 28, 9, 0));
   ok("D/anno non bisestile: dal 28 febbraio si passa al 1 marzo",
      nonBisestile.getMonth() === 2 && nonBisestile.getDate() === 1);
+
+  // ------------------------------------------- conFuso non deve lasciar tracce
+  // `conFuso` cambia il fuso del PROCESSO: se non lo ripristina, resta addosso
+  // a tutte le scene dopo, in silenzio. Ripristinarlo con
+  // `process.env.TZ = precedente` quando `precedente` e undefined scrive la
+  // STRINGA "undefined" — la chiave resta nell'ambiente, con un valore che non
+  // e un fuso. Qui Node ci ricade su UTC e il danno non si vede, ma e un caso
+  // fortunato, non una garanzia: su un altro motore o un'altra versione quella
+  // stringa e libera di significare altro.
+  //
+  // La scena si azzera da se invece di fidarsi dell'ambiente ereditato: cosi
+  // misura il ripristino e non lo stato di partenza, che e la ragione per cui
+  // la prima stesura di questa guardia passava anche con conFuso rotta.
+  {
+    const cEra = "TZ" in process.env;
+    const valore = process.env.TZ;
+    delete process.env.TZ;
+    await conFuso("Europe/Rome", () => undefined);
+    ok("D/conFuso non lascia TZ nell'ambiente se non c'era",
+       !("TZ" in process.env),
+       `dopo: ${"TZ" in process.env ? JSON.stringify(process.env.TZ) : "assente"}`);
+
+    process.env.TZ = "America/Mexico_City";
+    await conFuso("Europe/Rome", () => undefined);
+    ok("D/e rimette esattamente quella che c'era",
+       process.env.TZ === "America/Mexico_City", JSON.stringify(process.env.TZ));
+
+    if (cEra) process.env.TZ = valore;
+    else delete process.env.TZ;
+  }
 
   // ---------------------------------------------------------- ora legale
   // Il commento del modulo promette che l'avviso resta all'ora locale del
@@ -1502,8 +1568,8 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
   pulisci();
   await svuotaSessioni();
   await notifiche.salvaPromemoria(acceso(7, 0, "mattina"));
-  await registraSessione("mattina", Date.now() - 2 * 3600_000, 30);
-  await registraSessione("ripasso", Date.now() - 3 * 3600_000, 15);
+  await registraSessione("mattina", oggiGiaPassato(), 30);
+  await registraSessione("ripasso", oggiGiaPassato(), 15);
   {
     const sc = creaSchermata();
     await sc.montaggio();
@@ -1526,7 +1592,7 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
   pulisci();
   await svuotaSessioni();
   await notifiche.salvaPromemoria(acceso(7, 0, "mattina"));
-  await registraSessione("mattina", Date.now() - 26 * 3600_000, 30);
+  await registraSessione("mattina", ieriAMezzogiorno(), 30);
   {
     const sc = creaSchermata();
     await sc.montaggio();
