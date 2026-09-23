@@ -354,6 +354,28 @@ try:
     ok(PR._fuente(V.DESDE_NUBE) == V.DESDE_NUBE
        and PR._fuente('fonti_v4.sql').endswith('/fonti_v4.sql'),
        "S12 --da-nuvola es una bandera, no una ruta")
+    # Caso real de la corrida del 23-09: el scouting revienta y el informe dice
+    # «propuestas 0», igual que si no hubiera encontrado nada. La pata que hace
+    # mejorar la lista queda muerta y nadie se entera.
+    def _programa_roto(codigo, lavoro, salud):
+        with open(os.path.join(lavoro, 'activar.json'), 'w', encoding='utf-8') as fh:
+            json.dump(CAMBIO, fh)
+        with open(os.path.join(lavoro, 'salud.md'), 'w', encoding='utf-8') as fh:
+            fh.write(salud)
+        avisos = []
+        hecho = PR.programar(
+            'fonti.sql', lavoro,
+            verificar=lambda sql, l: codigo,
+            aplicar=lambda c: None,
+            descubrir=lambda t, sql, l: 1,     # como subprocess.run(...).returncode
+            avisar=lambda t: avisos.append(t),
+            proponer=lambda p: None)
+        return hecho, avisos
+
+    h, av = _programa_roto(2, _trabajo, SALUD_AVISO)
+    ok(h['propuestas'] == 0 and len(av) == 1 and 'scouting' in av[0].lower(),
+       f"S14 un scouting che esplode non si confonde con «nessuna candidata»: {av}")
+
     _vera = V.filas_de_nuvola
     V.filas_de_nuvola = lambda *a, **k: [('N', 'https://nueva.example/f',
                                           'https://nueva.example/', 'ia')]
@@ -363,6 +385,28 @@ try:
            f"{S.conocidos(V.DESDE_NUBE)}")
     finally:
         V.filas_de_nuvola = _vera
+
+    # La fila que reventó el scouting: `verifica()` sale antes de p3 -REVISAR
+    # por redirección a otro dominio- y no tiene 'p3_utiles'. Una sola así
+    # mataba la corrida entera.
+    _vv, _vd = V.verifica, K.descubrir
+    K.descubrir = lambda home, r=None: (['https://%s/feed' % K.host(home)], None)
+    _filas = iter([
+        {'nome': 'a', 'url_feed': 'https://a/f', 'url_sito': 'https://a/',
+         'categoria': 'ia', 'motivo': 'REVISAR redirección a otro dominio: b.com'},
+        {'nome': 'b', 'url_feed': 'https://b/f', 'url_sito': 'https://b/',
+         'categoria': 'ia', 'motivo': 'ACEPTADA', 'p3_utiles': 7},
+    ])
+    V.verifica = lambda *a, **k: next(_filas)
+    try:
+        props = S.explorar('ia', [('a.example', 3), ('b.example', 2)], 1)
+        ok([p['nome'] for p in props] == ['b'],
+           f"S15 una fila senza punteggio non è una candidata, e non ferma il resto: "
+           f"{[p['nome'] for p in props]}")
+    except KeyError as e:
+        ok(False, f"S15 explorar è esploso su una fila senza punteggio: {e!r}")
+    finally:
+        V.verifica, K.descubrir = _vv, _vd
 finally:
     shutil.rmtree(_trabajo, ignore_errors=True)
 

@@ -72,6 +72,12 @@ def explorar(slug, dominios, por_tema, amplia=False):
         row = V.verifica(h, feeds[0], home, slug, amplia, con_muro=True)
         row['menciones'] = menciones
         if row['motivo'].startswith(('TRANSITORIO', 'p1')): continue
+        # Sin 'p3_utiles' la fuente no llegó a puntuarse: `verifica()` sale antes
+        # de p3 en cada camino de rechazo temprano -REVISAR por redirección a otro
+        # dominio, entre ellos- y esa fila no es una candidata, es un aviso.
+        # Caso real (corrida del 23-09): una sola fila así reventaba el scouting
+        # entero con KeyError, y el programador reportaba «propuestas 0».
+        if 'p3_utiles' not in row: continue
         props.append(row)
         if sum(p['p3_utiles'] >= C.UMBRAL_VOCES for p in props) >= por_tema: break
     return props
