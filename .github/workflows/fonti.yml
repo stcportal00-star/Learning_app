@@ -20,8 +20,8 @@ on:
   workflow_dispatch:
     inputs:
       applica:
-        description: "si = scrive davvero in percorso.fonti; no = marcia a secco"
-        default: "no"
+        description: "no = marcia a secco, non scrive niente. Di norma si lascia si."
+        default: "si"
 
 # `verifica_fonti.py` non scrive in `percorso.articoli` né tocca `stato.tar`, ma
 # `applica_fonti` cambia proprio la tabella che `nuvola.yml` sta leggendo: due
@@ -67,25 +67,29 @@ jobs:
             echo "non avrà un confronto questa volta, e va bene: lo avrà dalla prossima."
           fi
 
-      # Il cancello vero della prima scrittura. Finché la variabile di
-      # repository FONTI_APPLICA non vale «si», qui si calcola tutto e non si
-      # tocca niente: il rapporto esce lo stesso e si legge dal telefono. La
-      # prima scrittura in una base che nessuno sorveglia è una decisione
-      # dell'utente, non un effetto collaterale di un merge.
+      # Applica per difetto, e non c'è un interruttore da girare a mano.
+      # Un cancello qui dentro sarebbe proprio la cosa che, dal 2 ottobre in
+      # poi, lascia il sistema fermo senza che nessuno lo sappia: la rete non
+      # c'è, dal telefono non si aprono le Actions, e una fonte che muore
+      # resta morta fino a novembre.
+      #
+      # Ciò che protegge non è un permesso, sono i due interruttori che
+      # misurano da soli se questa corsa è credibile: 40% di guasti di rete, o
+      # le accettate che crollano di oltre la metà rispetto alla volta prima.
+      # In entrambi i casi non si scrive una riga.
+      #
+      # `applica: no` resta a mano, per guardare senza toccare.
       - name: Verifica e applicazione
         id: verifica
         env:
           SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
-          APPLICA: ${{ github.event.inputs.applica || vars.FONTI_APPLICA || 'no' }}
+          APPLICA: ${{ github.event.inputs.applica || 'si' }}
         run: |
           set -euo pipefail
-          secco=(--senza-applicare)
-          if [ "$APPLICA" = "si" ]; then
-            secco=()
-            echo "Applicazione ABILITATA: le decisioni finiscono in percorso.fonti."
-          else
-            echo "Marcia a secco: nessuna scrittura. Per abilitarla, imposta la"
-            echo "variabile di repository FONTI_APPLICA = si (Settings → Variables)."
+          secco=()
+          if [ "$APPLICA" != "si" ]; then
+            secco=(--senza-applicare)
+            echo "Marcia a secco chiesta a mano: nessuna scrittura."
           fi
           python3 consegna_code/programma_fonti.py consegna_code/fonti_v4.sql \
             --lavoro lavoro-fonti "${secco[@]}"
@@ -111,6 +115,13 @@ jobs:
           cd lavoro-fonti
           python3 ../consegna_code/scopri_fonti.py \
             ../consegna_code/fonti_v4.sql --temi "$temi"
+          cd ..
+          # Le candidate entrano nella tabella SPENTE. Accenderle non è cosa di
+          # questo passo: lo decide la verifica del lunedì dopo, che è l'unica
+          # che le guarda davvero. Senza questa riga `proponer.json` resterebbe
+          # un file, e la lista delle fonti smetterebbe di migliorare il giorno
+          # in cui nessuno apre più il repository.
+          python3 consegna_code/programma_fonti.py --proponi lavoro-fonti
 
       - name: Stato aggiornato nella release
         if: always()

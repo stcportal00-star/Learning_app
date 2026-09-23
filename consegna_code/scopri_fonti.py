@@ -69,6 +69,20 @@ def explorar(slug, dominios, por_tema, amplia=False):
         if sum(p['p3_utiles'] >= C.UMBRAL_VOCES for p in props) >= por_tema: break
     return props
 
+def proponer_json(rows):
+    """Las mismas propuestas de proponer_sql(), para percorso.proponi_fonti.
+
+    El .sql lo lee una persona cuando quiere entender qué salió; esto lo aplica
+    el programador sin que nadie mire, que es el único modo de que la lista de
+    fuentes siga mejorando después del lanzamiento.
+    """
+    return [{'nome': r['nome'], 'url_feed': r.get('url_nuevo') or r['url_feed'],
+             'url_sito': r['url_sito'], 'metodo': 'sitemap' if str(
+                 r.get('url_nuevo') or '').startswith('sitemap:') else 'rss',
+             'categoria': r['categoria'], 'lingua': 'en', 'peso': 0.3}
+            for r in rows if r.get('p3_utiles', 0) >= C.UMBRAL_VOCES]
+
+
 def proponer_sql(rows):
     esc = lambda s: s.replace("'", "''")
     vals = [f"  ('{esc(r['nome'])}', '{esc(r.get('url_nuevo') or r['url_feed'])}', '{esc(r['url_sito'])}', 'rss', "
@@ -93,7 +107,12 @@ if __name__ == '__main__':
         props = explorar(slug, doms, por, '--licencia-amplia' in a)
         todas += props; known |= {K.base(K.host(p['url_sito'])) for p in props}
         print(f"{slug:18} dominios {len(doms):3} · evaluados {len(props):2} · con ≥{C.UMBRAL_VOCES}/10: {sum(p['p3_utiles'] >= C.UMBRAL_VOCES for p in props)}")
-    V.escribir(todas, 'candidatas.csv', '/dev/null')
+    # '/dev/null' anche per il JSON: `escribir` scrive `activar.json` per
+    # difetto, e quello è il file che il programmatore applica. Scriverci dentro
+    # le candidate dello scouting significherebbe accendere fonti mai verificate.
+    V.escribir(todas, 'candidatas.csv', '/dev/null', '/dev/null')
     for w in dict.fromkeys(AVISOS): print('AVISO', w)   # una API caída no debe parecer 'cero dominios'
     open('proponer.sql', 'w').write(proponer_sql(todas))
-    print('-> candidatas.csv, proponer.sql (attiva=false; activar solo vía verifica_fonti.py)')
+    with open('proponer.json', 'w', encoding='utf-8') as fh:
+        json.dump(proponer_json(todas), fh, ensure_ascii=False, indent=1)
+    print('-> candidatas.csv, proponer.sql, proponer.json (attiva=false; activar solo vía verifica_fonti.py)')

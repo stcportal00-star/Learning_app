@@ -262,19 +262,32 @@ ok(b2 is not None and n2 == 3 and b'countries' not in b2,
 # fuentes sanas, y volver a encenderlas exige saber cuáles eran.
 import programma_fonti as PR
 
-def _programa(codigo, lavoro, activar=None, salud='', est=None):
+PROPUESTAS = []
+
+def _programa(codigo, lavoro, activar=None, salud='', propone=None):
     """Corre el programador con un verificador falso. Devuelve (hecho, aplicados, avisos)."""
     with open(os.path.join(lavoro, 'activar.json'), 'w', encoding='utf-8') as fh:
         json.dump(activar if activar is not None else [], fh)
     with open(os.path.join(lavoro, 'salud.md'), 'w', encoding='utf-8') as fh:
         fh.write(salud)
     aplicados, avisos, buscados = [], [], []
+    del PROPUESTAS[:]
+
+    def _descubrir(temas, sql, l):
+        buscados.append(list(temas))
+        # El scouting real escribe proponer.json; aquí se imita para comprobar
+        # que el programador lo recoge sin que nadie se lo pida.
+        if propone:
+            with open(os.path.join(l, 'proponer.json'), 'w', encoding='utf-8') as fh:
+                json.dump(propone, fh)
+
     hecho = PR.programar(
         'fonti.sql', lavoro,
         verificar=lambda sql, l: codigo,
         aplicar=lambda c: aplicados.append(c),
-        descubrir=lambda t, sql, l: buscados.append(list(t)),
-        avisar=lambda t: avisos.append(t))
+        descubrir=_descubrir,
+        avisar=lambda t: avisos.append(t),
+        proponer=lambda p: PROPUESTAS.append(p))
     return hecho, aplicados, avisos, buscados
 
 CAMBIO = [{'url_feed': 'https://blog.ejemplo.org/feed.xml', 'attiva': True, 'motivo': 'ACEPTADA'}]
@@ -318,6 +331,21 @@ try:
     h, ap, av, bu = _programa(1, _trabajo, CAMBIO)
     ok(ap == [] and len(av) == 1 and h['disyuntores_seguidos'] == 1,
        f"S7 código 1: avisa, no aplica y no falsea la racha · {h['disyuntores_seguidos']}")
+
+    # La pata por la que la lista MEJORA sola: lo que el scouting escribe entra
+    # en la tabla sin que nadie abra un archivo. Apagado, eso sí.
+    CANDIDATA = [{'nome': 'Blog nuevo', 'url_feed': 'https://n/f', 'url_sito': 'https://n/',
+                  'metodo': 'rss', 'categoria': 'ai_act', 'lingua': 'en', 'peso': 0.3}]
+    h, ap, av, bu = _programa(2, _trabajo, CAMBIO, SALUD_AVISO, propone=CANDIDATA)
+    ok(h['propuestas'] == 1 and PROPUESTAS == [CANDIDATA],
+       f"S9 las candidatas del scouting entran solas · {h['propuestas']}")
+    ok(not os.path.exists(os.path.join(_trabajo, 'proponer.json')),
+       "S10 y el archivo se borra, para no reproponerlas cada semana en silencio")
+
+    # Sin scouting no hay propuestas: el programador no inventa nada.
+    h, ap, av, bu = _programa(2, _trabajo, CAMBIO, SALUD_AVISO)
+    ok(h['propuestas'] == 0 and PROPUESTAS == [],
+       f"S11 sin candidatas no se propone nada · {h['propuestas']}")
 finally:
     shutil.rmtree(_trabajo, ignore_errors=True)
 

@@ -95,5 +95,54 @@ begin
 end
 $$;
 
+-- 3) Le proposte dello scouting mensile. Entrano SEMPRE spente e con peso basso:
+-- non è questa funzione a decidere che una fonte è buona, è `verifica_fonti.py`
+-- della settimana dopo. Separata da `applica_fonti` di proposito — quella non
+-- deve poter inserire niente, e questa non deve poter accendere niente.
+--
+-- `utente_id` non si passa: lo mette il default `percorso.utente_fisso()`, che è
+-- anche ciò che la policy `solo_utente_fisso` pretende.
+create or replace function percorso.proponi_fonti(nuove jsonb)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = percorso, public
+as $$
+declare
+  c jsonb;
+  n int;
+  inserite int := 0;
+begin
+  if jsonb_typeof(nuove) is distinct from 'array' then
+    raise exception 'proponi_fonti: atteso un array, arrivato %',
+      coalesce(jsonb_typeof(nuove), 'null');
+  end if;
+
+  for c in select * from jsonb_array_elements(nuove)
+  loop
+    if nullif(c->>'url_feed', '') is null or nullif(c->>'nome', '') is null
+       or nullif(c->>'categoria', '') is null then
+      raise exception 'proponi_fonti: proposta incompleta: %', c;
+    end if;
+    insert into percorso.fonti (nome, url_feed, url_sito, metodo, categoria, lingua, peso, attiva)
+    values (c->>'nome', c->>'url_feed', nullif(c->>'url_sito', ''),
+            coalesce(nullif(c->>'metodo', ''), 'rss'), c->>'categoria',
+            coalesce(nullif(c->>'lingua', ''), 'en'),
+            coalesce((c->>'peso')::real, 0.3), false)
+    on conflict (utente_id, url_feed) do nothing;
+    get diagnostics n = row_count;
+    inserite := inserite + n;
+  end loop;
+
+  return jsonb_build_object('inserite', inserite, 'proposte', jsonb_array_length(nuove));
+end
+$$;
+
+-- `anon` e non solo `authenticated`: la conduttura parla con la chiave
+-- publishable, che è il ruolo anon, ed è la policy `solo_utente_fisso` a
+-- recintare le righe — non il ruolo. Con il solo grant a `authenticated` queste
+-- funzioni sarebbero irraggiungibili proprio da chi deve chiamarle.
 revoke all on function percorso.applica_fonti(jsonb) from public;
-grant execute on function percorso.applica_fonti(jsonb) to authenticated;
+revoke all on function percorso.proponi_fonti(jsonb) from public;
+grant execute on function percorso.applica_fonti(jsonb) to anon, authenticated;
+grant execute on function percorso.proponi_fonti(jsonb) to anon, authenticated;

@@ -174,10 +174,21 @@ Due cose senza le quali non funziona:
   PostgREST sono venti transazioni: se la decima fallisce, la tabella resta
   come nessuno ha deciso. La funzione riceve dati, mai SQL.
 
-Di default il workflow gira **a secco**: calcola tutto, pubblica `salud.md` e
-`informe.csv` sulla release, e non scrive. Per abilitare la scrittura serve la
-variabile di repository `FONTI_APPLICA = si`, e prima va applicata la
-migrazione `strumenti/db/004_fonti_sitemap_e_applica.sql`.
+Il primo del mese lo scouting propone fonti nuove, e le **inserisce spente**
+con `percorso.proponi_fonti(jsonb)`. Accenderle non è cosa sua: lo decide la
+verifica del lunedì dopo. È la gamba per cui la lista migliora da sola invece
+di invecchiare.
+
+**Non c'è nessun interruttore da girare a mano, ed è voluto.** Un permesso da
+concedere è proprio la cosa che dal 2 ottobre lascerebbe il sistema fermo senza
+che nessuno lo sappia: la rete non c'è, dal telefono non si aprono le Actions,
+e una fonte morta resterebbe morta fino a novembre. A proteggere sono i due
+interruttori, che misurano da soli se la corsa è credibile. `applica: no`
+sull'avvio manuale serve solo a guardare senza toccare.
+
+Setup fatto una volta sola, e già fatto: le migrazioni
+`strumenti/db/004_fonti_sitemap_e_applica.sql` (il CHECK con `sitemap` e le due
+funzioni) e `consegna_code/fonti_v4.sql` (le 57 fonti, tutte `attiva = false`).
 
 ### Se Supabase rifiuta
 
