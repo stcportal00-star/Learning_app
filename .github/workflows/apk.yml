@@ -269,7 +269,9 @@ jobs:
           tag="apk-${GITHUB_RUN_NUMBER}"
           apk="percorso-${GITHUB_RUN_NUMBER}.apk"
           mv percorso.apk "$apk"
-          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}."
+          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}.
+
+          Si installa sopra la build precedente e i dati restano. Per tornare a una build piu' vecchia NON reinstallare il suo APK: Android rifiuta un versionCode che scende e dice solo «App non installata». Rilancia il workflow su quel commit — ne esce lo stesso codice con un numero piu' alto."
 
           # «Latest» è cio' che il telefono scarica aprendo /releases/latest.
           # Il workflow gira su QUALUNQUE ramo di proposito — le sessioni cloud
