@@ -119,6 +119,18 @@ all'estrazione del testo — e un catalogo di titoli senza testo, in aereo, non
 si legge. Una fonte che non risponde non ferma le altre: finisce fra i «non
 riusciti» del rapporto.
 
+**La trascrizione che l'autore pubblica viene prima della pagina.** Un
+`<podcast:transcript>` nel feed è un file che l'editore ha messo online
+apposta, con la sua licenza, e `testo_della_voce()` lo prova per primo: per un
+podcast la pagina dell'episodio porta le note di trasmissione, mentre la
+trascrizione è l'unica cosa che rende quell'ora *studiabile* senza rete — si
+cerca dentro, si annota una frase, si rilegge un passaggio. L'audio da solo non
+fa nessuna delle tre. Trascrizioni non se ne generano: costerebbero una chiave,
+una quota e un servizio che un giorno risponde 429, e quel giorno si è in volo.
+`estrattore.testo_da_trascrizione()` riconosce il formato dal CONTENUTO — VTT,
+SRT, il JSON del Podcast Namespace, HTML, testo — perché un feed che dichiara
+`text/html` e serve VTT esiste.
+
 C'è una terza strada, stretta di proposito: **l'esplorazione**. Al massimo
 cinque voci al giorno (`temi_config.ESPLORAZIONE_MAX_DIA`) che nessun tema ha
 preso ma che sono articoli veri — almeno millecinquecento caratteri di testo,

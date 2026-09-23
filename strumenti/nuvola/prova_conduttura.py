@@ -74,6 +74,48 @@ SENZA_FEED = {
     "costi": ("Cost model tuning for vectorized execution", _CORPO_PIANO),
 }
 
+# La trascrizione che l'autore pubblica, nel formato in cui la pubblica: WEBVTT,
+# con i tempi, i contatori e una battuta ripetuta come fanno i sottotitoli a
+# scorrimento. Se arrivasse in tabella così com'è, in aereo si leggerebbe
+# un'ora di «00:00:04.000 -->».
+TRASCRIZIONE_VTT = ("""WEBVTT
+
+NOTE Trascrizione pubblicata dall'autore.
+
+1
+00:00:01.000 --> 00:00:06.000
+<v Chi conduce>Il triage in emergenza non è una fila e non è un ordine di arrivo.
+
+2
+00:00:06.000 --> 00:00:12.000
+Il triage in emergenza non è una fila e non è un ordine di arrivo.
+Si decide chi passa prima, e la decisione va presa in meno di un minuto.
+
+3
+00:00:12.000 --> 00:00:20.000
+Chi arriva per primo può aspettare, e chi arriva per ultimo può entrare subito:
+è la parte che si spiega peggio e che conta di più, perché ribalta l'idea di
+giustizia con cui la gente entra da quella porta.
+
+4
+00:00:20.000 --> 00:00:30.000
+Il resto dell'ora serve a mostrare che cosa succede quando la regola si applica
+a venti persone insieme, con due medici e una barella sola.
+""").encode("utf-8")
+
+# La pagina dell'episodio, e non è una pagina povera: supera la soglia dei
+# quattrocento caratteri. Serve a questo — se la trascrizione non venisse per
+# prima, il testo arriverebbe lo stesso e nessuno se ne accorgerebbe.
+PAGINA_EPISODIO = ("""<html><body><article>
+<p>NOTE DI TRASMISSIONE. In questa puntata parliamo di triage, di come si
+decide chi passa prima e di che cosa succede quando le persone sono venti e i
+medici due. Trovate i riferimenti qui sotto, insieme ai link agli studi che
+citiamo e alla trascrizione completa dell'episodio.</p>
+<p>Ringraziamo chi ci ascolta e chi ci scrive. La puntata dura un'ora e
+quindici minuti, e la trascrizione integrale è pubblicata sul sito insieme
+all'audio, come per tutte le altre puntate di questa stagione.</p>
+</article></body></html>""").encode("utf-8")
+
 FINTO_FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
@@ -319,6 +361,12 @@ class FintoSupabase(BaseHTTPRequestHandler):
         if u.path == "/finto-feed.xml":
             self._rispondi(200, FINTO_FEED, "application/rss+xml")
             return
+        if u.path == "/trascrizione.vtt":
+            self._rispondi(200, TRASCRIZIONE_VTT, "text/vtt")
+            return
+        if u.path == "/episodio":
+            self._rispondi(200, PAGINA_EPISODIO, "text/html")
+            return
         self._rispondi(404, b'{"error":"rotta sconosciuta"}')
 
     def do_POST(self):
@@ -440,6 +488,18 @@ def principale():
             "data": "2026-09-20", "fonte": "rss[Chi parla]", "tema_slug": "ottimizzazione",
             "trimestre": "T1", "rilevanza": 2.0, "solo_metadati": True,
         },
+        {
+            # Un episodio di podcast con la trascrizione che l'autore pubblica.
+            # La pagina dell'episodio qui è BUONA — passa la soglia dei
+            # quattrocento caratteri — apposta: se la trascrizione non venisse
+            # per prima, il testo arriverebbe lo stesso e il test resterebbe
+            # verde su una scelta sbagliata.
+            "chiave": "podcast:P1", "titolo": "Che cosa decide chi passa prima",
+            "autori": ["Chi conduce"], "url": base + "/episodio",
+            "url_trascrizione": base + "/trascrizione.vtt",
+            "data": "2026-09-21", "fonte": "podcast[Chi conduce]", "tema_slug": "triage",
+            "trimestre": "T1", "rilevanza": 1.8,
+        },
     ]
     with open(os.path.join(cartella, "rassegna", "catalogo.json"), "w", encoding="utf-8") as f:
         json.dump(catalogo, f)
@@ -487,10 +547,19 @@ def principale():
     # La rete verso gli archivi non esiste qui dentro: `scarica` fallisce, e va
     # bene — si sta provando la conduttura, non gli archivi. Ciò che conta è
     # che una voce senza testo venga pubblicata lo stesso.
+    #
+    # L'unica eccezione è il finto server di questa prova, che gira su 127.0.0.1
+    # e serve la trascrizione e la pagina dell'episodio. Non è un varco nella
+    # regola: è la stessa macchina, e senza quelle due rotte la strada della
+    # trascrizione non sarebbe percorribile qui — cioè resterebbe la parte del
+    # deposito che nessuno ha mai visto funzionare.
+    vero_scarica = pubblica.scarica
+
     def niente_rete(url, massimo_byte=None, timeout=None):
+        if url.startswith(base + "/"):
+            return vero_scarica(url, massimo_byte=massimo_byte, timeout=timeout)
         raise pubblica.ErroreEstrazione("nessuna rete in questa prova: " + url)
 
-    vero_scarica = pubblica.scarica
     pubblica.scarica = niente_rete
     rapporto = {
         "adesso": "2026-09-22T00:00:00+00:00", "gia_in_archivio": 0, "candidate": 0,
@@ -527,8 +596,9 @@ def principale():
     # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
     # una strada propria questo numero resterebbe due e le righe comparirebbero
     # da un'altra parte.
-    prova("nove articoli: tre dal catalogo, uno solo-metadati, due dal feed, tre dal sitemap",
-          len(articoli), 9)
+    prova("dieci articoli: tre dal catalogo, uno solo-metadati, uno con trascrizione, "
+          "due dal feed, tre dal sitemap",
+          len(articoli), 10)
     prova_vero(
         "il NUL e' stato tolto invece di far cadere il lotto",
         all("\x00" not in (r.get("abstract") or "") for r in articoli),
@@ -586,6 +656,39 @@ def principale():
         "nessun fallimento di rete per lei",
         not any("youtube" in f for f in rapporto["falliti"]),
         repr(rapporto["falliti"]),
+    )
+
+    # La trascrizione dell'autore e\u0300 la sola strada per cui un podcast diventa
+    # *studiabile* senza rete: l'audio si ascolta, ma non si cerca dentro, non
+    # si annota una frase e non si rilegge un passaggio.
+    podcast = [r for r in articoli if r.get("chiave") == "podcast:P1"]
+    testo_podcast = (podcast[0].get("testo") or "") if len(podcast) == 1 else ""
+    prova_vero(
+        "l'episodio ha il testo della trascrizione",
+        "Si decide chi passa prima" in testo_podcast,
+        repr(testo_podcast[:200]),
+    )
+    # La pagina dell'episodio supera la soglia dei quattrocento caratteri: se la
+    # trascrizione non venisse per PRIMA il testo arriverebbe lo stesso, e
+    # sarebbero le note di trasmissione al posto dell'ora di contenuto.
+    prova_vero(
+        "e non le note di trasmissione, che pure sarebbero bastate",
+        "NOTE DI TRASMISSIONE" not in testo_podcast,
+        repr(testo_podcast[:200]),
+    )
+    prova_vero(
+        "senza i tempi dentro",
+        "-->" not in testo_podcast and "00:00:" not in testo_podcast,
+        repr(testo_podcast[:200]),
+    )
+    # I sottotitoli a scorrimento ripetono la battuta precedente a ogni battuta
+    # nuova: senza la deduplica, meta\u0300 della trascrizione arriva doppia.
+    prova("la battuta ripetuta dal formato compare una volta sola",
+          testo_podcast.count("non e\u0300 una fila"), 1)
+    prova_vero(
+        "e la riga porta l'indirizzo della trascrizione, per risalire alla fonte",
+        len(podcast) == 1 and (podcast[0].get("url_trascrizione") or "").endswith("/trascrizione.vtt"),
+        repr(podcast),
     )
 
     # Il sito senza feed non ha un XML: queste tre righe esistono solo se il
