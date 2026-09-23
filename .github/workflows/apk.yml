@@ -22,6 +22,9 @@ on:
       - "package.json"
       - "package-lock.json"
       - "app.json"
+      # Da qui esce il versionCode: una modifica a questo file cambia cosa
+      # finisce nel pacchetto, quindi deve far ricompilare come app.json.
+      - "app.config.js"
       - "metro.config.js"
       - ".github/workflows/apk.yml"
       - ".github/fumo.sh"
@@ -160,6 +163,34 @@ jobs:
           fi
           cp "$apk" percorso.apk
 
+      # Per la firma il workflow non si fida della configurazione: misura
+      # l'APK. Per la versione non misurava niente, e il modo in cui questa
+      # catena fallisce e' sempre lo stesso — il numero e' giusto ovunque
+      # tranne che dentro il pacchetto. Il valore di ripiego di Expo quando la
+      # configurazione non viene letta e' 1, e un APK con versionCode 1 non si
+      # installa sopra nessuna build precedente: verde in CI, morto sul
+      # telefono. Sta qui, dopo la compilazione, perche' prima non esiste un
+      # APK da misurare.
+      - name: Versione dichiarata contro versione nel pacchetto
+        env:
+          CORSA: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)
+          badging=$("$aapt2" dump badging percorso.apk | head -1)
+          codice=$(printf '%s' "$badging" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          nome=$(printf '%s' "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          echo "versionCode: $codice"
+          echo "versionName: $nome"
+          if [ "${codice:-1}" -le 1 ]; then
+            echo "::error::versionCode $codice: app.config.js non e' stato letto e Expo e' ricaduto sul suo 1. Questo APK non si installerebbe sopra il precedente."
+            exit 1
+          fi
+          if [ "$nome" != "0.1.0+$CORSA" ]; then
+            echo "::error::versionName '$nome', atteso '0.1.0+$CORSA': il numero di corsa non e' finito nel pacchetto."
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v7
         with:
           name: apk
@@ -228,12 +259,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           IMPRONTA: ${{ needs.build.outputs.impronta }}
+          RAMO: ${{ github.ref_name }}
+          # Non "main" scritto a mano: se un giorno il ramo predefinito cambia
+          # nome, una costante qui dentro comincerebbe a marcare «Latest» le
+          # build di un ramo qualunque, e nessuno se ne accorgerebbe.
+          PREDEFINITO: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           tag="apk-${GITHUB_RUN_NUMBER}"
           apk="percorso-${GITHUB_RUN_NUMBER}.apk"
           mv percorso.apk "$apk"
-          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}. Installa l'APK sopra la versione precedente: i dati restano."
+          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}.
+
+          Si installa sopra la build precedente e i dati restano. Per tornare a una build piu' vecchia NON reinstallare il suo APK: Android rifiuta un versionCode che scende e dice solo «App non installata». Rilancia il workflow su quel commit — ne esce lo stesso codice con un numero piu' alto."
+
+          # «Latest» è cio' che il telefono scarica aprendo /releases/latest.
+          # Il workflow gira su QUALUNQUE ramo di proposito — le sessioni cloud
+          # pubblicano su rami nuovi — quindi senza questa distinzione una
+          # build sperimentale diventa la versione che l'utente installa.
+          if [ "$RAMO" = "${PREDEFINITO:-main}" ]; then
+            visibilita=(--latest)
+          else
+            visibilita=(--prerelease)
+            note="$note
+
+          ATTENZIONE: build del ramo \`$RAMO\`, non di \`${PREDEFINITO:-main}\`. Marcata come preliminare: non è la versione che il telefono scarica da «Latest»."
+          fi
 
           pubblica() {
             # Una corsa precedente può aver creato la release e non i suoi
@@ -242,10 +293,16 @@ jobs:
             if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
               gh release upload "$tag" "$apk" fumo/*.png \
                 --repo "$GITHUB_REPOSITORY" --clobber
+              # Anche qui, e non solo alla creazione: una riesecuzione
+              # ricompila con lo stesso numero di corsa, e senza questa riga
+              # una release marcata «Latest» da un ramo resterebbe tale per
+              # sempre, con note che parlano di un altro commit.
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+                --notes "$note" "${visibilita[@]}"
               return
             fi
             gh release create "$tag" "$apk" fumo/*.png \
-              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${visibilita[@]}" \
               --title "Percorso — build ${GITHUB_RUN_NUMBER}" --notes "$note"
           }
 
