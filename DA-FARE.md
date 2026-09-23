@@ -380,3 +380,47 @@ mezzanotte locale calcolata, e falsificare ogni correzione una per una. La
 falsificazione ha anche bocciato la mia prima spiegazione (`conFuso` come
 causa): rimettendo solo quel difetto la prova restava verde.
 
+
+---
+
+## RSS-01 — l'ingestione dei feed, 23 settembre 2026
+
+**Cosa c'è adesso.** `strumenti/nuvola/feed.py` legge le righe di
+`percorso.fonti` con `metodo='rss'` e `attiva=true`, scarica i feed (RSS 2.0,
+Atom, RDF, un lettore solo), costruisce le voci con `fonti_aperte.voce()` e le
+classifica con la tassonomia della rassegna. `pubblica.py` le **innesta nel
+catalogo** prima della deduplica: da lì in giù non esiste una strada separata,
+e questo è il punto — una seconda deduplica da tenere allineata alla prima
+sarebbe la prossima voce di questo elenco.
+
+**Cosa è stato provato senza rete.** 40 verifiche in `feed.py` (dieci feed
+scritti a mano: CDATA, entità HTML illegali in XML, collegamenti relativi,
+date RFC 822 e ISO, feed rotto, feed che non è un feed, campi mancanti); il
+giro completo in `prova_conduttura.py`, dove il finto server serve anche un
+feed e la voce che ne esce arriva fino all'evento. Il finto server ora applica
+davvero i filtri `eq.` e `is.` di PostgREST: senza, una `leggi_fonti` che
+dimenticasse `metodo=eq.rss` sarebbe rimasta verde qui e avrebbe provato a
+leggere un feed da una casella di posta.
+
+**Cosa NON è stato provato.** Nessuno dei cinque indirizzi di
+`strumenti/db/003_fonti_rss.sql` è stato interrogato: il contenitore della
+sessione non ha uscita verso internet. Li prova la prima corsa, o
+`diagnosi.py --fonti`. Una fonte che risponde 200 e non porta voci con un tema
+è un guasto quanto un 404, e solo quel comando lo distingue.
+
+### Due difetti trovati per strada
+
+| Dove | Cosa | Stato |
+|---|---|---|
+| `strumenti/rassegna/fonti_aperte.py:208,217` | `extra.get("autori", [])` restituisce `None` quando la chiave c'è con valore nullo — cioè la forma normale di un campo vuoto letto da JSON — e la comprensione che segue solleva `TypeError` | **corretta**, con una guardia in `verifica_rassegna.py` che diventa rossa se si torna indietro |
+| `strumenti/rassegna/catalogo.py:168-170` | Il commento promette «rilevanza, poi data recente», ma l'ordinamento su `x.get("data") or ""` è crescente: a parità di rilevanza esce prima la voce più VECCHIA. Il secondo `sort` sulla sola rilevanza è inoltre ridondante | **aperta** — è codice con prove verdi e nessuno se n'è mai lamentato: cambiarlo stanotte significherebbe cambiare l'ordine della rassegna senza saperlo |
+
+### Un debito che non è codice
+
+Le migrazioni della sessione della nuvola (utente fisso, policy
+`solo_utente_fisso`, bucket `biblioteca`, colonne nuove di `articoli` e
+`biblioteca`) sono state applicate direttamente sul progetto e **non hanno un
+file** in `strumenti/db/`. Si rileggono nella cronologia delle migrazioni di
+Supabase, ma chi rifacesse il database da zero partendo da quella cartella
+otterrebbe uno schema che l'app non sa leggere. La 003 è il primo file scritto
+con questa regola in mente; le precedenti vanno estratte e messe accanto.
