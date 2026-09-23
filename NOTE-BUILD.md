@@ -20,6 +20,10 @@ Gli ultimi portano le correzioni trovate dal collaudo.
 | 11 | **riuscito** | — release `apk-11`, con le correzioni del collaudo |
 | 12 | fumo fallito, poi **riuscito** al secondo tentativo | l'emulatore, non l'app: vedi sotto — release `apk-12` |
 | 13 | **riuscito** al primo tentativo | — release `apk-13`, con `NOT-07` corretto e le prove dentro `verifica.sh` |
+| 14 | **annullato** | l'ho cancellato io, la terza volta con lo stesso meccanismo: un push mentre girava |
+| 15 | **riuscito** | — release `apk-15`, con le dodici correzioni di `QRY` |
+| 16 | **riuscito** | — release `apk-16`, il primo con la nuvola: schema v2, client `fetch`, proiezione, schermate nuove |
+| 17 | **riuscito** | — release `apk-17`, con la diagnosi dei permessi. **È la build corrente**: i commit successivi toccano solo conduttura, prove e documenti |
 
 Stato del test di fumo al build 13: schermata Oggi in **3 secondi**, tutte e
 cinque le rotte percorse, lettore PDF che apre il documento di prova e ne conta
@@ -628,3 +632,90 @@ non sono regressioni smette di essere letta.
 
 Mai modificati: `fumo.sh`, `test-firma.sh`, il passo della chiave di firma,
 la release `firma`.
+
+
+---
+
+# La nuvola — 22/23 settembre 2026
+
+Sessione a parte, con uno scopo diverso dalle altre: non correggere difetti ma
+aggiungere la sola cosa che mancava perché l'app serva davvero durante il
+viaggio — una rassegna che arriva da sola, e un posto dove ciò che si studia
+non si perde.
+
+## Cosa è stato costruito
+
+Supabase come **quarto trasporto**, non come dipendenza. Viaggia lo stesso
+registro di eventi degli altri tre, con la stessa deduplicazione per id; è un
+pari che non dorme mai, e l'unico che può ricevere ciò che è stato raccolto
+mentre il telefono era spento. Niente dipendenze nuove: PostgREST e Storage
+sono due API HTTP e `fetch` c'è già.
+
+La conduttura quotidiana gira su GitHub alle **08:00 locali** — Città del
+Messico fino al 2 ottobre, Roma da lì in poi — estrae il TESTO degli articoli
+prima di depositarli, carica i PDF nel deposito, e scrive gli **eventi**, che
+sono ciò che l'app legge davvero.
+
+## I cinque difetti trovati, in ordine di quanto sono costati
+
+**1. Gli eventi ricevuti non venivano MAI proiettati** (SYN-01). Il registro
+cresceva, le tabelle no: una nota scritta sul tablet arrivava sul telefono e
+restava invisibile. Esisteva da prima di questa sessione e riguardava anche i
+tre trasporti offline — cioè proprio quelli del viaggio. È il difetto più
+grave dell'intera sessione, e sarebbe rimasto invisibile per sempre, perché
+non produce nessun errore.
+
+**2. La cache dello schema di PostgREST.** Esporre lo schema `percorso`
+aggiorna la *configurazione* del servizio, non la sua *cache dello schema*:
+ogni tabella rispondeva 404 mentre chiave e policy erano perfette. Il
+messaggio dell'app diceva «la chiave non è più buona», che era falso e mandava
+a controllare la cosa sbagliata. Da qui `diagnosi.py`, che prova i quattro
+permessi uno per uno e di ognuno stampa stato, corpo e rimedio.
+
+**3. `articoli.punteggio` ha un CHECK 0..100**, e ci scrivevo `rilevanza*100`:
+370 su una voce da 3.7. Ottanta articoli preparati, cinquantasei col testo
+intero, otto PDF già nel deposito — tutto perso sull'ultima scrittura. La
+correzione successiva stava dentro il vincolo ma saturava, e dava 100 a tutte
+e ottanta: un voto costante non ordina niente. Terza stesura, una curva che
+non satura per costruzione.
+
+**4. Diciassette articoli su ottanta erano doppioni.** Lo stesso articolo da
+due archivi ha due chiavi diverse, e la setacciatura deduplica per chiave.
+
+**5. Il difetto che non c'era.** Per un giorno intero `npm run verifica` è
+stata verde la mattina e rossa la sera, e la diagnosi scritta in `DA-FARE.md`
+accusava l'app: «un promemoria impostato di sera non riconosce il blocco già
+fatto». Era falso. La simulazione fissa il fuso a Europe/Rome, dove fra le
+22:00 e le 24:00 UTC è già domani; il blocco L3 registrava una sessione a «due
+ore fa» chiamandola «di oggi». `giaFattoOggi()` rispondeva giusto.
+
+## Cosa ha funzionato, come metodo
+
+Ogni correzione falsificata, e **due falsificazioni hanno cambiato la
+conclusione**: rimettere il ripristino rotto di `conFuso` lasciava la prova
+verde, quindi non era la causa che avevo appena scritto; e la prima stesura
+della guardia su `conFuso` passava anche col codice rotto, perché misurava lo
+stato di partenza invece del ripristino.
+
+Il difetto 3 è passato attraverso il finto PostgREST senza un fiato: **un
+doppio che accetta ciò che il servizio rifiuta non è una prova, è un
+permesso**. Ora fa rispettare i CHECK veri e risponde 400 col codice 23514.
+
+Il giro completo contro il Supabase VERO (`test/rete/giro-vero.mjs`) gira a
+ogni push: scrive una nota col codice dell'app, la manda su, cancella ogni
+traccia locale, risincronizza, e pretende che torni — evento riscaricato,
+deduplicato, proiettato.
+
+## Cosa resta aperto
+
+- **La PR non è stata unita**, e finché non lo è i cron non partono: GitHub
+  esegue gli `schedule:` solo dal ramo predefinito, e `.github/workflows/` su
+  `main` non esiste.
+- **Il progetto Supabase ospita una seconda applicazione** senza rapporto con
+  Percorso. La chiave publishable dell'APK è la chiave `anon` dell'intero
+  progetto e raggiunge anche quella. È una decisione da prendere, non un
+  difetto da correggere.
+- **Ventiquattro articoli senza testo**: quelle fonti rispondono 403 a chi non
+  è un browser. Unpaywall le coprirebbe, e aspetta il segreto
+  `PERCORSO_CONTATTO`.
+- **Le fonti dell'utente**: la tabella `fonti` è vuota.

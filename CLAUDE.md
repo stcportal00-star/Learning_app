@@ -133,10 +133,14 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
 |---|---|
 | `npm install` | 980 pacchetti, nessun conflitto bloccante |
 | `npx tsc --noEmit` | 0 errori sull'intero progetto |
-| `npm run verifica` | typecheck + 146 test, 256 del banco, 1614 delle simulazioni |
+| `npm run verifica` | typecheck + test di logica, 256 del banco, le simulazioni (compresa `nuvola`) e il triage — tutto verde |
 | `.github/test-firma.sh` | 10 scenari della chiave di firma, tutti superati |
 | `npx expo config --type prebuild` | valido, SDK 54 |
 | Versioni vs `bundledNativeModules` | 15 su 15 allineate |
+
+La riga `npm run verifica` non porta più un numero fisso: i conteggi cambiano a
+ogni sessione e un numero stantio in un documento è peggio di nessun numero —
+si legge come una misura e non lo è. Il comando stampa i suoi totali.
 
 **Eseguito qui:** `expo prebuild` (il plugin di firma modifica `build.gradle` come previsto;
 Gradle collegherà `react-native-webview` e 16 moduli Expo). **Mai eseguito:** la
