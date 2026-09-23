@@ -93,6 +93,41 @@ Per caricare un PDF a mano senza l'app: lasciarlo cadere in
 veri. Il push fa il resto, per la stessa strada di un PDF trovato dalla
 rassegna.
 
+### I feed RSS
+
+Nella stessa corsa entrano i feed dichiarati in `percorso.fonti`
+(`metodo = 'rss'`, `attiva = true`, in ordine di `peso` decrescente).
+`strumenti/nuvola/feed.py` legge RSS 2.0, Atom e RDF con lo stesso lettore,
+classifica le voci con la tassonomia della rassegna e le **innesta nel
+catalogo** prima della deduplica: da lì in giù una voce RSS è una voce come le
+altre, stessa deduplica per titolo, stessa estrazione del testo, stesso evento.
+Non esiste una seconda strada, e non deve esistere: sarebbe una seconda
+deduplica da tenere allineata alla prima.
+
+Due filtri, che non vanno confusi. Il tema lo assegna `classifica()`: senza
+tema la voce cade. Il rumore redazionale lo toglie `pubblica.py` con
+`assets/contenuti/esclusioni_rassegna.json`, e serve proprio qui, perché un
+comunicato stampa come «Acme announces the launch of a GDPR compliance
+platform» un tema pieno ce l'ha. Gli archivi aperti ci passano già dentro in
+`catalogo.setaccia()`; i feed no, e ne portano molto di più.
+
+Tetti: dodici voci per fonte e un terzo del tempo che resta, mai più di sei
+minuti. Sono lì perché un bollettino quotidiano riempirebbe da solo il tetto
+degli ottanta articoli e perché i minuti tolti al feed sono minuti tolti
+all'estrazione del testo — e un catalogo di titoli senza testo, in aereo, non
+si legge. Una fonte che non risponde non ferma le altre: finisce fra i «non
+riusciti» del rapporto.
+
+Per aggiungere una fonte basta una riga in `percorso.fonti`: `nome`,
+`url_feed`, `categoria` (uno degli slug di `modello_temi`), `peso` fra 0 e 1.
+La categoria non entra nella classificazione — sarebbe un'etichetta che si
+classifica da sé — ma se il tema calcolato coincide, la rilevanza sale del 20%.
+Per provare la lista prima di fidarsene:
+`python3 strumenti/nuvola/diagnosi.py --fonti`, oppure l'avvio a mano di
+`nuvola.yml` con `diagnosi: si`. Dice quali rispondono, quante voci portano e
+quante di quelle prendono un tema: una fonte che risponde 200 e non porta
+niente in biblioteca è un guasto quanto un 404, e si vede solo così.
+
 ### Se Supabase rifiuta
 
 Prima cosa: `python3 strumenti/nuvola/diagnosi.py`, oppure l'avvio a mano di

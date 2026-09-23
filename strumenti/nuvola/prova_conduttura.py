@@ -51,6 +51,82 @@ class VincoloViolato(Exception):
     pass
 
 
+# Un feed vero quanto basta, e sgraziato di proposito: un collegamento
+# relativo da risolvere, un CDATA con dentro dell'HTML e un'entità, una data in
+# RFC 822. Sono le tre cose su cui un lettore di RSS scritto in fretta si
+# rompe, e qui si rompe davanti a noi invece che alle otto del mattino.
+#
+# Gli altri due devono sparire, per due motivi diversi che non vanno confusi:
+# il comunicato stampa prende un tema pieno («GDPR») e lo ferma solo l'elenco
+# delle esclusioni redazionali; la classifica dei dieci strumenti non prende
+# nessun tema e si ferma da sé. Un feed di redazione porta molto più rumore di
+# un archivio accademico, quindi qui i due filtri contano di più, non di meno.
+FINTO_FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Finta rivista</title>
+    <link>http://esempio.invalid/</link>
+    <item>
+      <title>Window functions in PostgreSQL: a practical guide</title>
+      <link>/articoli/window-functions</link>
+      <pubDate>Mon, 21 Sep 2026 09:00:00 +0000</pubDate>
+      <description><![CDATA[<p>An OVER (PARTITION BY) walk-through, with &amp; an entity.</p>]]></description>
+    </item>
+    <item>
+      <title>Acme announces the launch of a GDPR compliance platform</title>
+      <link>http://esempio.invalid/articoli/annuncio</link>
+      <pubDate>Mon, 21 Sep 2026 09:30:00 +0000</pubDate>
+      <description>Un comunicato stampa.</description>
+    </item>
+    <item>
+      <title>Top 10 best productivity tools for 2026</title>
+      <link>http://esempio.invalid/articoli/top-10</link>
+      <pubDate>Mon, 21 Sep 2026 10:00:00 +0000</pubDate>
+      <description>Niente da studiare.</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+class FiltroSconosciuto(Exception):
+    pass
+
+
+# I parametri di PostgREST che NON sono filtri. Tutto il resto lo è, e va
+# applicato: un finto server che li ignora non prova niente. Se `leggi_fonti`
+# dimenticasse `metodo=eq.rss`, senza questa funzione riceverebbe qui le
+# stesse righe e la verifica resterebbe verde, mentre in produzione la
+# conduttura proverebbe a leggere un feed da una casella di posta.
+NON_FILTRI = ("select", "order", "limit", "offset", "on_conflict")
+
+VERO_FALSO_NULLO = {"true": True, "false": False, "null": None}
+
+
+def filtra(righe, query):
+    """I due operatori che la conduttura usa: `col=eq.valore` e `col=is.true`.
+
+    Un operatore che non è qui solleva invece di essere ignorato: il giorno in
+    cui qualcuno aggiunge `col=gt.3` deve accorgersene subito, non scoprire fra
+    sei mesi che quel filtro non è mai stato provato.
+    """
+    for chiave, valori in parse_qs(query).items():
+        if chiave in NON_FILTRI:
+            continue
+        for v in valori:
+            if v.startswith("eq."):
+                atteso = v[3:]
+                righe = [r for r in righe if str(r.get(chiave)) == atteso]
+            elif v.startswith("is."):
+                if v[3:] not in VERO_FALSO_NULLO:
+                    raise FiltroSconosciuto("%s=%s" % (chiave, v))
+                atteso = VERO_FALSO_NULLO[v[3:]]
+                righe = [r for r in righe if r.get(chiave) is atteso]
+            else:
+                raise FiltroSconosciuto("%s=%s" % (chiave, v))
+    return righe
+
+
 def controlla(tabella, riga):
     for colonna, regola in VINCOLI.get(tabella, {}).items():
         if colonna in riga and not regola(riga[colonna]):
@@ -85,6 +161,15 @@ class FintoSupabase(BaseHTTPRequestHandler):
         if u.path.startswith("/rest/v1/"):
             tabella = u.path[len("/rest/v1/"):]
             righe = RICEVUTO["tabelle"].get(tabella, [])
+            try:
+                righe = filtra(righe, u.query)
+            except FiltroSconosciuto as e:
+                self._rispondi(400, json.dumps({
+                    "code": "PGRST100",
+                    "message": "filtro che questo finto server non conosce: %s. "
+                               "Insegnaglielo in filtra()." % e,
+                }).encode())
+                return
             campi = parse_qs(u.query).get("select", ["*"])[0]
             if campi != "*":
                 voluti = campi.split(",")
@@ -98,6 +183,9 @@ class FintoSupabase(BaseHTTPRequestHandler):
                 self._rispondi(404, b'{"error":"non trovato"}')
             else:
                 self._rispondi(200, dati, "application/octet-stream")
+            return
+        if u.path == "/finto-feed.xml":
+            self._rispondi(200, FINTO_FEED, "application/rss+xml")
             return
         self._rispondi(404, b'{"error":"rotta sconosciuta"}')
 
@@ -192,6 +280,24 @@ def principale():
     with open(os.path.join(cartella, "rassegna", "visti.json"), "w", encoding="utf-8") as f:
         json.dump([], f)
 
+    # La fonte RSS vive in una riga di `percorso.fonti`, non nel codice: si
+    # aggiunge una rivista senza ripubblicare nulla. Qui punta al finto server,
+    # così l'intera strada — lettura, classificazione, innesto nel catalogo —
+    # viene percorsa senza uscire da questa macchina.
+    RICEVUTO["tabelle"]["fonti"] = [{
+        "nome": "finta", "url_feed": base + "/finto-feed.xml", "url_sito": None,
+        "metodo": "rss", "categoria": "sql_base", "lingua": "en",
+        "peso": 0.8, "attiva": True,
+    }, {
+        # Spenta, e con un indirizzo che non esiste: se il filtro `attiva` si
+        # perdesse, questa riga comparirebbe fra i non riusciti. È il modo di
+        # accorgersene senza aspettare che un feed morto sporchi il rapporto
+        # ogni mattina.
+        "nome": "spenta", "url_feed": base + "/feed-che-non-esiste.xml",
+        "url_sito": None, "metodo": "rss", "categoria": "gdpr", "lingua": "en",
+        "peso": 0.9, "attiva": False,
+    }]
+
     # Un PDF vero quanto basta: i byte magici sono l'unica cosa che il
     # cancello di `e_pdf` guarda, ed è giusto così.
     with open(os.path.join(manuale, "Manuale di campo.pdf"), "wb") as f:
@@ -215,6 +321,7 @@ def principale():
         "adesso": "2026-09-22T00:00:00+00:00", "gia_in_archivio": 0, "candidate": 0,
         "articoli": 0, "con_testo": 0, "pdf": 0, "manuali": 0, "volumi": 0,
         "eventi": 0, "falliti": [], "tempo_scaduto": False,
+        "feed_letti": 0, "voci_da_feed": 0,
     }
     try:
         n = cliente.Nuvola(base=base)
@@ -241,7 +348,11 @@ def principale():
     volumi = RICEVUTO["tabelle"].get("biblioteca", [])
     eventi = RICEVUTO["tabelle"].get("eventi", [])
 
-    prova("due articoli pubblicati", len(articoli), 2)
+    # Tre: i due del catalogo più quello arrivato dal feed. Il conto è la prova
+    # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
+    # una strada propria questo numero resterebbe due e le righe comparirebbero
+    # da un'altra parte.
+    prova("tre articoli pubblicati: due dal catalogo, uno dal feed", len(articoli), 3)
     prova("un volume: il file a mano buono", len(volumi), 1)
     prova("l'impostore è stato scartato", rapporto["manuali"], 1)
     prova_vero(
@@ -250,6 +361,61 @@ def principale():
         repr(rapporto["falliti"]),
     )
     prova("un evento per ogni riga", len(eventi), len(articoli) + len(volumi))
+
+    # ------------------------------------------------------------- il feed
+    prova("una fonte letta", rapporto["feed_letti"], 1)
+    prova_vero(
+        "la fonte spenta non è stata nemmeno chiesta",
+        not any("spenta" in f for f in rapporto["falliti"]),
+        repr(rapporto["falliti"]),
+    )
+    prova("una voce sola ha superato la classificazione", rapporto["voci_da_feed"], 1)
+    prova("e il comunicato stampa è stato tolto come rumore",
+          rapporto["rumore_feed"], 1)
+    prova_vero(
+        "l'annuncio non è arrivato in biblioteca",
+        not any("announces the launch" in (r.get("titolo") or "") for r in articoli),
+        "un comunicato stampa con un tema pieno è passato: l'elenco delle "
+        "esclusioni redazionali non viene applicato alle voci RSS",
+    )
+    da_feed = [r for r in articoli if (r.get("fonte") or "").startswith("rss[")]
+    prova("l'articolo del feed è arrivato in tabella", len(da_feed), 1)
+    prova_vero(
+        "il rumore di redazione non passa",
+        not any("Top 10" in (r.get("titolo") or "") for r in articoli),
+        "un titolo senza tema è entrato lo stesso: il filtro della rassegna "
+        "non è stato applicato alle voci RSS",
+    )
+    if da_feed:
+        voce = da_feed[0]
+        prova("la fonte porta il nome della rivista", voce["fonte"], "rss[finta]")
+        prova_vero(
+            "il collegamento relativo è stato risolto",
+            (voce.get("url") or "").startswith(base + "/articoli/"),
+            repr(voce.get("url")),
+        )
+        prova_vero(
+            "l'HTML del sommario è stato tolto",
+            "<p>" not in (voce.get("abstract") or ""),
+            repr(voce.get("abstract")),
+        )
+        prova_vero(
+            "e l'entità è stata sciolta",
+            "&amp;" not in (voce.get("abstract") or ""),
+            repr(voce.get("abstract")),
+        )
+        prova("la data RFC 822 è diventata un timestamp",
+              (voce.get("pubblicato_a") or "")[:10], "2026-09-21")
+        prova_vero(
+            "il tema è quello che la rassegna assegnerebbe",
+            voce.get("tema_slug") == "sql_base",
+            repr(voce.get("tema_slug")),
+        )
+        prova_vero(
+            "e l'evento c'è, che è l'unica cosa che l'app legge davvero",
+            any(e["entita_id"] == voce["chiave"] for e in eventi
+                if e["entita"] == "articoli"),
+        )
 
     prova_vero("ogni riga porta utente_id", all(r.get("utente_id") == cliente.UTENTE
                                                 for r in articoli + volumi + eventi))
@@ -312,7 +478,8 @@ def principale():
     # già pubblicato» letto da Supabase funziona davvero.
     prima = len(RICEVUTO["tabelle"]["articoli"])
     rapporto2 = dict(rapporto, articoli=0, volumi=0, eventi=0, falliti=[],
-                     gia_in_archivio=0, candidate=0, manuali=0, pdf=0, con_testo=0)
+                     gia_in_archivio=0, candidate=0, manuali=0, pdf=0, con_testo=0,
+                     feed_letti=0, voci_da_feed=0, rumore_feed=0)
     pubblica.scarica = niente_rete
     try:
         pubblica.pubblica(
@@ -326,6 +493,12 @@ def principale():
     prova("e sa di averli già visti", rapporto2["gia_in_archivio"], prima)
     prova("il volume a mano resta uno solo",
           len(RICEVUTO["tabelle"]["biblioteca"]), 1)
+    # Il feed NON viene saltato alla seconda corsa: viene riletto e la voce
+    # torna identica. A fermarla è la deduplica per chiave, cioè lo stesso
+    # meccanismo che ferma gli archivi. Senza questa riga la prova sopra
+    # passerebbe anche se il feed non fosse stato letto affatto.
+    prova("il feed è stato riletto", rapporto2["feed_letti"], 1)
+    prova("e la stessa voce non si deposita due volte", rapporto2["voci_da_feed"], 1)
 
     server.shutdown()
     shutil.rmtree(cartella, ignore_errors=True)

@@ -30,7 +30,10 @@ import time
 import hashlib
 from datetime import datetime, timezone
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+QUI = os.path.dirname(os.path.abspath(__file__))
+RADICE = os.path.dirname(os.path.dirname(QUI))
+sys.path.insert(0, os.path.join(os.path.dirname(QUI), "rassegna"))
+sys.path.insert(0, QUI)
 
 from cliente import Nuvola, ErroreNuvola, UTENTE  # noqa: E402
 from estrattore import (  # noqa: E402
@@ -41,6 +44,8 @@ from estrattore import (  # noqa: E402
     riassunto,
     ErroreEstrazione,
 )
+import feed  # noqa: E402
+from specializzazioni import e_rumore  # noqa: E402
 
 # L'identificativo di dispositivo della conduttura. Deve stare nel formato
 # dell'HLC dell'app, che divide la stringa sui trattini: niente trattini qui.
@@ -52,6 +57,16 @@ DISPOSITIVO = "rassegna"
 MASSIMO_ARTICOLI = 80
 MASSIMO_PDF = 8
 MINUTI = 20
+# I feed hanno tetti propri perché si comportano in modo diverso dagli
+# archivi: rispondono in fretta o non rispondono affatto, e una fonte che
+# pubblica un bollettino quotidiano riempirebbe da sola il tetto degli
+# articoli. Dodici per fonte è la cifra che tiene: con sei fonti fanno
+# settantadue candidate contro un tetto di ottanta, quindi gli archivi restano
+# in gara invece di essere scavalcati da un digest del mattino.
+MASSIMO_PER_FONTE = 12
+MINUTI_FEED = 6
+# Il rumore redazionale: la stessa lista che setaccia gli archivi aperti.
+ESCLUSIONI = os.path.join(RADICE, "assets", "contenuti", "esclusioni_rassegna.json")
 BYTE_PER_FILE = 60 * 1024 * 1024
 
 
@@ -353,6 +368,40 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     orologio = Orologio()
     scadenza = time.time() + tetti["minuti"] * 60
 
+    # I feed entrano NEL catalogo, non accanto. Da questa riga in giù una voce
+    # RSS è una voce come le altre: stessa deduplica per titolo, stessa
+    # estrazione del testo, stesso evento. Una seconda strada avrebbe voluto
+    # dire una seconda deduplica da tenere allineata a questa, e prima o poi
+    # non lo sarebbe stata.
+    #
+    # Il tetto di tempo sta DENTRO quello complessivo, e vale un terzo di
+    # quanto resta: un feed che non risponde non deve rubare i minuti
+    # all'estrazione, che è la parte che produce qualcosa da leggere. Un
+    # catalogo di titoli senza testo, in aereo, non si legge.
+    minuti_feed = min(float(tetti.get("minuti_feed", MINUTI_FEED)),
+                      max(0.0, scadenza - time.time()) / 180.0)
+    if minuti_feed > 0:
+        voci = feed.raccogli(
+            nuvola, rapporto,
+            massimo_per_fonte=int(tetti.get("per_fonte", MASSIMO_PER_FONTE)),
+            minuti=minuti_feed,
+        )
+        # Il rumore redazionale si toglie qui e non dentro `feed.py`: l'elenco
+        # sta in `assets/contenuti/`, e un lettore di RSS che se lo caricasse
+        # da solo sarebbe un modulo che senza il repository non funziona.
+        #
+        # Gli archivi aperti ci sono già passati dentro, in
+        # `catalogo.setaccia()`. I feed no, e ne portano molto di più: «Acme
+        # announces the launch of a GDPR compliance platform» prende un tema
+        # pieno e non è una pubblicazione — è un comunicato stampa. Senza
+        # questo passaggio la biblioteca si riempirebbe di annunci.
+        esclusioni = carica_json(ESCLUSIONI, [])
+        pulite = [v for v in voci if not e_rumore(v.get("titolo") or "", esclusioni)]
+        rumore = len(voci) - len(pulite)
+        rapporto["rumore_feed"] = rapporto.get("rumore_feed", 0) + rumore
+        rapporto["voci_da_feed"] = max(0, rapporto.get("voci_da_feed", 0) - rumore)
+        catalogo = list(catalogo) + pulite
+
     # Lo stato: le chiavi già pubblicate. Una colonna sola, qualche migliaio di
     # righe: costa meno di qualunque file di stato da tenere allineato.
     gia, titoli_gia = set(), set()
@@ -508,6 +557,9 @@ def scrivi_rapporto(cartella, rapporto):
         "Nuvola — %s" % rapporto["adesso"],
         "",
         "Già in archivio  : %d" % rapporto["gia_in_archivio"],
+        "Feed letti       : %d" % rapporto.get("feed_letti", 0),
+        "Voci dai feed    : %d" % rapporto.get("voci_da_feed", 0),
+        "  rumore tolto   : %d" % rapporto.get("rumore_feed", 0),
         "Candidate        : %d" % rapporto["candidate"],
         "Doppioni tolti   : %d" % rapporto.get("doppioni", 0),
         "Articoli scritti : %d" % rapporto["articoli"],
@@ -536,12 +588,17 @@ def principale(argv=None):
     p.add_argument("--massimo-articoli", type=int, default=MASSIMO_ARTICOLI)
     p.add_argument("--massimo-pdf", type=int, default=MASSIMO_PDF)
     p.add_argument("--minuti", type=int, default=MINUTI)
+    p.add_argument("--minuti-feed", type=float, default=MINUTI_FEED)
+    p.add_argument("--per-fonte", type=int, default=MASSIMO_PER_FONTE)
     a = p.parse_args(argv)
 
     rapporto = {
         "adesso": adesso_iso(),
         "gia_in_archivio": 0,
         "candidate": 0,
+        "feed_letti": 0,
+        "voci_da_feed": 0,
+        "rumore_feed": 0,
         "articoli": 0,
         "con_testo": 0,
         "pdf": 0,
@@ -569,6 +626,7 @@ def principale(argv=None):
     try:
         pubblica(a.cartella, a.manuale, nuvola, {
             "articoli": a.massimo_articoli, "pdf": a.massimo_pdf, "minuti": a.minuti,
+            "minuti_feed": a.minuti_feed, "per_fonte": a.per_fonte,
         }, rapporto)
     except ErroreNuvola as e:
         print(scrivi_rapporto(a.cartella, rapporto))
