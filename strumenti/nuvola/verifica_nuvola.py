@@ -242,6 +242,30 @@ prova_vero("vince chi ha il PDF, non chi ha il sommario più lungo",
 prova_vero("una voce senza titolo non viene buttata",
            any(v["chiave"] == "e" for v in _tenute),
            "senza titolo non si può confrontare: buttarla sarebbe peggio del doppione")
+# I doppioni sono di DUE specie, e guardare solo la prima li lascia tornare una
+# mattina dopo l'altra: trentuno su duecentoventitre alla seconda corsa vera.
+# Il conteggio va provato quanto il filtro, perché sommare le due specie era
+# il modo naturale di contarle due volte.
+for nome, voci, noti, attese, quanti in (
+    ("solo archivio",
+     [{"chiave": "x", "titolo": "DuckDB: A Deep Dive"}, {"chiave": "y", "titolo": "Nuova"}],
+     ["duckdb a deep dive"], ["y"], 1),
+    ("solo lotto",
+     [{"chiave": "a", "titolo": "T", "abstract": "lungo lungo"},
+      {"chiave": "b", "titolo": "t!"}, {"chiave": "c", "titolo": "Altra"}],
+     [], ["a", "c"], 1),
+    ("archivio e lotto insieme",
+     [{"chiave": "a", "titolo": "T"}, {"chiave": "b", "titolo": "t"},
+      {"chiave": "c", "titolo": "Vecchia"}],
+     ["vecchia"], ["a"], 2),
+    ("nessun doppione",
+     [{"chiave": "a", "titolo": "X"}, {"chiave": "b", "titolo": "Y"}], [], ["a", "b"], 0),
+):
+    _rap = {}
+    _tenute = [v["chiave"] for v in pubblica.senza_doppioni(voci, _rap, noti)]
+    prova("doppioni, %s: cosa resta" % nome, _tenute, attese)
+    prova("doppioni, %s: quanti scartati" % nome, _rap.get("doppioni", 0), quanti)
+
 prova("l'ordine di partenza non si perde",
       [v["chiave"] for v in pubblica.senza_doppioni(
           [{"chiave": "z", "titolo": "Z"}, {"chiave": "y", "titolo": "Y"}], {})],

@@ -145,7 +145,7 @@ def titolo_normale(titolo):
     return re.sub(r"[^a-z0-9]+", " ", (titolo or "").lower()).strip()
 
 
-def senza_doppioni(voci, rapporto):
+def senza_doppioni(voci, rapporto, gia_noti=()):
     """
     Lo stesso articolo pubblicato da due archivi ha due `chiave` diverse, e la
     setacciatura della rassegna deduplica per chiave: i doppioni le passano
@@ -160,9 +160,18 @@ def senza_doppioni(voci, rapporto):
         return (bool(v.get("url_pdf")), len(v.get("abstract") or ""),
                 float(v.get("rilevanza") or 0))
 
-    migliori = {}
+    # I titoli gia in archivio contano quanto quelli dentro al lotto: la stessa
+    # voce ritrovata domani da un altro archivio ha una chiave diversa, passa
+    # il filtro delle chiavi, e si deposita accanto a quella di ieri. Guardare
+    # solo dentro il lotto lasciava tornare i doppioni una mattina dopo
+    # l'altra: trentuno su duecentoventitre alla seconda corsa.
+    noti = {t for t in (titolo_normale(x) for x in gia_noti) if t}
+    migliori, gia_visti = {}, 0
     for v in voci:
         chiave = titolo_normale(v.get("titolo"))
+        if chiave and chiave in noti:
+            gia_visti += 1
+            continue
         if not chiave:
             # Senza titolo non si può confrontare: passa, e ci penserà la
             # chiave della rassegna. Buttarla sarebbe peggio del doppione.
@@ -170,7 +179,11 @@ def senza_doppioni(voci, rapporto):
             continue
         if chiave not in migliori or pregio(v) > pregio(migliori[chiave]):
             migliori[chiave] = v
-    scartati = len(voci) - len(migliori)
+    # Gli scarti sono due categorie distinte e non vanno sommate due volte:
+    # quelli gia in archivio non entrano mai in `migliori`, quindi sottrarli
+    # anche dalla differenza li conterebbe di nuovo.
+    entro_il_lotto = len(voci) - gia_visti - len(migliori)
+    scartati = gia_visti + entro_il_lotto
     if scartati:
         rapporto["doppioni"] = rapporto.get("doppioni", 0) + scartati
     # L'ordine di partenza non si perde: si rimettono in fila come erano.
@@ -342,10 +355,12 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
 
     # Lo stato: le chiavi già pubblicate. Una colonna sola, qualche migliaio di
     # righe: costa meno di qualunque file di stato da tenere allineato.
-    gia = set()
-    for r in nuvola.seleziona("articoli", "select=chiave", massimo=20000):
+    gia, titoli_gia = set(), set()
+    for r in nuvola.seleziona("articoli", "select=chiave,titolo", massimo=20000):
         if r.get("chiave"):
             gia.add(r["chiave"])
+        if r.get("titolo"):
+            titoli_gia.add(r["titolo"])
     rapporto["gia_in_archivio"] = len(gia)
 
     nuove = [v for v in catalogo if isinstance(v, dict) and v.get("chiave") not in gia]
@@ -353,7 +368,7 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     nuove.sort(key=lambda v: -float(v.get("rilevanza") or 0))
     # I doppioni si tolgono PRIMA del tetto: altrimenti il tetto conta due
     # volte la stessa voce e lascia fuori qualcosa che non c'è ancora.
-    nuove = senza_doppioni(nuove, rapporto)
+    nuove = senza_doppioni(nuove, rapporto, titoli_gia)
     nuove = nuove[: tetti["articoli"]]
     rapporto["candidate"] = len(nuove)
 
