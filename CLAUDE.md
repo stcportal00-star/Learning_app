@@ -96,7 +96,8 @@ rassegna.
 ### I feed RSS
 
 Nella stessa corsa entrano i feed dichiarati in `percorso.fonti`
-(`metodo = 'rss'`, `attiva = true`, in ordine di `peso` decrescente).
+(`metodo` fra `'rss'` e `'sitemap'`, `attiva = true`, in ordine di `peso`
+decrescente).
 `strumenti/nuvola/feed.py` legge RSS 2.0, Atom e RDF con lo stesso lettore,
 classifica le voci con la tassonomia della rassegna e le **innesta nel
 catalogo** prima della deduplica: da lì in giù una voce RSS è una voce come le
@@ -117,6 +118,14 @@ degli ottanta articoli e perché i minuti tolti al feed sono minuti tolti
 all'estrazione del testo — e un catalogo di titoli senza testo, in aereo, non
 si legge. Una fonte che non risponde non ferma le altre: finisce fra i «non
 riusciti» del rapporto.
+
+`'sitemap'` non è un secondo modo di leggere un feed: è ciò che resta quando un
+sito che vale la pena leggere non ne ha uno. `url_feed` vale allora
+`sitemap:https://sito/`, e `feed.scarica_fonte()` costruisce il feed dal sitemap
+e dalle pagine vere con `consegna_code/fonti_core.py` — lo stesso codice che gira
+nella verifica settimanale, perché due definizioni di «che cosa è un articolo»
+divergerebbero al primo sito strano. Quella riga la scrive l'autoriparazione di
+`verifica_fonti.py`, non la si compila a mano.
 
 Per aggiungere una fonte basta una riga in `percorso.fonti`: `nome`,
 `url_feed`, `categoria` (uno degli slug di `modello_temi`), `peso` fra 0 e 1.

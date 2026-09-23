@@ -1,7 +1,6 @@
 """Núcleo compartido: red, puntuación, autorreparación, licencia, muro de pago, dominio."""
 import re, os, time, calendar, socket, gzip, zlib, html as H, urllib.request, urllib.error, urllib.parse
 from dataclasses import dataclass, field
-import feedparser
 import temi_config as C
 from lessico_patch import aplicar
 
@@ -74,7 +73,13 @@ def descomprimir(b, enc=''):
     return b
 
 def feed(url):
-    """url 'sitemap:https://sitio/' = feed sintetizado con contenido real del sitio (sin feed propio)."""
+    """url 'sitemap:https://sitio/' = feed sintetizado con contenido real del sitio (sin feed propio).
+
+    feedparser se importa AQUÍ y no arriba: el pipeline diario del repositorio corre
+    con python3 pelado y sin pip install, y solo necesita `sintetizar_feed` -que es
+    stdlib- para leer una fuente con metodo 'sitemap'. Un import en cabecera lo
+    dejaría sin esa fuente por una dependencia que no usa."""
+    import feedparser
     if url.startswith('sitemap:'):
         b = sintetizar_feed(url[8:])
         return Resp(200 if b else 404, url, body=b or b''), (feedparser.parse(b) if b else feedparser.FeedParserDict(entries=[], feed={}))
@@ -316,16 +321,22 @@ def _navegacion(loc):
     ruta = [p for p in urllib.parse.urlparse(loc).path.split('/') if p]
     return not ruta or (len(ruta) == 1 and '-' not in ruta[0])
 
-def sintetizar_feed(url_sito, n=10):
+def sintetizar_feed(url_sito, n=10, hasta=None):
     """Feed RSS construido con contenido REAL del sitio (sitemap + páginas). -> bytes o None.
 
     Solo se devuelve si al menos SINTESIS_MIN_RECIENTES voces traen una fecha FIABLE
     -meta de publicación, JSON-LD o fecha en la URL- dentro de MAX_DIAS_SIN_PUBLICAR.
     El <lastmod> del sitemap NO es fecha de publicación: dice cuándo cambió la página.
+
+    `hasta` es un instante de time.monotonic(): quien tiene presupuesto de tiempo
+    -el pipeline diario- lo pasa y la síntesis se detiene ahí. La LECTURA del sitemap
+    no es interrumpible: el tope empieza a valer a partir de la primera página.
     """
+    if hasta is not None and time.monotonic() >= hasta: return None
     items, bajadas = [], 0
     for loc, lm in sitemap_urls(url_sito):
         if len(items) >= n or bajadas >= n + 6: break      # tope de descargas por síntesis
+        if hasta is not None and time.monotonic() >= hasta: break
         if re.search(r'(?i)/(tag|category|author|page|feed|wp-content|search)/|\.(jpg|png|pdf|xml)$', loc): continue
         if _navegacion(loc): continue
         r = fetch(loc); bajadas += 1
