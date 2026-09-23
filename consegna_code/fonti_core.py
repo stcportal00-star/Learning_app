@@ -1,42 +1,50 @@
 """Núcleo compartido: red, puntuación, autorreparación, licencia, muro de pago, dominio."""
-import re, os, time, calendar, socket, gzip, zlib, html as H, urllib.request, urllib.error, urllib.parse
+import re, os, sys, time, calendar, socket, gzip, zlib, json as _json
+import html as H, urllib.request, urllib.error, urllib.parse
 from dataclasses import dataclass, field
 import temi_config as C
-from lessico_patch import aplicar
+
+# El clasificador REAL del repositorio, el mismo que corre a las 08:00. Antes aquí
+# había una réplica de su léxico: el verificador aceptaba una fuente a 6/10 y el
+# pipeline le sacaba dos voces, porque puntuaban distinto el mismo artículo.
+_QUI = os.path.dirname(os.path.abspath(__file__))
+_RADICE = os.path.dirname(_QUI)
+sys.path.insert(0, os.path.join(_RADICE, 'strumenti', 'rassegna'))
+import specializzazioni as SP
 
 socket.setdefaulttimeout(20)
 UA = 'Mozilla/5.0 (compatible; percorso-fonti/1.0)'
 
-FUERTES = {  # extracto del léxico fuerte de PROMPT-FONTI §3 (réplica). Sustituir por import del clasificador real (B3).
-'sql_base':"sql, relational database, query optimizer, query plan, postgresql, sqlite, duckdb, transaction isolation, acid, join algorithm",
-'ottimizzazione':"query performance, execution plan, cardinality estimation, vectorized execution, columnar storage, index selection, cost model, query rewriting",
-'modellazione':"data modeling, dimensional model, star schema, data vault, entity relationship, data contract, semantic layer, schema evolution, data mesh",
-'lettura_codice':"code comprehension, code review, static analysis, debugging, version control, refactoring, software maintenance",
-'statistica':"causal inference, bayesian inference, regression, time series forecasting, confidence interval, hypothesis testing, propensity score, difference-in-differences, instrumental variable, survival analysis",
-'epidemiologia':"epidemiology, disease surveillance, outbreak detection, incidence rate, case fatality, cohort study, case-control, seroprevalence, vaccination coverage, nutritional survey, smart survey, mortality survey",
-'kpi':"key performance indicator, data visualization, dashboard design, indicator framework, visual encoding, chart design, performance measurement",
-'qualita_dati':"data quality, data validation, reproducibility, research data management, missing data, record linkage, deduplication, data provenance, fair data",
-'gdpr':"gdpr, general data protection regulation, data protection impact assessment, lawful basis, data minimisation, data subject rights, international data transfer, data protection by design, humanitarian data protection",
-'ai_act':"ai act, artificial intelligence act, high-risk ai system, conformity assessment, general purpose ai, ai governance framework, algorithmic accountability, fundamental rights impact assessment",
-'ia':"large language model, retrieval augmented generation, prompt injection, model evaluation, hallucination, fine-tuning, foundation model, ai risk management, red teaming, model card",
-'business_analysis':"requirements elicitation, business process modeling, stakeholder analysis, process mining, value stream mapping, cost-benefit analysis, theory of change",
-'governance':"service level objective, error budget, site reliability engineering, architecture decision record, data governance, stewardship, operating model, postmortem, change management",
-'hardware':"mobile device management, network latency, offline first, intermittent connectivity, delay tolerant network, business continuity, disaster recovery, edge computing, satellite connectivity, power resilience",
-'sicurezza':"incident response, threat modeling, vulnerability management, zero trust, security framework, ransomware, supply chain security, nis2, cyber resilience, penetration testing",
-'meal':"monitoring and evaluation, humanitarian evaluation, accountability to affected populations, logical framework, outcome harvesting, needs assessment, sphere standards, core humanitarian standard, cash and voucher assistance, protection mainstreaming",
-'salute_digitale':"health information system, dhis2, electronic health record, interoperability, hl7 fhir, icd-11, digital health intervention, telemedicine, health data standard, openmrs",
-}
-FUERTES = {k: [t.strip() for t in v.split(',')] for k, v in FUERTES.items()}
-_BASE = None
+# Vista del léxico fuerte por tema, para el scouting por keyword: es lo único
+# que `scopri_fonti.py` necesita del vocabulario. La verdad está en
+# SP.SPECIALIZZAZIONI, con MEDIDO, DOMINIO y RELACIONADOS ya fusionados dentro.
+FUERTES = {slug: list(v[2]) for slug, v in SP.SPECIALIZZAZIONI.items()}
+
+# El ruido redactorial se lee del repositorio, no de una copia: es la misma lista
+# que `pubblica.py` aplica a las voces RSS. Si el archivo no está -verificador
+# ejecutado fuera del repo- se cae a la copia de temi_config, que es idéntica.
+_ESCLUSIONI = os.path.join(_RADICE, 'assets', 'contenuti', 'esclusioni_rassegna.json')
+def _rumore_base():
+    try:
+        with open(_ESCLUSIONI, encoding='utf-8') as f:
+            lista = _json.load(f)
+        return list(lista) if isinstance(lista, list) and lista else list(C.RUMORE)
+    except (OSError, ValueError):
+        return list(C.RUMORE)
+RUMORE = _rumore_base()
+
 def configurar(parche=True, dominio=None):
-    global FUERTES, _BASE
-    import lessico_patch as LP
-    _BASE = _BASE or {k: list(v) for k, v in FUERTES.items()}
-    FUERTES = {k: list(v) for k, v in _BASE.items()}
-    if parche: LP.aplicar(FUERTES)
-    if parche and (C.USAR_DOMINIO if dominio is None else dominio):
-        for slug, terms in LP.DOMINIO.items():
-            FUERTES.setdefault(slug, []).extend(t for t in terms if t not in FUERTES[slug])
+    """Queda por compatibilidad con el runbook: ya no hay nada que parchear.
+
+    MEDIDO, DOMINIO y RELACIONADOS están fusionados en el clasificador real, así
+    que `--sin-parche` ya no puede devolver el léxico de antes: habría que
+    deshacer la fusión, y entonces verificador y pipeline volverían a divergir,
+    que es justo el defecto que la fusión corrige.
+    """
+    if not parche:
+        print('AVISO: --sin-parche ya no hace nada; el léxico está fusionado en '
+              'strumenti/rassegna/specializzazioni.py.', file=sys.stderr)
+    return FUERTES
 
 # ---------------------------------------------------------------- red
 @dataclass
@@ -87,25 +95,28 @@ def feed(url):
     return r, (feedparser.parse(r.body) if r.body else feedparser.FeedParserDict(entries=[], feed={}))
 
 # ---------------------------------------------------------------- texto y puntuación
-norm = lambda s: ' ' + re.sub(r'[^a-z0-9\-]+', ' ', (s or '').lower()) + ' '
+norm = SP.normalizza
 def texto(html_bytes_or_str):
     s = html_bytes_or_str.decode('utf-8', 'ignore') if isinstance(html_bytes_or_str, bytes) else html_bytes_or_str
     s = re.sub(r'(?is)<(script|style|noscript)\b.*?</\1>', ' ', s)
     return re.sub(r'\s+', ' ', H.unescape(re.sub(r'<[^>]+>', ' ', s))).strip()
 def cuerpo(e): return e.content[0].value if e.get('content') else e.get('summary', '')
-def contiene(ntexto, termino): return f' {termino} ' in ntexto
+def contiene(ntexto, termino): return SP.occorre(SP.normalizza(termino), ntexto)
 
 def punteggio(t, s):
-    t, s, out, solo_deb = norm(t), norm(s[:4000]), {}, {}
-    for k in FUERTES:
-        vf = sum(1.5 if contiene(t, x) else 1.0 if contiene(s, x) else 0 for x in FUERTES[k])
-        vd = sum(0.6 if contiene(t, x) else 0.4 if contiene(s, x) else 0 for x in C.RELACIONADOS.get(k, []))
-        if vf + vd: out[k] = round(vf + vd, 2); solo_deb[k] = vf == 0
-    return out, solo_deb
+    """-> ({tema: puntuación}, {tema: la puntuación viene SOLO de términos débiles}).
+
+    Una sola implementación, la del clasificador real: 1,5 fuerte en título / 1,0 en
+    sumario, 0,6 débil en título / 0,4 en sumario, umbral 1,0. Los pesos no se
+    repiten aquí porque repetirlos significa que un día serán dos.
+    """
+    a = (s or '')[:4000]
+    p = SP.punteggi(t, a)
+    solo = SP.temi_solo_deboli(t, a)
+    return p, {k: (k in solo) for k in p}
 
 def es_rumore(t, slug=None):
-    n = norm(t)
-    return any(contiene(n, x) for x in C.RUMORE + C.RUMORE_EXTRA.get(slug, []))
+    return SP.e_rumore(t, RUMORE + C.RUMORE_EXTRA.get(slug, []))
 
 def dias_desde_ultima(d):
     fs = [e.get('published_parsed') or e.get('updated_parsed') for e in d.entries[:10]]
@@ -235,7 +246,7 @@ def muro(links):
     return n, total, '; '.join(det), trans
 
 # ================================================================ CURACIÓN PROFUNDA (autónoma)
-import difflib, json as _json
+import difflib
 def similitud(a, b):
     n = lambda s: re.sub(r'[^a-z0-9 ]+', ' ', (s or '').lower()).split()
     return difflib.SequenceMatcher(None, ' '.join(n(a)), ' '.join(n(b))).ratio()

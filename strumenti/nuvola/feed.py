@@ -1114,16 +1114,21 @@ def _autoverifica():
     try:
         rapporto = {"falliti": [], "tempo_scaduto": False}
         raccolte = raccogli(_FintaNuvola([rotta, motori, muta, epidemie]), rapporto)
-        # Epidemie dichiara "epidemiologia" e il primo tema è quello: 2,1 + 1,5
-        # = 3,6, per 1,2 fa 4,32. La seconda voce dello stesso feed parla di
-        # qualità dei dati, che la categoria non conferma: resta 3,5.
+        # Epidemie dichiara "epidemiologia" e il primo tema è quello: nel titolo
+        # «disease surveillance», «cholera» e «outbreaks» sono tre termini forti
+        # (1,5 l'uno) più «surveillance» debole (0,6), cioè 5,1; «causal
+        # inference» porta statistica a 1,5. Somma 6,6, per 1,2 fa 7,92. La
+        # seconda voce dello stesso feed parla di qualità dei dati, che la
+        # categoria non conferma: «data quality» nel titolo 1,5, «record
+        # linkage» e «data validation» nel sommario 1,0 l'uno, «validation»
+        # debole 0,4 — resta 3,9.
         _prova("le voci arrivano classificate e in ordine di rilevanza",
                [(v["titolo"], v["rilevanza"], v["fonte"]) for v in raccolte],
-               [("Query optimization for columnar storage engines", 5.4,
+               [("Causal inference for disease surveillance in cholera outbreaks",
+                 7.92, "rss[Epidemie]"),
+                ("Query optimization for columnar storage engines", 5.4,
                  "rss[Blog dei motori]"),
-                ("Causal inference for disease surveillance in cholera outbreaks",
-                 4.32, "rss[Epidemie]"),
-                ("Data quality checks that actually run", 3.5, "rss[Epidemie]")])
+                ("Data quality checks that actually run", 3.9, "rss[Epidemie]")])
         _prova("due feed letti su quattro fonti", rapporto["feed_letti"], 2)
         _prova("e tre voci contate", rapporto["voci_da_feed"], 3)
         _prova("la fonte rotta e quella senza indirizzo sono annotate, non sollevate",

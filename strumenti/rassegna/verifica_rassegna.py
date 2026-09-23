@@ -20,8 +20,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import catalogo
 import fonti_aperte as fonti
-from specializzazioni import (SPECIALIZZAZIONI, classifica, e_pubblicazione, e_rumore,
-                              normalizza, punteggi, termini_di_ricerca, trimestre_di)
+from specializzazioni import (SOGLIA, SPECIALIZZAZIONI, classifica, e_pubblicazione,
+                              e_rumore, normalizza, punteggi, temi_solo_deboli,
+                              termini_di_ricerca, trimestre_di)
 
 RADICE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -105,6 +106,32 @@ esclusioni = json.load(open(os.path.join(RADICE, "assets", "contenuti",
 verifica("il rumore redazionale è riconosciuto", e_rumore("Top 10 best tools", esclusioni))
 verifica("un titolo scientifico non è rumore",
          not e_rumore("Bayesian inference for time series", esclusioni))
+
+# Il confronto è a confine di parola, e questi due titoli sono il motivo. Con il
+# confronto per sottostringa «valuation» catturava «evaluations»: sparivano
+# proprio gli articoli sulla valutazione dei modelli, cioè il contenuto migliore
+# del tema `ia`. E spariva in silenzio, perché una voce scartata come rumore non
+# lascia traccia da nessuna parte.
+verifica("«evaluations» non è «valuation»",
+         not e_rumore("Cheating behaviour in frontier model evaluations", esclusioni))
+verifica("ma «valuation» resta rumore",
+         e_rumore("Acme raises Series B at $1B valuation", esclusioni))
+verifica("e «Top 100» non è «top 10»",
+         not e_rumore("Top 100 questions about causal inference", esclusioni))
+
+# Due termini deboli nel titolo arrivano a 1,2 e la voce entra in libreria — è il
+# contratto della rassegna — ma non dicono niente sulla FONTE che li pubblica.
+# `verifica_fonti.py` conta come utili solo le voci con almeno un termine forte,
+# e la distinzione deve stare qui, non in una seconda copia del classificatore.
+verifica("un titolo di soli termini deboli supera la soglia",
+         punteggi("How we changed our workflow and requirements")
+         .get("business_analysis", 0) >= SOGLIA)
+verifica("ma risulta fatto di soli termini deboli",
+         "business_analysis" in
+         temi_solo_deboli("How we changed our workflow and requirements"))
+verifica("mentre un termine forte nel titolo non è «solo debole»",
+         "epidemiologia" not in
+         temi_solo_deboli("Cholera outbreak detection in Yemen"))
 
 # ---------------------------------------------------------------- chiavi e deduplicazione
 verifica("il DOI normalizza l'URL completo",
