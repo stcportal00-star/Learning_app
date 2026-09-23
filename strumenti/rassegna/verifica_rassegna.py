@@ -123,6 +123,12 @@ verifica("voce: campi obbligatori presenti",
                               "concetti", "editore")))
 verifica("voce: autori vuoti scartati",
          fonti.voce("t", "f", "u", autori=["a", None, ""])["autori"] == ["a"])
+# Un campo che c'e' ed e' nullo non e' un campo che manca: `get(k, [])` torna
+# None nel primo caso, e la comprensione che segue esplode. E' la forma in cui
+# arrivano i campi vuoti di un JSON, quindi bastera' un chiamante che legga
+# `autori` da un feed invece di costruirlo per trovarla.
+verifica("un elenco nullo non fa esplodere la voce",
+         fonti.voce("t", "f", "u", autori=None, concetti=None)["autori"] == [])
 
 # ---------------------------------------------------------------- setaccio completo
 grezzo = catalogo.dati_di_prova()
