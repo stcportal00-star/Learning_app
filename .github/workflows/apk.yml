@@ -22,6 +22,9 @@ on:
       - "package.json"
       - "package-lock.json"
       - "app.json"
+      # Da qui esce il versionCode: una modifica a questo file cambia cosa
+      # finisce nel pacchetto, quindi deve far ricompilare come app.json.
+      - "app.config.js"
       - "metro.config.js"
       - ".github/workflows/apk.yml"
       - ".github/fumo.sh"
