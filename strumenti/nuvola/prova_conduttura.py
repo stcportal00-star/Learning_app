@@ -144,6 +144,34 @@ def controlla_unici(tabella, righe, deposito, chiavi_upsert):
             visti[firma] = "nello stesso lotto"
 
 
+class TestoImpossibile(Exception):
+    pass
+
+
+def controlla_testo(tabella, riga):
+    """PostgreSQL non puo' tenere un NUL in una colonna `text`.
+
+    Il finto server lo rifiuta come il server vero — 400, codice 22P05 — e
+    rifiuta la richiesta INTERA, non la riga: e' quello che fa PostgREST, e la
+    differenza fra le due cose e' fra perdere una voce e perdere la mattina.
+    """
+    def guarda(v, dove):
+        if isinstance(v, str):
+            if "\x00" in v:
+                raise TestoImpossibile(
+                    "unsupported Unicode escape sequence in %s.%s: "
+                    "\\u0000 cannot be converted to text." % (tabella, dove))
+        elif isinstance(v, dict):
+            for k2, v2 in v.items():
+                guarda(v2, "%s.%s" % (dove, k2))
+        elif isinstance(v, list):
+            for i, v2 in enumerate(v):
+                guarda(v2, "%s[%d]" % (dove, i))
+
+    for colonna, valore in riga.items():
+        guarda(valore, colonna)
+
+
 class FiltroSconosciuto(Exception):
     pass
 
@@ -258,6 +286,11 @@ class FintoSupabase(BaseHTTPRequestHandler):
             try:
                 for r in righe:
                     controlla(tabella, r)
+                    controlla_testo(tabella, r)
+            except TestoImpossibile as e:
+                self._rispondi(400, json.dumps(
+                    {"code": "22P05", "message": str(e)}).encode())
+                return
             except VincoloViolato as e:
                 # Stessa forma di PostgREST: stato 400 e il motivo nel corpo.
                 self._rispondi(400, json.dumps(
@@ -330,6 +363,17 @@ def principale():
             "url": "https://esempio.invalid/uno", "data": "2026-09-21",
             "abstract": "Un sommario.", "fonte": "openalex", "tema_slug": "statistica",
             "trimestre": "T1", "rilevanza": 2.5, "tipo": "articolo",
+        },
+        {
+            # Il carattere che il 23 settembre ha fatto fallire la corsa vera:
+            # un NUL finito nel sommario. PostgreSQL non lo accetta in `text`
+            # e PostgREST rifiuta il LOTTO INTERO con 22P05 — ottanta articoli
+            # preparati, zero eventi scritti.
+            "chiave": "crossref:C3", "titolo": "Terzo studio", "autori": ["Verdi"],
+            "url": "https://esempio.invalid/tre", "data": "2026-09-19",
+            "abstract": "Un sommario con un NUL:\x00 proprio qui.",
+            "fonte": "crossref", "tema_slug": "statistica", "trimestre": "T2",
+            "rilevanza": 0.9,
         },
         {
             "chiave": "zenodo:Z2", "titolo": "Secondo studio", "autori": [],
@@ -414,7 +458,17 @@ def principale():
     # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
     # una strada propria questo numero resterebbe due e le righe comparirebbero
     # da un'altra parte.
-    prova("quattro articoli: due dal catalogo, due dal feed", len(articoli), 4)
+    prova("cinque articoli: tre dal catalogo, due dal feed", len(articoli), 5)
+    prova_vero(
+        "il NUL e' stato tolto invece di far cadere il lotto",
+        all("\x00" not in (r.get("abstract") or "") for r in articoli),
+        repr([r.get("abstract") for r in articoli]),
+    )
+    prova_vero(
+        "e la voce che lo conteneva e' arrivata lo stesso",
+        any("Terzo studio" == (r.get("titolo") or "") for r in articoli),
+        "ripulire non vuol dire scartare: la voce vale, il carattere no",
+    )
     prova("un volume: il file a mano buono", len(volumi), 1)
     prova("l'impostore è stato scartato", rapporto["manuali"], 1)
     prova_vero(

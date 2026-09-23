@@ -30,6 +30,7 @@ Le tre regole che questo file impone a chiunque lo usi:
 import http.client
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -180,6 +181,39 @@ def _mascherata(chiave):
     """La chiave e' pubblicabile, ma un registro di CI si condivide piu'
     facilmente del repository: in stampa se ne mostra solo il prefisso."""
     return (chiave[:12] + "…") if len(chiave) > 12 else "(vuota)"
+
+
+# I caratteri che una colonna `text` di PostgreSQL non puo' contenere. Il NUL
+# fa rifiutare l'intera richiesta con 22P05; i surrogati spaiati non sono
+# UTF-8 valido e rompono la serializzazione.
+_VIETATI = re.compile("[\x00\ud800-\udfff]")
+
+
+def ripulisci(valore):
+    """Toglie i caratteri che PostgreSQL non puo' tenere in una colonna `text`.
+
+    Sono due, e nessuno dei due porta significato:
+
+    - **il byte NUL.** `text` non lo accetta, e PostgREST rifiuta l'intera
+      richiesta con 22P05, «\\u0000 cannot be converted to text». Non si perde
+      la riga che lo conteneva: si perde il LOTTO, perche' le righe vanno in
+      una transazione sola. E' successo il 23 settembre: ottanta articoli
+      preparati, zero eventi scritti, la mattina buttata per un carattere
+      finito nel testo estratto da un PDF.
+    - **i surrogati spaiati** (U+D800–U+DFFF). Non sono UTF-8 valido; arrivano
+      da HTML mal codificato e fanno fallire la serializzazione o la scrittura.
+
+    Si ripulisce qui, nell'unico punto da cui passano tutte le scritture,
+    invece che in chi prepara le righe: un chiamante nuovo non puo'
+    dimenticarsene, e l'estrattore non deve sapere cosa PostgreSQL accetta.
+    """
+    if isinstance(valore, str):
+        return _VIETATI.sub("", valore)
+    if isinstance(valore, dict):
+        return {k: ripulisci(v) for k, v in valore.items()}
+    if isinstance(valore, list):
+        return [ripulisci(v) for v in valore]
+    return valore
 
 
 class Nuvola:
@@ -333,7 +367,7 @@ class Nuvola:
                 raise ErroreNuvola(
                     f"innesta su {tabella}: la riga {indice} e' "
                     f"{type(riga).__name__}, serve un dizionario colonna→valore")
-            copia = dict(riga)
+            copia = ripulisci(dict(riga))
             copia.setdefault("utente_id", UTENTE)
             preparate.append(copia)
 
