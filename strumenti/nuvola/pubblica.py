@@ -430,6 +430,7 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
             nuvola, rapporto,
             massimo_per_fonte=int(tetti.get("per_fonte", MASSIMO_PER_FONTE)),
             minuti=minuti_feed,
+            esplorazione=tetti.get("esplorazione"),
         )
         # Il rumore redazionale si toglie qui e non dentro `feed.py`: l'elenco
         # sta in `assets/contenuti/`, e un lettore di RSS che se lo caricasse
@@ -611,6 +612,7 @@ def scrivi_rapporto(cartella, rapporto):
         "Feed letti       : %d" % rapporto.get("feed_letti", 0),
         "Voci dai feed    : %d" % rapporto.get("voci_da_feed", 0),
         "  rumore tolto   : %d" % rapporto.get("rumore_feed", 0),
+        "  fuori tema     : %d" % rapporto.get("esplorazione", 0),
         "Candidate        : %d" % rapporto["candidate"],
         "Doppioni tolti   : %d" % rapporto.get("doppioni", 0),
         "Url ripetuti     : %d" % rapporto.get("url_ripetuti", 0),
@@ -642,6 +644,10 @@ def principale(argv=None):
     p.add_argument("--minuti", type=int, default=MINUTI)
     p.add_argument("--minuti-feed", type=float, default=MINUTI_FEED)
     p.add_argument("--per-fonte", type=int, default=MASSIMO_PER_FONTE)
+    # Il valore vero sta in `consegna_code/temi_config.py`: qui si può solo
+    # abbassarlo per una corsa. Senza `--esplorazione` vale quello, e resta
+    # un numero solo.
+    p.add_argument("--esplorazione", type=int, default=None)
     a = p.parse_args(argv)
 
     rapporto = {
@@ -651,6 +657,7 @@ def principale(argv=None):
         "feed_letti": 0,
         "voci_da_feed": 0,
         "rumore_feed": 0,
+        "esplorazione": 0,
         "articoli": 0,
         "con_testo": 0,
         "pdf": 0,
@@ -680,6 +687,7 @@ def principale(argv=None):
         pubblica(a.cartella, a.manuale, nuvola, {
             "articoli": a.massimo_articoli, "pdf": a.massimo_pdf, "minuti": a.minuti,
             "minuti_feed": a.minuti_feed, "per_fonte": a.per_fonte,
+        "esplorazione": a.esplorazione,
         }, rapporto)
     except ErroreNuvola as e:
         print(scrivi_rapporto(a.cartella, rapporto))

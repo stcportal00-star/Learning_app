@@ -119,6 +119,15 @@ all'estrazione del testo — e un catalogo di titoli senza testo, in aereo, non
 si legge. Una fonte che non risponde non ferma le altre: finisce fra i «non
 riusciti» del rapporto.
 
+C'è una terza strada, stretta di proposito: **l'esplorazione**. Al massimo
+cinque voci al giorno (`temi_config.ESPLORAZIONE_MAX_DIA`) che nessun tema ha
+preso ma che sono articoli veri — almeno millecinquecento caratteri di testo,
+oppure un segnale di genere come «lessons learned» o «post-mortem» — entrano
+sotto lo slug `esplorazione`, che non è il diciottesimo tema: non sta in
+`modello_temi`, non ha trimestre, e ha rilevanza zero apposta, così se il tetto
+degli ottanta articoli taglia, taglia queste per prime. Un margine che ruba il
+posto al programma di studio smette di essere un margine.
+
 `'sitemap'` non è un secondo modo di leggere un feed: è ciò che resta quando un
 sito che vale la pena leggere non ne ha uno. `url_feed` vale allora
 `sitemap:https://sito/`, e `feed.scarica_fonte()` costruisce il feed dal sitemap

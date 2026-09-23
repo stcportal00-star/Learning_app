@@ -53,7 +53,7 @@ sys.path.insert(0, QUI)
 
 import fonti_aperte as fonti  # noqa: E402
 from specializzazioni import (classifica, e_pubblicazione,  # noqa: E402
-                              normalizza, trimestre_di)
+                              normalizza, occorre, trimestre_di)
 from cliente import ErroreNuvola  # noqa: E402
 from estrattore import ErroreEstrazione, scarica  # noqa: E402
 
@@ -85,6 +85,24 @@ PREFISSO_SITEMAP = "sitemap:"
 # definizione di «che cosa è un articolo», e divergerebbe dalla prima al primo
 # sito che si comporta in modo strano.
 CONSEGNA = os.path.join(os.path.dirname(STRUMENTI), "consegna_code")
+
+# I parametri dell'esplorazione vivono in `consegna_code/temi_config.py`, dove
+# si cambiano senza toccare il codice. Se quella cartella non c'è, l'esplorazione
+# è spenta e basta: cinque voci al giorno scelte con numeri inventati qui
+# sarebbero una seconda verità, e una seconda verità è peggio di zero voci.
+if CONSEGNA not in sys.path:
+    sys.path.insert(0, CONSEGNA)
+try:
+    import temi_config as _CONF  # noqa: E402
+except ImportError:  # pragma: no cover — dipende da come è montato il repository
+    _CONF = None
+
+# Lo slug delle voci senza tema che vale comunque la pena leggere. Non è il
+# diciottesimo tema: non sta in `modello_temi`, non ha trimestre, e la rilevanza
+# è zero apposta — se il tetto degli ottanta articoli taglia, taglia queste per
+# prime. È un margine, e un margine che ruba il posto al programma di studio
+# smette di essere un margine.
+SLUG_ESPLORAZIONE = "esplorazione"
 
 # Quanto sale la rilevanza quando il tema calcolato conferma la categoria che
 # l'utente ha dichiarato per quella fonte. Non è una scorciatoia per arrivare
@@ -598,6 +616,45 @@ def classifica_voce(v):
     return v
 
 
+def quota_esplorazione():
+    """Quante voci fuori tema al giorno. Zero se i parametri non ci sono."""
+    return int(getattr(_CONF, "ESPLORAZIONE_MAX_DIA", 0) or 0)
+
+
+def segna_esplorazione(v):
+    """La voce non ha preso nessun tema: vale comunque una lettura?
+
+    Due vie, e sono diverse apposta. La lunghezza dice che qualcuno ci ha
+    lavorato: sotto i millecinquecento caratteri di testo non c'è un articolo,
+    c'è un annuncio. I segnali dicono di che GENERE è il pezzo — «lessons
+    learned», «post-mortem», «how we built» — e valgono anche corti, perché un
+    resoconto di campo scritto stretto resta un resoconto di campo.
+
+    Un errata corrige non entra mai: non ha tema perché non è una
+    pubblicazione, ed è il motivo opposto a quello che cerchiamo qui.
+
+    Modifica la voce sul posto e restituisce True quando l'ha presa.
+    """
+    if not _CONF:
+        return False
+    titolo = v.get("titolo") or ""
+    if not e_pubblicazione(titolo):
+        return False
+    testo = v.get("abstract") or ""
+    minimo = int(getattr(_CONF, "ESPLORAZIONE_MIN_CHARS", 0) or 0)
+    segnali = list(getattr(_CONF, "ESPLORAZIONE_SEGNALI", ()) or ())
+    dove = normalizza(titolo + " " + testo[:500])
+    if len(testo) < minimo and not any(occorre(normalizza(x), dove) for x in segnali):
+        return False
+
+    v["temi"] = [SLUG_ESPLORAZIONE]
+    v["punteggi"] = {}
+    v["tema_slug"] = SLUG_ESPLORAZIONE
+    v["trimestre"] = None
+    v["rilevanza"] = 0.0
+    return True
+
+
 # ---------------------------------------------------------------- raccolta
 
 
@@ -626,7 +683,7 @@ def leggi_fonti(nuvola):
                   key=lambda r: (-peso_di(r), str(r.get("nome") or "")))
 
 
-def raccogli(nuvola, rapporto, massimo_per_fonte=25, minuti=6):
+def raccogli(nuvola, rapporto, massimo_per_fonte=25, minuti=6, esplorazione=None):
     """Legge le fonti, scarica i feed, costruisce e classifica le voci.
 
     Restituisce le voci già classificate, pronte a stare accanto a quelle del
@@ -646,7 +703,13 @@ def raccogli(nuvola, rapporto, massimo_per_fonte=25, minuti=6):
     rapporto.setdefault("falliti", [])
     rapporto.setdefault("feed_letti", 0)
     rapporto.setdefault("voci_da_feed", 0)
+    rapporto.setdefault("esplorazione", 0)
     rapporto.setdefault("tempo_scaduto", False)
+
+    # Il tetto è della CORSA, e la corsa è una al giorno: contarlo qui è
+    # contarlo al giorno, senza uno stato in più da tenere allineato.
+    resta_esplorazione = (quota_esplorazione() if esplorazione is None
+                          else int(esplorazione))
 
     try:
         righe = leggi_fonti(nuvola)
@@ -702,7 +765,10 @@ def raccogli(nuvola, rapporto, massimo_per_fonte=25, minuti=6):
             if v["chiave"] in gia_prese:
                 continue
             if classifica_voce(v) is None:
-                continue
+                if resta_esplorazione <= 0 or not segna_esplorazione(v):
+                    continue
+                resta_esplorazione -= 1
+                rapporto["esplorazione"] += 1
             gia_prese.add(v["chiave"])
             voci.append(v)
             rapporto["voci_da_feed"] += 1
@@ -1168,6 +1234,66 @@ def _autoverifica():
                raccogli(muta_nuvola, rapporto4), [])
         _prova_inizio("e il motivo resta scritto",
                       rapporto4["falliti"][0], "lettura di percorso.fonti: ")
+
+        # ------------------------------------------------- esplorazione
+        #
+        # Dodici voci fuori tema: dieci lunghe abbastanza da essere articoli,
+        # una corta con un segnale di genere, una che è un errata corrige. Il
+        # tetto è cinque, e deve essere cinque esatte: una quota che si sfora
+        # di una voce al giorno sono trentun voci al mese fuori programma.
+        _CUCINA = "Uova, guanciale e pecorino romano, mantecati fuori dal fuoco. " * 30
+        _VOCI_FUORI_TEMA = "".join(
+            "<item><title>La carbonara della nonna, puntata %d</title>"
+            "<link>https://cucina.example/p%d</link>"
+            "<pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>"
+            "<description>%s</description></item>" % (i, i, _CUCINA)
+            for i in range(10))
+        _FEED_FUORI_TEMA = (
+            '<?xml version="1.0"?><rss version="2.0"><channel>'
+            "<title>Cucina</title><link>https://cucina.example/</link>"
+            + _VOCI_FUORI_TEMA
+            + "<item><title>Due righe sul pane</title>"
+              "<link>https://cucina.example/pane</link>"
+              "<pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>"
+              "<description>Poche righe, niente da studiare.</description></item>"
+              "<item><title>Erratum: la carbonara della nonna</title>"
+              "<link>https://cucina.example/err</link>"
+              "<pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>"
+              "<description>%s</description></item>" % _CUCINA
+            + "</channel></rss>")
+
+        cucina = {"id": "f-9", "nome": "Cucina", "url_feed": "https://d/rss",
+                  "url_sito": "https://cucina.example/", "categoria": "",
+                  "lingua": "it", "peso": 0.2, "metodo": "rss", "attiva": True}
+        risposte["https://d/rss"] = _FEED_FUORI_TEMA
+        rapporto7 = {"falliti": [], "tempo_scaduto": False}
+        raccolte7 = raccogli(_FintaNuvola([cucina]), rapporto7)
+        _prova("di dodici voci senza tema ne entrano esattamente cinque",
+               (len(raccolte7), rapporto7["esplorazione"]), (5, 5))
+        _prova("stanno sotto lo slug dell'esplorazione, senza trimestre",
+               sorted({(v["tema_slug"], v["trimestre"], v["rilevanza"])
+                       for v in raccolte7}),
+               [("esplorazione", None, 0.0)])
+        _prova("la voce di due righe non è un articolo e resta fuori",
+               [v for v in raccolte7 if "pane" in v["titolo"]], [])
+        _prova("e un errata corrige non diventa esplorazione",
+               [v for v in raccolte7 if v["titolo"].startswith("Erratum")], [])
+
+        # Un segnale di genere vale anche su un testo corto: un resoconto di
+        # campo scritto stretto resta un resoconto di campo.
+        corta = fonti.voce("Lessons learned da una cucina di paese",
+                           fonte="rss[Cucina]", url="https://cucina.example/l",
+                           abstract="Poche righe.")
+        _prova("un segnale di genere basta anche senza lunghezza",
+               (segna_esplorazione(corta), corta["tema_slug"]),
+               (True, "esplorazione"))
+
+        # Tetto a zero: nessuna voce fuori tema, e nessuna eccezione.
+        rapporto8 = {"falliti": [], "tempo_scaduto": False}
+        _prova("con il tetto a zero l'esplorazione è spenta",
+               (raccogli(_FintaNuvola([cucina]), rapporto8, esplorazione=0),
+                rapporto8["esplorazione"]), ([], 0))
+        del risposte["https://d/rss"]
 
         # ------------------------------------------------ metodo 'sitemap'
         #
