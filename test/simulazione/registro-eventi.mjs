@@ -326,14 +326,19 @@ await prova("A1 primo avvio: lo schema v1 nasce intero e il registro e vuoto", a
       "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%' ORDER BY name"
     )
   ).map((r) => r.name);
-  const attesiIndici = ["articoli_raccolto_idx", "articoli_tema_idx", "biblioteca_codice_idx",
+  const attesiIndici = ["articoli_media_idx", "articoli_raccolto_idx", "articoli_tema_idx", "biblioteca_codice_idx",
     "biblioteca_trim_idx", "esercizi_tema_idx", "eventi_da_sincronizzare", "eventi_entita_idx",
     "eventi_hlc_idx", "ripasso_prossima_idx", "segni_volume_idx", "sessioni_inizio_idx",
     "tentativi_esercizio_idx"];
-  ok("i 12 indici dichiarati esistono", indici.join(",") === attesiIndici.join(","), indici.join(","));
+  ok(`i ${attesiIndici.length} indici dichiarati esistono`,
+    indici.join(",") === attesiIndici.join(","), indici.join(","));
 
   const v = await base.getFirstAsync("PRAGMA user_version");
-  ok("user_version passa a 2", v.user_version === 2, String(v.user_version));
+  // Il numero si legge dal modulo, non si riscrive qui: era «2» a mano, e alla
+  // migrazione successiva questa riga sarebbe diventata rossa per il motivo
+  // sbagliato — non perche lo schema fosse rotto, ma perche il test era vecchio.
+  ok(`user_version passa a ${app.SCHEMA_VERSIONE}`,
+    v.user_version === app.SCHEMA_VERSIONE, String(v.user_version));
   ok("SCHEMA_VERSIONE coincide con la versione scritta", app.SCHEMA_VERSIONE === v.user_version,
     `SCHEMA_VERSIONE=${app.SCHEMA_VERSIONE}`);
 
@@ -356,7 +361,8 @@ await prova("A2 secondo avvio sullo stesso file: niente migrazioni, dati intatti
 
   const secondo = await avvia("aaaa2222", primo.cartella);
   const v = await secondo.base.getFirstAsync("PRAGMA user_version");
-  ok("user_version resta 2", v.user_version === 2, String(v.user_version));
+  ok(`user_version resta ${secondo.app.SCHEMA_VERSIONE}`,
+    v.user_version === secondo.app.SCHEMA_VERSIONE, String(v.user_version));
   ok("l'evento di prima e ancora li", (await contaEventi(secondo.base)) === 1);
   ok("la nota di prima e ancora li",
     (await secondo.base.getFirstAsync("SELECT testo FROM note WHERE id='n1'")).testo === "prima");
@@ -381,7 +387,8 @@ await prova("A3 migrazione ripetibile: user_version riportata a 0 su un database
 
   const secondo = await avvia("aaaa3333", primo.cartella);
   const v = await secondo.base.getFirstAsync("PRAGMA user_version");
-  ok("la migrazione rigira senza errori e riporta la versione a 2", v.user_version === 2, String(v.user_version));
+  ok(`la migrazione rigira senza errori e riporta la versione a ${secondo.app.SCHEMA_VERSIONE}`,
+    v.user_version === secondo.app.SCHEMA_VERSIONE, String(v.user_version));
   ok("CREATE TABLE IF NOT EXISTS non ha cancellato l'evento", (await contaEventi(secondo.base)) === 1);
   ok("ne la nota", (await secondo.base.getFirstAsync("SELECT testo FROM note WHERE id='n1'")).testo === "testo");
 });

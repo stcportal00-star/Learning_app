@@ -282,6 +282,14 @@ def riga_articolo(v, testo, rapporto):
         # arrivi dagli archivi: 1 → 17, 2,5 → 33, 5 → 50, 11,2 → 69.
         "punteggio": punteggio_da(v.get("rilevanza")),
         "rilevanza": float(v.get("rilevanza") or 0),
+        # L'allegato che il feed dichiara, così com'è dichiarato. Non si
+        # scarica qui: duecento megabyte per voce non stanno né nel deposito né
+        # nei tredici minuti della corsa. Il telefono decide da sé, in wifi, e
+        # `byte_media` è ciò che gli permette di decidere PRIMA.
+        "url_media": v.get("url_media"),
+        "tipo_media": v.get("tipo_media") or None,
+        "byte_media": int(v.get("byte_media") or 0) or None,
+        "url_trascrizione": v.get("url_trascrizione"),
         "raccolto_a": rapporto["adesso"],
     }
 
@@ -310,6 +318,13 @@ def payload_articolo(riga):
         "raccolto_a": riga["raccolto_a"],
         "letto": 0,
         "salvato": 0,
+        "url_media": riga["url_media"],
+        "tipo_media": riga["tipo_media"],
+        "byte_media": riga["byte_media"],
+        "url_trascrizione": riga["url_trascrizione"],
+        # `file_media` MAI, per lo stesso motivo di `file_locale` in
+        # `payload_volume`: è un percorso di un telefono, e sull'altro
+        # dispositivo significherebbe promettere un file che non c'è.
     }
 
 
