@@ -195,6 +195,20 @@ export async function liberaVisti(): Promise<{ liberati: number; byte: number }>
   return { liberati, byte };
 }
 
+/**
+ * I byte come si dicono a chi deve decidere se scaricare in roaming.
+ *
+ * Sotto il mezzo megabyte si scrive in KB: «0,4 MB» e «0,0 MB» sono la stessa
+ * cosa per chi legge, e un bottone che dice zero su un file che esiste sembra
+ * rotto. Sopra, un decimale basta: la scelta è fra dodici e centoventi, non
+ * fra 12,3 e 12,4.
+ */
+export function descriviByte(byte?: number | null): string {
+  if (!byte || byte < 0) return "peso ignoto";
+  if (byte < 512 * 1024) return `${Math.max(1, Math.round(byte / 1024))} KB`;
+  return `${(byte / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
 /** Quanto occupa la cache adesso, per poterlo dire su una schermata. */
 export async function spazioMedia(): Promise<{ file: number; byte: number }> {
   const righe = await database().getAllAsync<{ file_media: string }>(

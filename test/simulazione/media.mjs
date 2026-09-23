@@ -233,6 +233,16 @@ uguale("M9 con il file sparito dal disco non si apre niente",
   await media.apriMedia("m9"), "non_scaricato");
 uguale("M9 e nessun intent parte lo stesso", intent.giornale.length, contateInizio);
 
+// ================================================================= M10 peso
+// Il bottone dice quanti megabyte sono, ed è tutta l'informazione su cui si
+// decide in roaming: se dicesse «0,0 MB» su un file vero sembrerebbe rotto.
+uguale("M10 un peso ignoto si dichiara ignoto", media.descriviByte(null), "peso ignoto");
+uguale("M10 sotto il mezzo megabyte si parla in KB", media.descriviByte(300 * 1024), "300 KB");
+uguale("M10 un file minuscolo non diventa 0", media.descriviByte(200), "1 KB");
+uguale("M10 sopra, un decimale basta", media.descriviByte(12 * 1024 * 1024), "12,0 MB");
+uguale("M10 con la virgola, che e\u0300 come si scrive in italiano",
+  media.descriviByte(1536 * 1024), "1,5 MB");
+
 // ================================================================= ESITO
 if (guasti.length) {
   console.log("SIMULAZIONE DEI MEDIA: ROSSA\n");
