@@ -34,7 +34,7 @@ done
 
 echo "— simulazioni delle superfici (test/simulazione/)"
 for s in registro-eventi motore-sql import-database contenuti ripasso-e-sessioni nuvola \
-         schermate-stato sync-fusione ; do
+         schermate-stato sync-fusione media ; do
   esegui "$s" node "test/simulazione/$s.mjs"
 done
 # promemoria-notifiche si esegue a QUATTRO ore diverse del giorno, e non e
