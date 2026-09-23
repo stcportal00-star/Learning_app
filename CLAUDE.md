@@ -211,6 +211,17 @@ Actions fa da PC**: compila, firma, installa su un emulatore, legge logcat.
   mai una nuova: con un'altra chiave gli aggiornamenti non si installano, e
   disinstallare cancella i dati. `.github/test-firma.sh` lo verifica a ogni push.
   **Non eliminare mai la release `firma` e non toccare quel passo del workflow.**
+- **Il `versionCode` si calcola, non si scrive.** Sta in `app.config.js`: minuti
+  interi dall'epoca, la stessa formula ovunque. NON è il numero della corsa, e
+  legarcelo sarebbe un guasto irreversibile in tre modi — un APK compilato a
+  mano uscirebbe con 1 e non si installerebbe sopra una build di CI, proprio
+  quando la rete non c'è; rieseguire una corsa vecchia ne conserva il numero e
+  produce un downgrade; rinominare `apk.yml` azzera il contatore e blocca ogni
+  aggiornamento per sempre, con la CI verde. **Il versionCode non deve mai
+  decrescere**: per tornare a una build precedente si ricompila quel commit,
+  non si reinstalla il vecchio APK, e non si disinstalla mai. Il numero della
+  corsa vive in `version` (cioè `versionName`, leggibile in Impostazioni → App
+  anche ad app rotta) e in `extra`, da cui lo legge la riga in Profilo.
 - La biblioteca aperta si scarica con il workflow `biblioteca` (avvio manuale).
 - I trasporti di sincronizzazione 1 e 2 richiedono moduli nativi propri: non in
   questa fase. Il trasporto 3 passa dal foglio di condivisione e da Quick Share,

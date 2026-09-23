@@ -160,6 +160,34 @@ jobs:
           fi
           cp "$apk" percorso.apk
 
+      # Per la firma il workflow non si fida della configurazione: misura
+      # l'APK. Per la versione non misurava niente, e il modo in cui questa
+      # catena fallisce e' sempre lo stesso — il numero e' giusto ovunque
+      # tranne che dentro il pacchetto. Il valore di ripiego di Expo quando la
+      # configurazione non viene letta e' 1, e un APK con versionCode 1 non si
+      # installa sopra nessuna build precedente: verde in CI, morto sul
+      # telefono. Sta qui, dopo la compilazione, perche' prima non esiste un
+      # APK da misurare.
+      - name: Versione dichiarata contro versione nel pacchetto
+        env:
+          CORSA: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          aapt2=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -1)
+          badging=$("$aapt2" dump badging percorso.apk | head -1)
+          codice=$(printf '%s' "$badging" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          nome=$(printf '%s' "$badging" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          echo "versionCode: $codice"
+          echo "versionName: $nome"
+          if [ "${codice:-1}" -le 1 ]; then
+            echo "::error::versionCode $codice: app.config.js non e' stato letto e Expo e' ricaduto sul suo 1. Questo APK non si installerebbe sopra il precedente."
+            exit 1
+          fi
+          if [ "$nome" != "0.1.0+$CORSA" ]; then
+            echo "::error::versionName '$nome', atteso '0.1.0+$CORSA': il numero di corsa non e' finito nel pacchetto."
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v7
         with:
           name: apk
