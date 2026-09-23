@@ -110,10 +110,16 @@ jobs:
       - name: Diagnosi dei permessi su Supabase
         if: steps.orario.outputs.esegui == 'si'
         continue-on-error: true
-        timeout-minutes: 3
+        # Sei invece di tre: `--fonti` prova un feed alla volta, e con venti
+        # fonti attive tre minuti non bastano. Resta comunque mezzo minuto
+        # contro i tredici di una corsa intera.
+        timeout-minutes: 6
         env:
           SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
-        run: python3 strumenti/nuvola/diagnosi.py
+        # `--fonti` e' qui e non in un passo a parte perche' un feed morto si
+        # vede allo stesso posto dove si vedrebbe un permesso mancante: chi
+        # apre questo job la mattina guarda una lista sola.
+        run: python3 strumenti/nuvola/diagnosi.py --fonti
 
       - name: Stato precedente della rassegna
         if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'

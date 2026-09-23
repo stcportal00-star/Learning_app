@@ -6,7 +6,14 @@
 |---|---|---|
 | `001_schema_percorso.sql` | Schema base: 14 tabelle, event log con HLC, RLS | **già applicata** sul progetto `hgvzjeituvvwtskbxzzl` |
 | `002_piano_modello.sql` | Modello del piano + funzione `installa_piano` | **da applicare** |
+| `003_fonti_rss.sql` | Le prime fonti RSS della conduttura | **già applicata** |
 | `seed_percorso.sql` (cartella contenuti) | 381 item di studio | da applicare dopo la registrazione utente |
+
+Le modifiche di schema della sessione della nuvola (utente fisso, policy
+`solo_utente_fisso`, bucket `biblioteca`, colonne nuove di `articoli` e
+`biblioteca`) sono state applicate direttamente e non hanno un file qui: si
+leggono nella cronologia delle migrazioni di Supabase. È un debito, ed è
+scritto in `DA-FARE.md`.
 
 ## Perché il piano è un modello e non righe dirette
 

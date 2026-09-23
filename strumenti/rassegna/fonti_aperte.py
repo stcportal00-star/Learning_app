@@ -205,7 +205,10 @@ def voce(titolo, fonte, url, **extra):
     base = {
         "chiave": chiave_di(doi, titolo),
         "titolo": " ".join(str(titolo).split()),
-        "autori": [a for a in extra.get("autori", []) if a][:12],
+        # `or []` e non un valore di riposo: `get("autori", [])` restituisce
+        # None quando la chiave c'e' con valore nullo, che e' esattamente cio'
+        # che arriva da un JSON in cui il campo esiste ed e' vuoto.
+        "autori": [a for a in (extra.get("autori") or []) if a][:12],
         "data": extra.get("data"),
         "doi": doi,
         "tipo": extra.get("tipo", "articolo"),
@@ -214,7 +217,7 @@ def voce(titolo, fonte, url, **extra):
         "url_pdf": extra.get("url_pdf"),
         "licenza": extra.get("licenza"),
         "abstract": " ".join(str(extra.get("abstract") or "").split())[:4000],
-        "concetti": [c for c in extra.get("concetti", []) if c][:24],
+        "concetti": [c for c in (extra.get("concetti") or []) if c][:24],
         "editore": extra.get("editore"),
     }
     return base

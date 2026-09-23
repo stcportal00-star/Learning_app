@@ -364,7 +364,7 @@ prova_vero(
 # `prova_conduttura.py` sta in fondo perché è la più lenta delle tre e perché
 # non ha senso farla partire se le funzioni pure sono già rosse: alza un server
 # locale e ci fa passare l'intera pubblica.py.
-for modulo in ("cliente.py", "estrattore.py", "prova_conduttura.py"):
+for modulo in ("cliente.py", "estrattore.py", "feed.py", "prova_conduttura.py"):
     percorso = os.path.join(QUI, modulo)
     if not os.path.exists(percorso):
         guasti.append("manca %s" % modulo)
