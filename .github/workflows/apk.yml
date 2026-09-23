@@ -259,12 +259,30 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           IMPRONTA: ${{ needs.build.outputs.impronta }}
+          RAMO: ${{ github.ref_name }}
+          # Non "main" scritto a mano: se un giorno il ramo predefinito cambia
+          # nome, una costante qui dentro comincerebbe a marcare «Latest» le
+          # build di un ramo qualunque, e nessuno se ne accorgerebbe.
+          PREDEFINITO: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           tag="apk-${GITHUB_RUN_NUMBER}"
           apk="percorso-${GITHUB_RUN_NUMBER}.apk"
           mv percorso.apk "$apk"
-          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}. Installa l'APK sopra la versione precedente: i dati restano."
+          note="Commit ${GITHUB_SHA::7}. Test di fumo superato su emulatore Android 14. Firma SHA-256: ${IMPRONTA}."
+
+          # «Latest» è cio' che il telefono scarica aprendo /releases/latest.
+          # Il workflow gira su QUALUNQUE ramo di proposito — le sessioni cloud
+          # pubblicano su rami nuovi — quindi senza questa distinzione una
+          # build sperimentale diventa la versione che l'utente installa.
+          if [ "$RAMO" = "${PREDEFINITO:-main}" ]; then
+            visibilita=(--latest)
+          else
+            visibilita=(--prerelease)
+            note="$note
+
+          ATTENZIONE: build del ramo \`$RAMO\`, non di \`${PREDEFINITO:-main}\`. Marcata come preliminare: non è la versione che il telefono scarica da «Latest»."
+          fi
 
           pubblica() {
             # Una corsa precedente può aver creato la release e non i suoi
@@ -273,10 +291,16 @@ jobs:
             if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
               gh release upload "$tag" "$apk" fumo/*.png \
                 --repo "$GITHUB_REPOSITORY" --clobber
+              # Anche qui, e non solo alla creazione: una riesecuzione
+              # ricompila con lo stesso numero di corsa, e senza questa riga
+              # una release marcata «Latest» da un ramo resterebbe tale per
+              # sempre, con note che parlano di un altro commit.
+              gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+                --notes "$note" "${visibilita[@]}"
               return
             fi
             gh release create "$tag" "$apk" fumo/*.png \
-              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" "${visibilita[@]}" \
               --title "Percorso — build ${GITHUB_RUN_NUMBER}" --notes "$note"
           }
 
