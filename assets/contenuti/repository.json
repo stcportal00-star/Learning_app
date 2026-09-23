@@ -1,0 +1,122 @@
+[
+ {
+  "codice": "HUB-01",
+  "nome": "Directory of Open Access Books (DOAB)",
+  "url": "https://www.doabooks.org/",
+  "descrizione": "Oltre 90.000 libri accademici ad accesso aperto, con licenza verificata."
+ },
+ {
+  "codice": "HUB-02",
+  "nome": "OAPEN Library",
+  "url": "https://library.oapen.org/",
+  "descrizione": "Monografie accademiche ad accesso aperto, molte su salute pubblica e sviluppo."
+ },
+ {
+  "codice": "HUB-03",
+  "nome": "OpenStax",
+  "url": "https://openstax.org/subjects",
+  "descrizione": "Manuali universitari CC BY: statistica, informatica, economia."
+ },
+ {
+  "codice": "HUB-04",
+  "nome": "LibreTexts",
+  "url": "https://libretexts.org/",
+  "descrizione": "Testi universitari aperti, forte sezione statistica e informatica."
+ },
+ {
+  "codice": "HUB-05",
+  "nome": "Open Textbook Library",
+  "url": "https://open.umn.edu/opentextbooks",
+  "descrizione": "Manuali aperti recensiti da docenti."
+ },
+ {
+  "codice": "HUB-06",
+  "nome": "Project Gutenberg",
+  "url": "https://www.gutenberg.org/",
+  "descrizione": "Oltre 70.000 opere di pubblico dominio."
+ },
+ {
+  "codice": "HUB-07",
+  "nome": "Internet Archive — Open Texts",
+  "url": "https://archive.org/details/texts",
+  "descrizione": "Collezione di testi liberamente accessibili."
+ },
+ {
+  "codice": "HUB-08",
+  "nome": "HathiTrust — Public Domain",
+  "url": "https://www.hathitrust.org/",
+  "descrizione": "Digitalizzazioni di pubblico dominio."
+ },
+ {
+  "codice": "HUB-09",
+  "nome": "arXiv",
+  "url": "https://arxiv.org/",
+  "descrizione": "Preprint di informatica, statistica e matematica."
+ },
+ {
+  "codice": "HUB-10",
+  "nome": "PubMed Central",
+  "url": "https://www.ncbi.nlm.nih.gov/pmc/",
+  "descrizione": "Letteratura biomedica ad accesso aperto."
+ },
+ {
+  "codice": "HUB-11",
+  "nome": "Zenodo",
+  "url": "https://zenodo.org/",
+  "descrizione": "Archivio CERN: dati, software e pubblicazioni con DOI."
+ },
+ {
+  "codice": "HUB-12",
+  "nome": "World Bank Open Knowledge Repository",
+  "url": "https://openknowledge.worldbank.org/",
+  "descrizione": "Rapporti e libri CC BY su sviluppo e dati."
+ },
+ {
+  "codice": "HUB-13",
+  "nome": "WHO Publications / IRIS",
+  "url": "https://iris.who.int/",
+  "descrizione": "Repository istituzionale OMS, CC BY-NC-SA."
+ },
+ {
+  "codice": "HUB-14",
+  "nome": "ReliefWeb",
+  "url": "https://reliefweb.int/",
+  "descrizione": "Rapporti e valutazioni umanitarie."
+ },
+ {
+  "codice": "HUB-15",
+  "nome": "Humanitarian Data Exchange (HDX)",
+  "url": "https://data.humdata.org/",
+  "descrizione": "Dataset umanitari aperti, utili anche per esercizi."
+ },
+ {
+  "codice": "HUB-16",
+  "nome": "OpenAlex",
+  "url": "https://openalex.org/",
+  "descrizione": "Catalogo aperto di 250 milioni di lavori accademici, con API."
+ },
+ {
+  "codice": "HUB-17",
+  "nome": "Semantic Scholar",
+  "url": "https://www.semanticscholar.org/",
+  "descrizione": "Ricerca accademica con API aperta e TLDR automatici."
+ },
+ {
+  "codice": "HUB-18",
+  "nome": "Unpaywall",
+  "url": "https://unpaywall.org/",
+  "descrizione": "Trova la versione legale ad accesso aperto di un articolo a partire dal DOI."
+ },
+ {
+  "codice": "HUB-19",
+  "nome": "CORE",
+  "url": "https://core.ac.uk/",
+  "descrizione": "Aggregatore di repository ad accesso aperto."
+ },
+ {
+  "codice": "HUB-20",
+  "nome": "MediaLibraryOnLine (MLOL)",
+  "url": "https://www.medialibrary.it/",
+  "descrizione": "Prestito digitale delle biblioteche italiane. Richiede iscrizione a una biblioteca aderente, possibile una volta in Italia."
+ }
+]

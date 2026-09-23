@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "Percorso",
+    "slug": "percorso",
+    "version": "0.1.0",
+    "orientation": "default",
+    "scheme": "percorso",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "assets/contenuti/*"
+    ],
+    "android": {
+      "package": "org.alessiomirra.percorso",
+      "minSdkVersion": 26,
+      "targetSdkVersion": 35,
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_ADVERTISE",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_WIFI_STATE",
+        "android.permission.CHANGE_WIFI_STATE",
+        "android.permission.NEARBY_WIFI_DEVICES"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-document-picker",
+      "./plugins/firma-release",
+      "./plugins/senza-gms"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

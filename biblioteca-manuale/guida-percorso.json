@@ -1,0 +1,8 @@
+{
+  "titolo": "Percorso — guida rapida",
+  "autore": "Percorso",
+  "tema_slug": "gestione",
+  "trimestre": "T0",
+  "licenza": "uso personale",
+  "nota": "Le poche cose che non si ricordano, e che servono proprio quando non c'è rete. Si rigenera con strumenti/nuvola/guida_pdf.py."
+}

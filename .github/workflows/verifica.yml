@@ -1,0 +1,57 @@
+# Verifica a ogni push: typecheck, i test di logica, il catalogo della
+# biblioteca e la garanzia sulla chiave di firma.
+# Veloce ed economico: gira sempre, prima di qualunque build.
+name: verifica
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verifica:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verifica
+      # Il catalogo e la copia che l'app legge devono dire la stessa cosa, e
+      # lo scaricatore deve continuare a rifiutare ciò che non è un PDF.
+      - run: python3 strumenti/verifica_biblioteca.py
+
+      # L'unica prova che tocca la rete, e sta fuori da `npm run verifica` per
+      # questo: quella deve restare eseguibile in aereo.
+      #
+      # Serve perché tutto il resto gira contro un finto PostgREST scritto da
+      # noi, e un finto server risponde come CREDIAMO che risponda quello vero.
+      # Un `Content-Profile` dimenticato, un `on_conflict` con il nome di
+      # colonna storto, un payload mandato come stringa: il nostro doppio li
+      # accetta volentieri, Supabase no — di notte, senza nessuno che guardi.
+      #
+      # Fa il giro intero col codice vero dell'app: scrive una nota, la manda
+      # su, cancella ogni traccia locale, risincronizza, e la nota deve
+      # tornare — evento riscaricato, deduplicato, proiettato nella tabella.
+      # È la sequenza esatta che fa comparire sul telefono la rassegna
+      # raccolta stanotte. Lascia l'archivio come l'ha trovato.
+      - name: Il giro vero contro Supabase
+        env:
+          SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
+        timeout-minutes: 5
+        run: node test/rete/giro-vero.mjs
+
+  # La chiave di firma non deve cambiare MAI: se cambiasse, gli aggiornamenti
+  # non si installerebbero e l'unico rimedio cancellerebbe i dati. Questo test
+  # esegue il passo reale di apk.yml in tutti gli scenari di transizione.
+  firma:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash .github/test-firma.sh

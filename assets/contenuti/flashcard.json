@@ -1,0 +1,1594 @@
+[
+ {
+  "id": "GDPR-01",
+  "tema": "gdpr",
+  "domanda": "Come definisce il GDPR il «dato personale»?",
+  "risposta": "Qualsiasi informazione riguardante una persona fisica identificata o identificabile, direttamente o indirettamente, in particolare mediante riferimento a un identificativo (nome, numero, dati di ubicazione, identificativo online) o a elementi caratteristici della sua identità fisica, fisiologica, genetica, psichica, economica, culturale o sociale.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 4, punto 1"
+ },
+ {
+  "id": "GDPR-02",
+  "tema": "gdpr",
+  "domanda": "Che cos'è la pseudonimizzazione secondo il GDPR e perché non equivale all'anonimizzazione?",
+  "risposta": "È il trattamento dei dati in modo che non possano più essere attribuiti a un interessato senza informazioni aggiuntive, conservate separatamente e protette. Resta un dato personale a tutti gli effetti e continua a ricadere sotto il GDPR; l'anonimizzazione irreversibile invece esce dall'ambito del Regolamento.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 4, punto 5; Considerando 26"
+ },
+ {
+  "id": "GDPR-03",
+  "tema": "gdpr",
+  "domanda": "Quali sono i sei principi del trattamento previsti dall'art. 5, paragrafo 1?",
+  "risposta": "Liceità, correttezza e trasparenza; limitazione della finalità; minimizzazione dei dati; esattezza; limitazione della conservazione; integrità e riservatezza.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 5, par. 1, lett. a-f"
+ },
+ {
+  "id": "GDPR-04",
+  "tema": "gdpr",
+  "domanda": "Che cosa aggiunge l'art. 5, paragrafo 2 ai sei principi?",
+  "risposta": "Il principio di responsabilizzazione (accountability): il titolare non deve solo rispettare i principi, ma essere in grado di dimostrarne il rispetto.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 5, par. 2"
+ },
+ {
+  "id": "GDPR-05",
+  "tema": "gdpr",
+  "domanda": "Quali sono le sei basi giuridiche del trattamento?",
+  "risposta": "Consenso; esecuzione di un contratto; obbligo legale; interesse vitale; compito di interesse pubblico o esercizio di pubblici poteri; legittimo interesse del titolare o di terzi.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 6, par. 1, lett. a-f"
+ },
+ {
+  "id": "GDPR-06",
+  "tema": "gdpr",
+  "domanda": "I dati sanitari rientrano in quale categoria e qual è la regola generale?",
+  "risposta": "Sono categorie particolari di dati. La regola generale è il divieto di trattamento, salvo che ricorra una delle eccezioni tassative del paragrafo 2. Serve quindi sia una base dell'art. 6 sia un'eccezione dell'art. 9.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 9, par. 1 e 2"
+ },
+ {
+  "id": "GDPR-07",
+  "tema": "gdpr",
+  "domanda": "Quali eccezioni dell'art. 9, par. 2 sono più rilevanti per un'organizzazione medico-umanitaria?",
+  "risposta": "Consenso esplicito (lett. a); interesse vitale quando l'interessato è incapace di prestare consenso (lett. c); finalità di medicina preventiva, diagnosi e assistenza sanitaria (lett. h); interesse pubblico nel settore della sanità pubblica (lett. i); ricerca scientifica e statistica (lett. j).",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 9, par. 2, lett. a, c, h, i, j"
+ },
+ {
+  "id": "GDPR-08",
+  "tema": "gdpr",
+  "domanda": "Entro quanto tempo va notificata una violazione dei dati personali all'autorità di controllo?",
+  "risposta": "Senza ingiustificato ritardo e, ove possibile, entro 72 ore dal momento in cui il titolare ne è venuto a conoscenza. Se la notifica supera le 72 ore deve essere corredata dei motivi del ritardo. Non è dovuta se è improbabile che la violazione presenti un rischio per i diritti e le libertà.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 33, par. 1"
+ },
+ {
+  "id": "GDPR-09",
+  "tema": "gdpr",
+  "domanda": "Quando va comunicata la violazione anche agli interessati?",
+  "risposta": "Quando è probabile che la violazione presenti un rischio ELEVATO per i diritti e le libertà delle persone fisiche; la comunicazione va fatta senza ingiustificato ritardo e con linguaggio semplice e chiaro.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 34, par. 1 e 2"
+ },
+ {
+  "id": "GDPR-10",
+  "tema": "gdpr",
+  "domanda": "In quali tre casi la valutazione d'impatto (DPIA) è obbligatoria secondo l'art. 35, par. 3?",
+  "risposta": "Valutazione sistematica e globale di aspetti personali basata su trattamento automatizzato, compresa la profilazione, con effetti giuridici o analogamente significativi; trattamento su larga scala di categorie particolari di dati o di dati relativi a condanne e reati; sorveglianza sistematica su larga scala di zone accessibili al pubblico.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 35, par. 3, lett. a-c"
+ },
+ {
+  "id": "GDPR-11",
+  "tema": "gdpr",
+  "domanda": "Che cosa impone il principio di protezione dei dati fin dalla progettazione e per impostazione predefinita?",
+  "risposta": "Il titolare deve attuare misure tecniche e organizzative adeguate — come la pseudonimizzazione — sia al momento di determinare i mezzi del trattamento sia durante il trattamento stesso, e garantire per impostazione predefinita che siano trattati solo i dati necessari per ciascuna finalità.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 25, par. 1 e 2"
+ },
+ {
+  "id": "GDPR-12",
+  "tema": "gdpr",
+  "domanda": "Che cos'è il registro delle attività di trattamento e chi deve tenerlo?",
+  "risposta": "Un registro scritto, anche elettronico, delle attività di trattamento sotto la responsabilità del titolare. Obbligatorio per organizzazioni con almeno 250 dipendenti e, a prescindere dalla dimensione, quando il trattamento può presentare un rischio per i diritti, non è occasionale o riguarda categorie particolari di dati.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 30, par. 1 e 5"
+ },
+ {
+  "id": "GDPR-13",
+  "tema": "gdpr",
+  "domanda": "Quali misure di sicurezza cita espressamente l'art. 32?",
+  "risposta": "Pseudonimizzazione e cifratura; capacità di assicurare riservatezza, integrità, disponibilità e resilienza dei sistemi; capacità di ripristinare tempestivamente disponibilità e accesso in caso di incidente; procedura per testare e valutare regolarmente l'efficacia delle misure.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 32, par. 1, lett. a-d"
+ },
+ {
+  "id": "GDPR-14",
+  "tema": "gdpr",
+  "domanda": "Quando è obbligatoria la designazione di un responsabile della protezione dei dati (DPO)?",
+  "risposta": "Quando il trattamento è effettuato da un'autorità o organismo pubblico; quando le attività principali consistono in trattamenti che richiedono monitoraggio regolare e sistematico su larga scala; quando consistono nel trattamento su larga scala di categorie particolari di dati o di dati giudiziari.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 37, par. 1, lett. a-c"
+ },
+ {
+  "id": "GDPR-15",
+  "tema": "gdpr",
+  "domanda": "Quali sono i due livelli di sanzione amministrativa previsti dal GDPR?",
+  "risposta": "Fino a 10 milioni di euro o al 2% del fatturato mondiale annuo per violazioni di obblighi come registro, sicurezza e DPIA; fino a 20 milioni o al 4% per violazioni dei principi, delle basi giuridiche, dei diritti degli interessati e delle regole sui trasferimenti. Si applica l'importo maggiore tra i due.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 83, par. 4 e 5"
+ },
+ {
+  "id": "GDPR-16",
+  "tema": "gdpr",
+  "domanda": "Quali diritti spettano all'interessato secondo il Capo III?",
+  "risposta": "Accesso, rettifica, cancellazione, limitazione del trattamento, notifica ai destinatari, portabilità, opposizione e diritto di non essere sottoposto a decisioni basate unicamente su trattamento automatizzato.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Artt. 15-22"
+ },
+ {
+  "id": "GDPR-17",
+  "tema": "gdpr",
+  "domanda": "Entro quale termine il titolare deve rispondere a una richiesta di esercizio dei diritti?",
+  "risposta": "Senza ingiustificato ritardo e comunque entro un mese dal ricevimento, prorogabile di ulteriori due mesi in caso di complessità o numero elevato di richieste, informando l'interessato entro il primo mese.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 12, par. 3"
+ },
+ {
+  "id": "GDPR-18",
+  "tema": "gdpr",
+  "domanda": "Che cosa stabilisce l'art. 22 sulle decisioni automatizzate?",
+  "risposta": "L'interessato ha il diritto di non essere sottoposto a una decisione basata unicamente su trattamento automatizzato, compresa la profilazione, che produca effetti giuridici o incida in modo analogamente significativo. Eccezioni: necessità contrattuale, autorizzazione normativa, consenso esplicito — con garanzie tra cui l'intervento umano.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 22, par. 1-3"
+ },
+ {
+  "id": "GDPR-19",
+  "tema": "gdpr",
+  "domanda": "Su quale base si può trasferire un dato personale fuori dallo Spazio economico europeo?",
+  "risposta": "Decisione di adeguatezza della Commissione; in mancanza, garanzie adeguate quali clausole contrattuali tipo, norme vincolanti d'impresa o codici di condotta; in via residuale, le deroghe per situazioni specifiche.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Artt. 45, 46 e 49"
+ },
+ {
+  "id": "GDPR-20",
+  "tema": "gdpr",
+  "domanda": "Qual è la differenza tra titolare e responsabile del trattamento?",
+  "risposta": "Il titolare determina finalità e mezzi del trattamento; il responsabile tratta i dati per conto del titolare. Il rapporto va disciplinato da un contratto che ne fissa oggetto, durata, natura, finalità, tipo di dati e obblighi.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 4 punti 7 e 8; Art. 28, par. 3"
+ },
+ {
+  "id": "GDPR-21",
+  "tema": "gdpr",
+  "domanda": "Quali condizioni rendono valido il consenso?",
+  "risposta": "Deve essere libero, specifico, informato e inequivocabile, manifestato con dichiarazione o azione positiva inequivocabile; il titolare deve poterlo dimostrare e l'interessato deve poterlo revocare con la stessa facilità con cui è stato prestato.",
+  "fonte": "Regolamento (UE) 2016/679",
+  "riferimento": "Art. 4 punto 11; Art. 7"
+ },
+ {
+  "id": "GDPR-22",
+  "tema": "gdpr",
+  "domanda": "In che senso il consenso è una base giuridica fragile in contesto umanitario?",
+  "risposta": "Perché deve essere libero: in una situazione di dipendenza dall'assistenza, il rifiuto può essere percepito come pregiudizievole per l'accesso ai servizi, e lo squilibrio di potere compromette la libertà della scelta. Le organizzazioni umanitarie ricorrono più spesso a interesse vitale, interesse pubblico o compiti istituzionali.",
+  "fonte": "ICRC, Handbook on Data Protection in Humanitarian Action",
+  "riferimento": "Cap. 3 — Legal bases for personal data processing"
+ },
+ {
+  "id": "GDPR-23",
+  "tema": "gdpr",
+  "domanda": "Che cos'è il principio di «do no harm» applicato ai dati umanitari?",
+  "risposta": "L'obbligo di valutare se la raccolta, la conservazione o la condivisione di un dato possa esporre le persone assistite a rischi di danno — targeting, stigmatizzazione, persecuzione — e di astenersi dal trattamento quando il rischio supera il beneficio operativo.",
+  "fonte": "OCHA Centre for Humanitarian Data, Data Responsibility Guidelines",
+  "riferimento": "Principio: Do No Harm"
+ },
+ {
+  "id": "GDPR-24",
+  "tema": "gdpr",
+  "domanda": "Che differenza c'è tra dato personale, dato sensibile e dato demograficamente identificabile in ambito umanitario?",
+  "risposta": "Il dato personale identifica un individuo; la categoria particolare (sensibile) riguarda salute, origine etnica, opinioni, orientamento sessuale e simili; il dato demograficamente identificabile è un dato aggregato che, per granularità geografica o di gruppo, permette comunque di identificare una comunità e può metterla a rischio.",
+  "fonte": "OCHA Centre for Humanitarian Data",
+  "riferimento": "Guidance Note on Statistical Disclosure Control"
+ },
+ {
+  "id": "GDPR-25",
+  "tema": "gdpr",
+  "domanda": "Qual è l'autorità di controllo italiana e come si chiama la normativa nazionale di raccordo?",
+  "risposta": "Il Garante per la protezione dei dati personali; la normativa nazionale di adeguamento è il d.lgs. 196/2003 come modificato dal d.lgs. 101/2018, noto come Codice in materia di protezione dei dati personali.",
+  "fonte": "d.lgs. 101/2018",
+  "riferimento": "Adeguamento al Regolamento (UE) 2016/679"
+ },
+ {
+  "id": "AIA-01",
+  "tema": "ai_act",
+  "domanda": "Su quale logica è costruito l'AI Act europeo?",
+  "risposta": "Su un approccio basato sul rischio, con quattro livelli: rischio inaccettabile (pratiche vietate), alto rischio (obblighi stringenti), rischio di trasparenza (obblighi informativi) e rischio minimo (nessun obbligo specifico).",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Struttura generale; Considerando 26"
+ },
+ {
+  "id": "AIA-02",
+  "tema": "ai_act",
+  "domanda": "Cita almeno quattro pratiche di IA vietate dall'art. 5.",
+  "risposta": "Tecniche subliminali o manipolative che distorcono il comportamento causando danno; sfruttamento di vulnerabilità legate a età, disabilità o situazione sociale; punteggio sociale da parte di autorità pubbliche o private; raccolta non mirata di immagini facciali da internet o telecamere per costruire banche dati di riconoscimento; riconoscimento delle emozioni sul lavoro e nell'istruzione; identificazione biometrica remota in tempo reale in spazi pubblici a fini di contrasto, salvo eccezioni tassative.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 5"
+ },
+ {
+  "id": "AIA-03",
+  "tema": "ai_act",
+  "domanda": "Quali settori dell'Allegato III sono più rilevanti per un'organizzazione umanitaria?",
+  "risposta": "Occupazione e gestione dei lavoratori (selezione del personale); accesso a servizi essenziali pubblici e privati, inclusa la valutazione dell'ammissibilità alle prestazioni e la classificazione delle chiamate di emergenza; migrazione, asilo e controllo delle frontiere, inclusa la valutazione dei rischi e l'esame delle domande di asilo.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Allegato III, punti 4, 5 e 7"
+ },
+ {
+  "id": "AIA-04",
+  "tema": "ai_act",
+  "domanda": "Quali obblighi principali gravano su un sistema di IA ad alto rischio?",
+  "risposta": "Sistema di gestione del rischio; governance dei dati di addestramento; documentazione tecnica; registrazione automatica degli eventi (log); trasparenza e istruzioni per l'uso; sorveglianza umana effettiva; livelli adeguati di accuratezza, robustezza e cibersicurezza.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Artt. 9-15"
+ },
+ {
+  "id": "AIA-05",
+  "tema": "ai_act",
+  "domanda": "Che cosa richiede l'art. 14 in materia di sorveglianza umana?",
+  "risposta": "Che il sistema sia progettato in modo da poter essere effettivamente supervisionato da persone fisiche, le quali devono poter comprenderne capacità e limiti, riconoscere il rischio di automation bias, interpretare correttamente l'output e decidere di non usarlo o di interromperne il funzionamento.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 14"
+ },
+ {
+  "id": "AIA-06",
+  "tema": "ai_act",
+  "domanda": "Che cos'è un modello GPAI con rischio sistemico e qual è la soglia presuntiva?",
+  "risposta": "Un modello per finalità generali con capacità di impatto elevato; si presume tale quando la potenza di calcolo cumulativa impiegata per l'addestramento supera 10^25 operazioni in virgola mobile.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 51, par. 2"
+ },
+ {
+  "id": "AIA-07",
+  "tema": "ai_act",
+  "domanda": "Quali obblighi di trasparenza prevede l'art. 50?",
+  "risposta": "Informare le persone quando interagiscono con un sistema di IA; marcare in formato leggibile da macchina i contenuti sintetici generati; dichiarare l'uso di sistemi di riconoscimento delle emozioni o categorizzazione biometrica; segnalare i deep fake e i testi pubblicati su questioni di interesse pubblico generati o manipolati da IA.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 50"
+ },
+ {
+  "id": "AIA-08",
+  "tema": "ai_act",
+  "domanda": "Che differenza c'è tra fornitore e deployer ai sensi dell'AI Act?",
+  "risposta": "Il fornitore sviluppa o fa sviluppare un sistema di IA e lo immette sul mercato con il proprio nome; il deployer lo utilizza sotto la propria autorità nell'ambito di un'attività professionale. Un'organizzazione che integra e personalizza sostanzialmente un sistema può assumere il ruolo di fornitore.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 3 punti 3 e 4; Art. 25"
+ },
+ {
+  "id": "AIA-09",
+  "tema": "ai_act",
+  "domanda": "Che cos'è la valutazione d'impatto sui diritti fondamentali e chi deve svolgerla?",
+  "risposta": "Una valutazione che i deployer che siano organismi di diritto pubblico, o soggetti privati che forniscono servizi pubblici, devono condurre prima di usare determinati sistemi ad alto rischio, descrivendo processi, categorie di persone interessate, rischi specifici di danno e misure di sorveglianza umana.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 27"
+ },
+ {
+  "id": "AIA-10",
+  "tema": "ai_act",
+  "domanda": "Come si articola nel tempo l'applicazione dell'AI Act?",
+  "risposta": "Entrato in vigore il 1° agosto 2024, con applicazione scaglionata: prima i divieti e l'alfabetizzazione in materia di IA, poi gli obblighi sui modelli per finalità generali, poi i sistemi ad alto rischio dell'Allegato III e infine quelli integrati in prodotti regolamentati. ATTENZIONE: il calendario è stato oggetto di proposte di modifica; verifica sempre lo stato aggiornato prima di citarlo in un documento ufficiale.",
+  "fonte": "Regolamento (UE) 2024/1689",
+  "riferimento": "Art. 113 — da verificare per eventuali modifiche successive"
+ },
+ {
+  "id": "AIA-11",
+  "tema": "ai_act",
+  "domanda": "Qual è la norma ISO di riferimento per un sistema di gestione dell'intelligenza artificiale?",
+  "risposta": "La ISO/IEC 42001, che definisce requisiti per stabilire, attuare, mantenere e migliorare un sistema di gestione dell'IA, con logica Plan-Do-Check-Act analoga alla ISO/IEC 27001.",
+  "fonte": "ISO/IEC 42001",
+  "riferimento": "Artificial intelligence — Management system"
+ },
+ {
+  "id": "AIA-12",
+  "tema": "ai_act",
+  "domanda": "Quali sono le quattro funzioni del NIST AI Risk Management Framework?",
+  "risposta": "Govern (cultura e responsabilità), Map (contestualizzare e identificare i rischi), Measure (analizzare e monitorare), Manage (dare priorità e agire sui rischi). Govern è trasversale alle altre tre.",
+  "fonte": "NIST AI RMF 1.0",
+  "riferimento": "Core functions"
+ },
+ {
+  "id": "MOD-01",
+  "tema": "modellazione",
+  "domanda": "Che cos'è la «grana» (grain) di una tabella dei fatti e perché si dichiara per prima?",
+  "risposta": "È la definizione esatta di che cosa rappresenta una singola riga della tabella dei fatti. Si dichiara prima di scegliere dimensioni e misure perché ogni decisione successiva dipende da essa; una grana ambigua produce doppi conteggi.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 1 — Four-step dimensional design process"
+ },
+ {
+  "id": "MOD-02",
+  "tema": "modellazione",
+  "domanda": "Quali sono i quattro passi del processo di progettazione dimensionale?",
+  "risposta": "Selezionare il processo aziendale; dichiarare la grana; identificare le dimensioni; identificare i fatti.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 1"
+ },
+ {
+  "id": "MOD-03",
+  "tema": "modellazione",
+  "domanda": "Quali sono i tre tipi fondamentali di tabella dei fatti?",
+  "risposta": "Transazionale (una riga per evento), snapshot periodico (una riga per periodo e entità), snapshot cumulativo (una riga per processo con più tappe, aggiornata nel tempo).",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 1 — Fact table types"
+ },
+ {
+  "id": "MOD-04",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una tabella dei fatti «factless» e a cosa serve?",
+  "risposta": "Una tabella dei fatti senza misure numeriche, che registra il verificarsi di un evento o una condizione di copertura. Serve a contare eventi e, soprattutto, a rispondere a domande su ciò che NON è accaduto.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 3 — Factless fact tables"
+ },
+ {
+  "id": "MOD-05",
+  "tema": "modellazione",
+  "domanda": "Che differenza c'è tra misura additiva, semi-additiva e non additiva?",
+  "risposta": "L'additiva si può sommare su tutte le dimensioni; la semi-additiva si può sommare su alcune ma non sul tempo (per esempio un saldo o una giacenza); la non additiva non si può sommare affatto (per esempio una percentuale o un rapporto), e va ricalcolata dai suoi componenti.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 1 — Additivity"
+ },
+ {
+  "id": "MOD-06",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una dimensione conforme e perché è il cardine dell'architettura a bus?",
+  "risposta": "Una dimensione condivisa e identica tra più tabelle dei fatti e più processi. Permette di confrontare e integrare (drill across) misure provenienti da processi diversi; senza conformità ogni data mart resta un silo.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 4 — Conformed dimensions, enterprise bus matrix"
+ },
+ {
+  "id": "MOD-07",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una dimensione degenerata?",
+  "risposta": "Un attributo dimensionale, tipicamente un identificativo di transazione come il numero d'ordine o l'ID della visita, che resta nella tabella dei fatti senza una tabella dimensionale associata perché non ha altri attributi.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 3 — Degenerate dimensions"
+ },
+ {
+  "id": "MOD-08",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una junk dimension?",
+  "risposta": "Una dimensione che raggruppa flag e indicatori a bassa cardinalità, altrimenti sparsi nella tabella dei fatti, in un'unica tabella con le combinazioni effettivamente osservate.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 6 — Junk dimensions"
+ },
+ {
+  "id": "MOD-09",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una dimensione con ruoli multipli (role-playing)?",
+  "risposta": "Una singola dimensione fisica referenziata più volte dalla stessa tabella dei fatti con significati diversi — per esempio la dimensione data usata come data di ammissione, di dimissione e di follow-up — esposta tramite viste distinte con nomi di colonna propri.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 6 — Role-playing dimensions"
+ },
+ {
+  "id": "MOD-10",
+  "tema": "modellazione",
+  "domanda": "Che cosa fa una SCD di Tipo 1?",
+  "risposta": "Sovrascrive il valore precedente. Non conserva storia: le analisi storiche vengono riscritte come se il nuovo valore fosse sempre stato vero.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 5 — SCD Type 1"
+ },
+ {
+  "id": "MOD-11",
+  "tema": "modellazione",
+  "domanda": "Che cosa fa una SCD di Tipo 2 e quali colonne di servizio richiede?",
+  "risposta": "Aggiunge una nuova riga con una nuova chiave surrogata a ogni cambiamento, conservando la storia. Richiede tipicamente data di inizio validità, data di fine validità e un indicatore di record corrente.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 5 — SCD Type 2"
+ },
+ {
+  "id": "MOD-12",
+  "tema": "modellazione",
+  "domanda": "Che cosa fa una SCD di Tipo 3 e quando si usa?",
+  "risposta": "Aggiunge una colonna con il valore precedente accanto a quello corrente. Si usa per cambiamenti rari e prevedibili — per esempio una riorganizzazione territoriale — in cui serve poter analizzare i dati sia secondo la vecchia sia secondo la nuova struttura.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 5 — SCD Type 3"
+ },
+ {
+  "id": "MOD-13",
+  "tema": "modellazione",
+  "domanda": "Perché si usano chiavi surrogate invece delle chiavi naturali del sistema sorgente?",
+  "risposta": "Per isolare il warehouse dai cambiamenti e dai riusi delle chiavi sorgente, per gestire la storia con SCD di Tipo 2, per integrare più sistemi sorgente, per gestire i membri sconosciuti o non applicabili e per ridurre lo spazio degli indici.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 3 — Surrogate keys"
+ },
+ {
+  "id": "MOD-14",
+  "tema": "modellazione",
+  "domanda": "Che differenza c'è tra schema a stella e snowflake, e perché Kimball preferisce la stella?",
+  "risposta": "Nella stella le dimensioni sono denormalizzate in un'unica tabella; nello snowflake sono normalizzate su più livelli. Kimball preferisce la stella per semplicità di comprensione, minor numero di join e prestazioni migliori, a fronte di una ridondanza di spazio trascurabile.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 1 e Cap. 20"
+ },
+ {
+  "id": "MOD-15",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una bridge table e quale problema risolve?",
+  "risposta": "Risolve le relazioni molti-a-molti tra fatto e dimensione — per esempio più diagnosi per una singola visita — introducendo una tabella ponte con un gruppo e, se necessario, un fattore di ponderazione per evitare il doppio conteggio.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 14 — Multivalued dimensions and bridge tables"
+ },
+ {
+  "id": "MOD-16",
+  "tema": "modellazione",
+  "domanda": "Che cos'è la enterprise bus matrix?",
+  "risposta": "Una matrice che incrocia i processi aziendali (righe) con le dimensioni conformi (colonne), usata come strumento di pianificazione per definire l'architettura del warehouse e l'ordine di costruzione incrementale.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 4 — Enterprise data warehouse bus matrix"
+ },
+ {
+  "id": "MOD-17",
+  "tema": "modellazione",
+  "domanda": "Perché una dimensione data si costruisce come tabella fisica anziché usare funzioni di data?",
+  "risposta": "Perché consente di memorizzare attributi non derivabili per calcolo — festività, stagioni epidemiche, anni fiscali, settimane di reporting del donatore — e di avere etichette coerenti e ordinabili in tutti gli strumenti di analisi.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 3 — Date dimension"
+ },
+ {
+  "id": "MOD-18",
+  "tema": "modellazione",
+  "domanda": "Che cos'è una mini-dimension e quando si usa?",
+  "risposta": "Una dimensione separata che accoglie gli attributi a variazione rapida di una dimensione molto grande, evitando l'esplosione di righe che si avrebbe applicando una SCD di Tipo 2 all'intera dimensione.",
+  "fonte": "Kimball & Ross, The Data Warehouse Toolkit, 3ª ed.",
+  "riferimento": "Cap. 5 — Rapidly changing monster dimensions"
+ },
+ {
+  "id": "MOD-19",
+  "tema": "modellazione",
+  "domanda": "Che cos'è un data contract e a che cosa serve in un'architettura moderna?",
+  "risposta": "Un accordo esplicito e versionato tra produttore e consumatore di dati, che fissa schema, semantica, qualità attesa, frequenza di aggiornamento e proprietà. Sposta la qualità a monte, trasformando rotture silenziose in violazioni rilevabili.",
+  "fonte": "Reis & Housley, Fundamentals of Data Engineering",
+  "riferimento": "Cap. 5 — Data generation and contracts"
+ },
+ {
+  "id": "MOD-20",
+  "tema": "modellazione",
+  "domanda": "Qual è la differenza tra ETL ed ELT e che cosa ha spostato l'equilibrio?",
+  "risposta": "Nell'ETL la trasformazione avviene prima del caricamento, su un motore esterno; nell'ELT i dati grezzi vengono caricati e trasformati dentro il warehouse. L'equilibrio si è spostato verso ELT con la disponibilità di motori colonnari scalabili a basso costo di calcolo.",
+  "fonte": "Reis & Housley, Fundamentals of Data Engineering",
+  "riferimento": "Cap. 8 — Queries, modeling and transformation"
+ },
+ {
+  "id": "MOD-21",
+  "tema": "modellazione",
+  "domanda": "Che cosa sono idempotenza e carico incrementale in una pipeline?",
+  "risposta": "Idempotenza è la proprietà per cui rieseguire la stessa operazione produce lo stesso stato finale, senza duplicare. Il carico incrementale processa solo i dati nuovi o modificati dall'ultima esecuzione; insieme rendono la pipeline sicura da rieseguire dopo un guasto.",
+  "fonte": "Reis & Housley, Fundamentals of Data Engineering",
+  "riferimento": "Cap. 5 e Cap. 8"
+ },
+ {
+  "id": "MOD-22",
+  "tema": "modellazione",
+  "domanda": "Che cosa distingue un data lake, un data warehouse e un lakehouse?",
+  "risposta": "Il lake conserva dati grezzi in formati aperti su storage a oggetti, con schema applicato in lettura; il warehouse conserva dati strutturati e modellati con schema applicato in scrittura; il lakehouse aggiunge allo storage aperto un livello transazionale con tabelle, versionamento e garanzie ACID.",
+  "fonte": "Reis & Housley, Fundamentals of Data Engineering",
+  "riferimento": "Cap. 3 — Data architecture"
+ },
+ {
+  "id": "MOD-23",
+  "tema": "modellazione",
+  "domanda": "Quali sono le sei dimensioni classiche della qualità dei dati?",
+  "risposta": "Completezza, accuratezza, coerenza, tempestività, validità e unicità.",
+  "fonte": "DAMA, DMBOK 2",
+  "riferimento": "Cap. 13 — Data Quality"
+ },
+ {
+  "id": "MOD-24",
+  "tema": "modellazione",
+  "domanda": "Che cos'è la data stewardship e in cosa differisce dalla data ownership?",
+  "risposta": "La stewardship è la responsabilità operativa di curare definizioni, qualità e uso corretto di un dominio di dati; la ownership è la responsabilità decisionale e di accountability sul dato. Lo steward esegue e presidia, l'owner decide e risponde.",
+  "fonte": "DAMA, DMBOK 2",
+  "riferimento": "Cap. 3 — Data Governance"
+ },
+ {
+  "id": "MOD-25",
+  "tema": "modellazione",
+  "domanda": "Che cos'è il lineage dei dati e a che cosa serve concretamente?",
+  "risposta": "La tracciabilità del percorso di un dato dalla sorgente al consumo, con le trasformazioni applicate. Serve per analisi d'impatto prima di una modifica, per diagnosi delle cause a valle di un errore e per dimostrare conformità in sede di audit.",
+  "fonte": "DAMA, DMBOK 2",
+  "riferimento": "Cap. 12 — Metadata Management"
+ },
+ {
+  "id": "KPI-01",
+  "tema": "kpi",
+  "domanda": "Come definisce Hubbard la «misurazione»?",
+  "risposta": "Una riduzione quantificata dell'incertezza basata su osservazione. Non serve la precisione assoluta: se un'osservazione riduce l'incertezza rispetto a prima, è una misurazione valida.",
+  "fonte": "Hubbard, How to Measure Anything, 3ª ed.",
+  "riferimento": "Cap. 3 — The illusion of intangibles"
+ },
+ {
+  "id": "KPI-02",
+  "tema": "kpi",
+  "domanda": "Che cos'è la «catena di chiarificazione» di Hubbard?",
+  "risposta": "Se conta, si nota; se si nota, si manifesta in qualche quantità osservabile; se si manifesta in una quantità, si può misurare. Serve a smontare l'obiezione «questo non è misurabile».",
+  "fonte": "Hubbard, How to Measure Anything, 3ª ed.",
+  "riferimento": "Cap. 3 — Clarification chain"
+ },
+ {
+  "id": "KPI-03",
+  "tema": "kpi",
+  "domanda": "Che cos'è la «regola del cinque»?",
+  "risposta": "Con un campione casuale di soli cinque elementi, c'è circa il 93,75% di probabilità che la mediana della popolazione cada tra il valore minimo e il massimo osservati. Mostra quanta incertezza si riduce con pochissimi dati.",
+  "fonte": "Hubbard, How to Measure Anything, 3ª ed.",
+  "riferimento": "Cap. 9 — Rule of five"
+ },
+ {
+  "id": "KPI-04",
+  "tema": "kpi",
+  "domanda": "Che cos'è il valore atteso dell'informazione e come cambia le priorità di misurazione?",
+  "risposta": "È il valore economico della riduzione di incertezza rispetto a una decisione. Ribalta le priorità: si misura ciò che ha alto valore informativo e alta incertezza, non ciò che è facile da misurare. Le variabili più misurate sono spesso quelle che contano meno.",
+  "fonte": "Hubbard, How to Measure Anything, 3ª ed.",
+  "riferimento": "Cap. 7 — Value of information"
+ },
+ {
+  "id": "KPI-05",
+  "tema": "kpi",
+  "domanda": "Che cos'è la calibrazione della stima e perché è addestrabile?",
+  "risposta": "È la capacità di esprimere intervalli di confidenza che contengono il valore reale con la frequenza dichiarata. Le persone non addestrate sono sistematicamente sovra-sicure; l'addestramento con feedback ripetuto porta la maggioranza a una calibrazione affidabile in poche ore.",
+  "fonte": "Hubbard, How to Measure Anything, 3ª ed.",
+  "riferimento": "Cap. 5 — Calibrated estimates"
+ },
+ {
+  "id": "KPI-06",
+  "tema": "kpi",
+  "domanda": "Qual è la differenza tra indicatore leading e lagging?",
+  "risposta": "Il lagging misura il risultato a valle e conferma ciò che è già accaduto; il leading misura un fattore a monte che anticipa il risultato e su cui si può ancora intervenire. Un cruscotto di soli lagging non permette di correggere la rotta.",
+  "fonte": "Kaplan & Norton, The Balanced Scorecard",
+  "riferimento": "Outcome measures and performance drivers"
+ },
+ {
+  "id": "KPI-07",
+  "tema": "kpi",
+  "domanda": "Quali sono le quattro prospettive della Balanced Scorecard?",
+  "risposta": "Finanziaria, cliente, processi interni, apprendimento e crescita. L'idea centrale è che le quattro siano legate da relazioni causali esplicite, non elencate in parallelo.",
+  "fonte": "Kaplan & Norton, The Balanced Scorecard",
+  "riferimento": "Cap. 1"
+ },
+ {
+  "id": "KPI-08",
+  "tema": "kpi",
+  "domanda": "Enuncia la legge di Goodhart e la sua rilevanza per i KPI.",
+  "risposta": "Quando una misura diventa un obiettivo, cessa di essere una buona misura. Ogni indicatore usato per valutare le persone genera incentivi a ottimizzare l'indicatore invece del risultato che intendeva rappresentare.",
+  "fonte": "Goodhart (1975); formulazione di Strathern (1997)",
+  "riferimento": "Improving ratings: audit in the British University system"
+ },
+ {
+  "id": "KPI-09",
+  "tema": "kpi",
+  "domanda": "Quali sono le quattro metriche DORA?",
+  "risposta": "Frequenza di rilascio, lead time per una modifica, tasso di fallimento delle modifiche, tempo di ripristino del servizio. Le prime due misurano la velocità, le altre due la stabilità — e i dati mostrano che non sono in trade-off.",
+  "fonte": "Forsgren, Humble & Kim, Accelerate",
+  "riferimento": "Cap. 2 — Measuring performance"
+ },
+ {
+  "id": "KPI-10",
+  "tema": "kpi",
+  "domanda": "Qual è la differenza tra SLI, SLO e SLA?",
+  "risposta": "L'SLI è l'indicatore misurato (per esempio la percentuale di richieste andate a buon fine); l'SLO è l'obiettivo interno su quell'indicatore; l'SLA è l'impegno contrattuale verso l'esterno, con conseguenze in caso di violazione. L'SLO dovrebbe sempre essere più stringente dell'SLA.",
+  "fonte": "Google SRE Book",
+  "riferimento": "Cap. 4 — Service level objectives"
+ },
+ {
+  "id": "KPI-11",
+  "tema": "kpi",
+  "domanda": "Che cos'è l'error budget e a che cosa serve?",
+  "risposta": "È la quota di inaffidabilità tollerata dall'SLO — il complemento a 100% dell'obiettivo. Trasforma il conflitto tra sviluppo e affidabilità in una regola oggettiva: finché il budget è capiente si può rilasciare, quando è esaurito la priorità passa alla stabilità.",
+  "fonte": "Google SRE Book",
+  "riferimento": "Cap. 3 — Embracing risk"
+ },
+ {
+  "id": "KPI-12",
+  "tema": "kpi",
+  "domanda": "Che cos'è un albero delle metriche?",
+  "risposta": "Una scomposizione gerarchica di una metrica di vertice in fattori moltiplicativi o additivi fino a variabili operative su cui qualcuno può agire. Rende esplicito il legame tra il KPI di direzione e il lavoro quotidiano.",
+  "fonte": "Prassi di analytics engineering; cfr. dbt Labs — Semantic layer",
+  "riferimento": "Metric trees / metric decomposition"
+ },
+ {
+  "id": "KPI-13",
+  "tema": "kpi",
+  "domanda": "Che cos'è un layer semantico e quale problema di governance risolve?",
+  "risposta": "È la definizione centralizzata e versionata delle metriche, disaccoppiata dagli strumenti di visualizzazione. Risolve la proliferazione di definizioni divergenti della stessa metrica in dashboard diverse.",
+  "fonte": "dbt Labs — documentazione ufficiale",
+  "riferimento": "Semantic layer / MetricFlow"
+ },
+ {
+  "id": "KPI-14",
+  "tema": "kpi",
+  "domanda": "Quali sono i limiti del criterio SMART per gli indicatori?",
+  "risposta": "Premia gli obiettivi facilmente quantificabili e a breve termine, penalizzando ciò che è rilevante ma difficile da misurare; non dice nulla sulla validità del costrutto, cioè se l'indicatore misuri davvero ciò che dichiara.",
+  "fonte": "Critica consolidata in letteratura MEL; cfr. ALNAP",
+  "riferimento": "Evaluation of humanitarian action guide"
+ },
+ {
+  "id": "KPI-15",
+  "tema": "kpi",
+  "domanda": "Che cos'è la validità di costrutto applicata a un indicatore?",
+  "risposta": "Il grado in cui l'indicatore misura effettivamente il concetto che intende rappresentare. Un indicatore può essere preciso, affidabile e tempestivo e nondimeno misurare la cosa sbagliata.",
+  "fonte": "Metodologia della ricerca sociale; cfr. OECD-DAC",
+  "riferimento": "Criteri di valutazione — rilevanza e validità"
+ },
+ {
+  "id": "KPI-16",
+  "tema": "kpi",
+  "domanda": "Quali sono i sei criteri di valutazione OECD-DAC?",
+  "risposta": "Rilevanza, coerenza, efficacia, efficienza, impatto e sostenibilità. La coerenza è stata aggiunta nella revisione del 2019.",
+  "fonte": "OECD-DAC",
+  "riferimento": "Evaluation criteria, revisione 2019"
+ },
+ {
+  "id": "KPI-17",
+  "tema": "kpi",
+  "domanda": "Che cos'è il Core Humanitarian Standard e quanti impegni prevede?",
+  "risposta": "Uno standard che definisce ciò che le comunità colpite possono attendersi dalle organizzazioni umanitarie, articolato in nove impegni con criteri di qualità associati, tra cui accesso a meccanismi di reclamo sicuri e accessibili.",
+  "fonte": "Core Humanitarian Standard on Quality and Accountability",
+  "riferimento": "I nove impegni"
+ },
+ {
+  "id": "KPI-18",
+  "tema": "kpi",
+  "domanda": "Che differenza c'è tra output, outcome e impatto in una teoria del cambiamento?",
+  "risposta": "L'output è il prodotto diretto dell'attività e sotto il controllo dell'organizzazione; l'outcome è il cambiamento a breve-medio termine nei beneficiari, influenzato ma non controllato; l'impatto è l'effetto di lungo periodo, a cui si può solo contribuire.",
+  "fonte": "OECD-DAC / quadro logico",
+  "riferimento": "Results chain"
+ },
+ {
+  "id": "KPI-19",
+  "tema": "kpi",
+  "domanda": "Perché un indicatore di processo non può sostituire un indicatore di risultato?",
+  "risposta": "Perché misura l'esecuzione dell'attività, non il cambiamento prodotto. Un programma può registrare il 100% delle attività pianificate e non produrre alcun effetto: senza un indicatore di risultato la differenza resta invisibile.",
+  "fonte": "ALNAP",
+  "riferimento": "Evaluation of humanitarian action guide"
+ },
+ {
+  "id": "KPI-20",
+  "tema": "kpi",
+  "domanda": "Che cos'è il costo per risultato e perché è un indicatore di efficienza fragile?",
+  "risposta": "È il rapporto tra costo totale e unità di risultato prodotta. È fragile perché dipende fortemente dal contesto operativo — accessibilità, sicurezza, scala — e confrontarlo tra programmi diversi senza normalizzazione produce conclusioni errate.",
+  "fonte": "OECD-DAC — criterio di efficienza",
+  "riferimento": "Cost-efficiency analysis"
+ },
+ {
+  "id": "NET-01",
+  "tema": "hardware",
+  "domanda": "Quali sono i sette livelli del modello OSI?",
+  "risposta": "Fisico, collegamento dati, rete, trasporto, sessione, presentazione, applicazione.",
+  "fonte": "ISO/IEC 7498-1",
+  "riferimento": "Modello di riferimento OSI"
+ },
+ {
+  "id": "NET-02",
+  "tema": "hardware",
+  "domanda": "Qual è la differenza operativa tra TCP e UDP?",
+  "risposta": "TCP è orientato alla connessione, garantisce consegna ordinata e affidabile con ritrasmissione e controllo di flusso; UDP è senza connessione, senza garanzie di consegna né di ordine, ma con latenza e overhead minori. Voce e video preferiscono UDP, i trasferimenti di dati TCP.",
+  "fonte": "RFC 793 (TCP) e RFC 768 (UDP)",
+  "riferimento": "Specifiche di protocollo"
+ },
+ {
+  "id": "NET-03",
+  "tema": "hardware",
+  "domanda": "Che differenza c'è tra latenza, larghezza di banda e throughput?",
+  "risposta": "La latenza è il tempo di attraversamento di un pacchetto; la larghezza di banda è la capacità teorica massima del collegamento; il throughput è il dato effettivamente trasferito nell'unità di tempo. Una banda ampia con latenza alta resta inadatta alle applicazioni interattive.",
+  "fonte": "Grigorik, High Performance Browser Networking",
+  "riferimento": "Cap. 1 — Primer on latency and bandwidth"
+ },
+ {
+  "id": "NET-04",
+  "tema": "hardware",
+  "domanda": "Che cos'è il bandwidth-delay product e perché conta su collegamenti satellitari?",
+  "risposta": "È il prodotto tra capacità del collegamento e tempo di andata e ritorno: rappresenta la quantità di dati «in volo». Su un collegamento a latenza alta occorrono finestre TCP ampie per saturare la banda; altrimenti il collegamento resta sottoutilizzato anche se nominalmente veloce.",
+  "fonte": "Grigorik, High Performance Browser Networking",
+  "riferimento": "Cap. 2 — Building blocks of TCP"
+ },
+ {
+  "id": "NET-05",
+  "tema": "hardware",
+  "domanda": "Quali sono gli ordini di grandezza della latenza di andata e ritorno per satellite geostazionario e per costellazione in orbita bassa?",
+  "risposta": "Un satellite geostazionario, a circa 35.786 km, comporta un tempo di andata e ritorno tipicamente intorno ai 500-600 millisecondi; le costellazioni in orbita terrestre bassa, a poche centinaia di chilometri, scendono a poche decine di millisecondi.",
+  "fonte": "Parametri orbitali standard; documentazione operatori VSAT",
+  "riferimento": "Verificare i valori reali del fornitore contrattualizzato"
+ },
+ {
+  "id": "NET-06",
+  "tema": "hardware",
+  "domanda": "Quali sono gli intervalli di indirizzi IPv4 privati?",
+  "risposta": "10.0.0.0/8, 172.16.0.0/12 e 192.168.0.0/16.",
+  "fonte": "RFC 1918",
+  "riferimento": "Address allocation for private internets"
+ },
+ {
+  "id": "NET-07",
+  "tema": "hardware",
+  "domanda": "Quanti host utilizzabili contiene una sottorete /24 e perché due indirizzi non sono assegnabili?",
+  "risposta": "254. Su 256 indirizzi totali, il primo è l'indirizzo di rete e l'ultimo è l'indirizzo di broadcast, entrambi non assegnabili a un host.",
+  "fonte": "RFC 950 / RFC 4632 (CIDR)",
+  "riferimento": "Subnetting"
+ },
+ {
+  "id": "NET-08",
+  "tema": "hardware",
+  "domanda": "Che cosa fanno rispettivamente DNS, DHCP e NAT?",
+  "risposta": "Il DNS risolve i nomi in indirizzi IP; il DHCP assegna dinamicamente indirizzi e parametri di rete ai client; il NAT traduce indirizzi privati in uno o più indirizzi pubblici, consentendo a molti dispositivi di condividere un'uscita.",
+  "fonte": "RFC 1035, RFC 2131, RFC 3022",
+  "riferimento": "Specifiche di protocollo"
+ },
+ {
+  "id": "NET-09",
+  "tema": "hardware",
+  "domanda": "Che cos'è la MTU e che effetto ha una MTU errata su una VPN?",
+  "risposta": "È la dimensione massima del pacchetto trasmissibile senza frammentazione. Una VPN aggiunge intestazioni di incapsulamento: se la MTU non viene ridotta di conseguenza, i pacchetti vengono frammentati o scartati, con sintomi tipici come connessioni che si aprono ma trasferimenti che si bloccano.",
+  "fonte": "RFC 1191 — Path MTU Discovery",
+  "riferimento": "Frammentazione e PMTUD"
+ },
+ {
+  "id": "NET-10",
+  "tema": "hardware",
+  "domanda": "Qual è la differenza tra IOPS e throughput in uno storage?",
+  "risposta": "Gli IOPS misurano il numero di operazioni di input/output al secondo e contano per carichi con accessi piccoli e casuali, come i database; il throughput misura i megabyte al secondo e conta per letture e scritture sequenziali di grandi file.",
+  "fonte": "Documentazione tecnica di storage; cfr. AWS EBS docs",
+  "riferimento": "Volume performance characteristics"
+ },
+ {
+  "id": "NET-11",
+  "tema": "hardware",
+  "domanda": "Che cosa distingue RAID 1, RAID 5 e RAID 10?",
+  "risposta": "RAID 1 specchia i dati su due dischi e tollera la perdita di uno; RAID 5 distribuisce dati e parità su almeno tre dischi, tollera un guasto e ha una ricostruzione lenta e rischiosa; RAID 10 combina mirroring e striping, offrendo prestazioni e tolleranza migliori a costo di metà della capacità.",
+  "fonte": "Patterson, Gibson & Katz (1988) — tassonomia RAID",
+  "riferimento": "A case for redundant arrays of inexpensive disks"
+ },
+ {
+  "id": "NET-12",
+  "tema": "hardware",
+  "domanda": "Perché il RAID non è un backup?",
+  "risposta": "Perché protegge dal guasto hardware di un disco, non dalla cancellazione accidentale, dalla corruzione logica, dal ransomware o dalla distruzione fisica del sito. Tutti questi eventi si replicano istantaneamente su tutti i dischi dell'array.",
+  "fonte": "Principio consolidato di continuità operativa; cfr. NIST SP 800-34",
+  "riferimento": "Contingency planning guide"
+ },
+ {
+  "id": "NET-13",
+  "tema": "hardware",
+  "domanda": "Che cos'è la regola di backup 3-2-1?",
+  "risposta": "Tre copie dei dati, su due supporti differenti, di cui una conservata fuori sede. Le varianti recenti aggiungono una copia immutabile o offline e la verifica periodica del ripristino.",
+  "fonte": "Prassi consolidata di disaster recovery; cfr. NIST SP 800-34",
+  "riferimento": "Backup strategy"
+ },
+ {
+  "id": "NET-14",
+  "tema": "hardware",
+  "domanda": "Qual è la differenza tra RTO e RPO?",
+  "risposta": "L'RTO è il tempo massimo tollerabile per ripristinare il servizio dopo un'interruzione; l'RPO è la quantità massima di dati che ci si può permettere di perdere, espressa come finestra temporale. L'RTO dimensiona la procedura di ripristino, l'RPO la frequenza dei backup.",
+  "fonte": "NIST SP 800-34 Rev. 1",
+  "riferimento": "Contingency planning guide for federal information systems"
+ },
+ {
+  "id": "NET-15",
+  "tema": "hardware",
+  "domanda": "Che cos'è la memoria ECC e quando è necessaria?",
+  "risposta": "Memoria con codice di correzione d'errore, in grado di rilevare e correggere errori su singolo bit causati da disturbi elettrici o radiazione. È raccomandata per server e sistemi che conservano dati critici, dove una corruzione silenziosa è inaccettabile.",
+  "fonte": "Documentazione tecnica dei produttori di memoria",
+  "riferimento": "ECC vs non-ECC DRAM"
+ },
+ {
+  "id": "NET-16",
+  "tema": "hardware",
+  "domanda": "Come si dimensiona un gruppo di continuità per un carico dato?",
+  "risposta": "Si somma la potenza attiva in watt dei carichi, si applica un margine di sicurezza, si verifica che non si superi né la potenza in VA né quella in watt dell'apparato, e si calcola l'autonomia dividendo l'energia disponibile in wattora per il carico effettivo, tenendo conto del rendimento.",
+  "fonte": "Documentazione tecnica UPS; cfr. IEC 62040",
+  "riferimento": "Uninterruptible power systems"
+ },
+ {
+  "id": "NET-17",
+  "tema": "hardware",
+  "domanda": "Che cosa distingue un'architettura ARM da una x86 e perché importa nella scelta dei dispositivi di campo?",
+  "risposta": "ARM adotta un set di istruzioni ridotto con efficienza energetica superiore, x86 un set complesso con prestazioni di picco storicamente maggiori. Su campo, dove l'energia è vincolo primario e la dissipazione passiva è preferibile, l'efficienza per watt di ARM diventa il criterio dominante.",
+  "fonte": "Letteratura di architettura dei calcolatori; cfr. Hennessy & Patterson",
+  "riferimento": "Computer Architecture: A Quantitative Approach"
+ },
+ {
+  "id": "NET-18",
+  "tema": "hardware",
+  "domanda": "Quando conviene inferire un modello di IA in locale anziché tramite API?",
+  "risposta": "Quando i dati non possono lasciare il perimetro per vincoli normativi o di protezione, quando la connettività è assente o instabile, o quando il volume costante rende il costo per chiamata superiore all'ammortamento dell'hardware. L'API resta preferibile per volumi variabili e bassa intensità.",
+  "fonte": "Huyen, AI Engineering",
+  "riferimento": "Cap. su inference optimization e cost"
+ },
+ {
+  "id": "NET-19",
+  "tema": "hardware",
+  "domanda": "Che cos'è la latenza del primo token e perché è distinta dal throughput di generazione?",
+  "risposta": "È il tempo che intercorre prima che il modello produca il primo token di risposta e determina la percezione di reattività; il throughput di generazione misura i token al secondo successivi e determina il tempo totale. Un sistema può avere throughput elevato e risultare comunque lento alla percezione.",
+  "fonte": "Huyen, AI Engineering",
+  "riferimento": "Metriche di latenza dell'inferenza"
+ },
+ {
+  "id": "NET-20",
+  "tema": "hardware",
+  "domanda": "Che cos'è il MDM e perché è centrale nella gestione di una flotta di dispositivi sul campo?",
+  "risposta": "La gestione centralizzata dei dispositivi mobili, che consente configurazione, distribuzione delle applicazioni, applicazione delle politiche di sicurezza, cifratura obbligatoria e cancellazione remota in caso di smarrimento. Senza MDM, la perdita di un tablet equivale a una potenziale violazione di dati.",
+  "fonte": "NIST SP 1800-4 / SP 800-124",
+  "riferimento": "Mobile device security"
+ },
+ {
+  "id": "NET-21",
+  "tema": "hardware",
+  "domanda": "Che cos'è la cifratura a riposo e in transito, e perché servono entrambe?",
+  "risposta": "A riposo protegge i dati memorizzati su disco da accesso fisico o furto del dispositivo; in transito protegge i dati mentre viaggiano in rete da intercettazione. Sono controlli su minacce diverse: nessuna delle due sostituisce l'altra.",
+  "fonte": "ISO/IEC 27002 / NIST SP 800-175B",
+  "riferimento": "Controlli crittografici"
+ },
+ {
+  "id": "NET-22",
+  "tema": "hardware",
+  "domanda": "Quali sono le cinque funzioni del NIST Cybersecurity Framework 2.0?",
+  "risposta": "Govern, Identify, Protect, Detect, Respond, Recover. La funzione Govern è stata introdotta nella versione 2.0 e attraversa tutte le altre.",
+  "fonte": "NIST CSF 2.0",
+  "riferimento": "Core functions"
+ },
+ {
+  "id": "BAB-01",
+  "tema": "business_analysis",
+  "domanda": "Quali sono le sei aree di conoscenza del BABOK v3?",
+  "risposta": "Pianificazione e monitoraggio della business analysis; elicitazione e collaborazione; gestione del ciclo di vita dei requisiti; analisi strategica; analisi dei requisiti e definizione del design; valutazione della soluzione.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Knowledge areas"
+ },
+ {
+  "id": "BAB-02",
+  "tema": "business_analysis",
+  "domanda": "Come classifica il BABOK i requisiti?",
+  "risposta": "Requisiti di business, requisiti degli stakeholder, requisiti di soluzione — suddivisi in funzionali e non funzionali — e requisiti di transizione, che valgono solo durante il passaggio dallo stato attuale a quello futuro.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Requirements classification schema"
+ },
+ {
+  "id": "BAB-03",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è l'analisi as-is / to-be e a cosa serve il gap?",
+  "risposta": "La descrizione dello stato attuale e dello stato desiderato di un processo; il divario tra i due definisce l'ambito del cambiamento e giustifica le iniziative. Senza as-is documentato, il to-be è un'aspirazione non verificabile.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Strategy analysis — current and future state"
+ },
+ {
+  "id": "BAB-04",
+  "tema": "business_analysis",
+  "domanda": "Quali sono le quattro categorie di elementi BPMN?",
+  "risposta": "Oggetti di flusso (eventi, attività, gateway); oggetti di connessione (flussi di sequenza, flussi di messaggio, associazioni); corsie (pool e lane); artefatti (oggetti dati, gruppi, annotazioni).",
+  "fonte": "OMG, BPMN 2.0",
+  "riferimento": "Specifica — elementi di base"
+ },
+ {
+  "id": "BAB-05",
+  "tema": "business_analysis",
+  "domanda": "Che differenza c'è tra gateway esclusivo, parallelo e inclusivo in BPMN?",
+  "risposta": "L'esclusivo attiva esattamente un percorso in base a una condizione; il parallelo attiva tutti i percorsi contemporaneamente senza valutare condizioni; l'inclusivo attiva tutti i percorsi le cui condizioni risultano vere, da uno a tutti.",
+  "fonte": "OMG, BPMN 2.0",
+  "riferimento": "Gateway types"
+ },
+ {
+  "id": "BAB-06",
+  "tema": "business_analysis",
+  "domanda": "Qual è la differenza tra pool e lane in BPMN?",
+  "risposta": "Il pool rappresenta un partecipante o un'entità organizzativa autonoma: tra pool diversi si comunica solo con flussi di messaggio. La lane è una suddivisione interna al pool, tipicamente un ruolo, e al suo interno il flusso di sequenza è consentito.",
+  "fonte": "OMG, BPMN 2.0",
+  "riferimento": "Swimlanes"
+ },
+ {
+  "id": "BAB-07",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è una matrice RACI?",
+  "risposta": "Uno strumento di assegnazione delle responsabilità che per ogni attività distingue chi esegue (Responsible), chi risponde del risultato (Accountable), chi viene consultato (Consulted) e chi viene informato (Informed). Regola fondamentale: un solo Accountable per attività.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Stakeholder analysis — RACI matrix"
+ },
+ {
+  "id": "BAB-08",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è la prioritizzazione MoSCoW?",
+  "risposta": "Una classificazione dei requisiti in Must have, Should have, Could have e Won't have (per questa volta). Funziona solo se la quota di Must è limitata: se tutto è indispensabile, il metodo non fornisce alcuna informazione.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Prioritization techniques"
+ },
+ {
+  "id": "BAB-09",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è un criterio di accettazione e in cosa differisce da un requisito?",
+  "risposta": "Il requisito dichiara che cosa la soluzione deve fare; il criterio di accettazione definisce la condizione verificabile che stabilisce se il requisito è stato soddisfatto. Un requisito senza criterio di accettazione non è collaudabile.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Acceptance and evaluation criteria"
+ },
+ {
+  "id": "BAB-10",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è un Architecture Decision Record e quali sezioni contiene?",
+  "risposta": "Un documento breve che registra una singola decisione architetturale: contesto e vincoli, opzioni considerate, decisione presa, motivazione e conseguenze, incluse quelle negative accettate. Serve a rendere ricostruibile il perché di una scelta a distanza di anni.",
+  "fonte": "Nygard (2011), Documenting architecture decisions",
+  "riferimento": "Formato ADR"
+ },
+ {
+  "id": "BAB-11",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è la tracciabilità dei requisiti?",
+  "risposta": "Il collegamento documentato di ogni requisito alla sua origine a monte (obiettivo di business, stakeholder) e ai suoi derivati a valle (design, codice, test). Rende possibile l'analisi d'impatto e dimostra la copertura in sede di verifica.",
+  "fonte": "IIBA, BABOK Guide v3",
+  "riferimento": "Trace requirements"
+ },
+ {
+  "id": "BAB-12",
+  "tema": "business_analysis",
+  "domanda": "Quali sono le cinque fasi del ciclo di vita ITIL 4 di un servizio, in termini di value stream?",
+  "risposta": "ITIL 4 sostituisce il ciclo di vita lineare con il Service Value System: domanda e opportunità in ingresso, catena del valore con le attività Plan, Improve, Engage, Design & Transition, Obtain/Build, Deliver & Support, e valore in uscita.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service Value System e Service Value Chain"
+ },
+ {
+  "id": "BAB-13",
+  "tema": "business_analysis",
+  "domanda": "Qual è la differenza tra incident, problem e change nella gestione dei servizi?",
+  "risposta": "L'incident è un'interruzione o degrado non pianificato del servizio e si gestisce ripristinando il servizio; il problem è la causa sottostante, potenziale o accertata, di uno o più incident; il change è l'aggiunta, modifica o rimozione di qualcosa che può avere effetto sui servizi.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Practices: incident, problem e change enablement"
+ },
+ {
+  "id": "BAB-14",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è il costo totale di proprietà e quali voci si dimenticano più spesso?",
+  "risposta": "Il costo complessivo di una soluzione lungo il suo ciclo di vita. Le voci più spesso omesse sono migrazione dei dati, formazione, integrazione con i sistemi esistenti, manutenzione e supporto continuativi, costo del personale interno dedicato e costo di uscita a fine contratto.",
+  "fonte": "Prassi di IT financial management; cfr. ITIL 4 — Service financial management",
+  "riferimento": "TCO analysis"
+ },
+ {
+  "id": "BAB-15",
+  "tema": "business_analysis",
+  "domanda": "Che cos'è il vendor lock-in e con quali leve contrattuali si mitiga?",
+  "risposta": "La dipendenza da un fornitore dovuta a costi di migrazione proibitivi. Si mitiga con clausole di portabilità ed esportazione dei dati in formati aperti, proprietà dei dati esplicitamente in capo al cliente, deposito del codice sorgente e assistenza contrattualmente dovuta in fase di uscita.",
+  "fonte": "Prassi di procurement IT",
+  "riferimento": "Exit management clauses"
+ },
+ {
+  "id": "ITIL-01",
+  "tema": "governance",
+  "domanda": "Quali sono le quattro dimensioni della gestione dei servizi in ITIL 4?",
+  "risposta": "Organizzazioni e persone; informazioni e tecnologia; partner e fornitori; flussi di valore e processi. Vanno considerate tutte e quattro per ogni servizio: trascurarne una produce servizi che funzionano tecnicamente ma falliscono nell'uso.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Four dimensions of service management"
+ },
+ {
+  "id": "ITIL-02",
+  "tema": "governance",
+  "domanda": "Quali sono i sette principi guida di ITIL 4?",
+  "risposta": "Concentrarsi sul valore; partire da dove si è; procedere iterativamente con feedback; collaborare e promuovere la visibilità; pensare e lavorare in modo olistico; mantenere le cose semplici e pratiche; ottimizzare e automatizzare.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Guiding principles"
+ },
+ {
+  "id": "ITIL-03",
+  "tema": "governance",
+  "domanda": "Come definisce ITIL il «servizio»?",
+  "risposta": "Un mezzo per abilitare la co-creazione di valore facilitando i risultati che i clienti vogliono ottenere, senza che debbano gestire costi e rischi specifici. Il valore non è consegnato dal fornitore: è co-creato con il cliente.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Key concepts — service"
+ },
+ {
+  "id": "ITIL-04",
+  "tema": "governance",
+  "domanda": "Che differenza c'è tra utilità e garanzia?",
+  "risposta": "L'utilità è ciò che il servizio fa, cioè l'idoneità allo scopo; la garanzia è come lo fa, cioè l'idoneità all'uso — disponibilità, capacità, continuità, sicurezza. Servono entrambe: un servizio utile ma inaffidabile non produce valore.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Utility and warranty"
+ },
+ {
+  "id": "ITIL-05",
+  "tema": "governance",
+  "domanda": "Quali sono le sei attività della catena del valore del servizio?",
+  "risposta": "Plan, Improve, Engage, Design & Transition, Obtain/Build, Deliver & Support. Non sono una sequenza fissa: ogni flusso di valore le combina nell'ordine che gli serve.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service value chain"
+ },
+ {
+  "id": "ITIL-06",
+  "tema": "governance",
+  "domanda": "Quali sono i tre tipi di change enablement?",
+  "risposta": "Standard (preautorizzato, a basso rischio, procedura nota); normale (valutato e autorizzato secondo il percorso previsto); emergenza (percorso accelerato per ripristinare un servizio o evitare un impatto grave, con autorizzazione a posteriori della documentazione).",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Change enablement practice"
+ },
+ {
+  "id": "ITIL-07",
+  "tema": "governance",
+  "domanda": "Che cos'è un known error e come si collega a workaround e problem?",
+  "risposta": "Un problema di cui sono stati analizzati causa e workaround ma che non è ancora risolto in modo definitivo. Il workaround riduce l'impatto senza eliminare la causa; il known error consente al service desk di ripristinare rapidamente i servizi in attesa della correzione strutturale.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Problem management practice"
+ },
+ {
+  "id": "ITIL-08",
+  "tema": "governance",
+  "domanda": "Che cos'è il service desk e qual è la sua funzione che va oltre il supporto tecnico?",
+  "risposta": "È il punto unico di contatto fra fornitore e utenti. La sua funzione che conta di più non è tecnica ma relazionale: è il canale attraverso cui l'organizzazione percepisce la qualità del servizio e attraverso cui si raccolgono i segnali deboli di problemi emergenti.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service desk practice"
+ },
+ {
+  "id": "ITIL-09",
+  "tema": "governance",
+  "domanda": "Qual è la differenza tra service request e incident?",
+  "risposta": "La richiesta di servizio è una domanda preventivata e normale dell'utente — un accesso, un dispositivo, un'informazione — e segue un flusso standardizzato; l'incident è un'interruzione o degrado non pianificato e ha come obiettivo il ripristino nel minor tempo possibile.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service request management"
+ },
+ {
+  "id": "ITIL-10",
+  "tema": "governance",
+  "domanda": "Quali sono i passi del modello di miglioramento continuo ITIL?",
+  "risposta": "Qual è la visione? Dove siamo ora? Dove vogliamo arrivare? Come ci arriviamo? Agire. Abbiamo raggiunto l'obiettivo? Come manteniamo lo slancio? Il passo più saltato — e più importante — è il secondo.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Continual improvement model"
+ },
+ {
+  "id": "ITIL-11",
+  "tema": "governance",
+  "domanda": "Che cos'è un catalogo dei servizi e perché è il primo documento che un nuovo responsabile IT dovrebbe produrre?",
+  "risposta": "L'elenco strutturato dei servizi erogati con descrizione, destinatari, livelli di servizio e proprietario. È il primo perché rende esplicito ciò che l'organizzazione si aspetta implicitamente, e trasforma richieste arbitrarie in servizi con confini negoziati.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service catalogue management"
+ },
+ {
+  "id": "ITIL-12",
+  "tema": "governance",
+  "domanda": "Che cos'è il service level management e qual è l'errore più comune nel definire gli SLA?",
+  "risposta": "La pratica che definisce, concorda e monitora i livelli di servizio. L'errore più comune è misurare ciò che è facile — disponibilità del sistema — invece di ciò che l'utente sperimenta, producendo la situazione in cui tutti gli SLA sono verdi mentre gli utenti sono insoddisfatti (watermelon SLA).",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service level management practice"
+ },
+ {
+  "id": "ITIL-13",
+  "tema": "governance",
+  "domanda": "Che cos'è la configuration management database e quale insidia comporta?",
+  "risposta": "Il repository degli elementi di configurazione e delle loro relazioni. L'insidia è l'ambizione di completezza: una CMDB che tenta di censire tutto diventa immediatamente obsoleta. Va limitata agli elementi le cui relazioni servono davvero per analisi d'impatto.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Service configuration management"
+ },
+ {
+  "id": "ITIL-14",
+  "tema": "governance",
+  "domanda": "Che differenza c'è tra disponibilità e continuità del servizio?",
+  "risposta": "La disponibilità riguarda il funzionamento del servizio nelle condizioni ordinarie e si misura in percentuale di tempo utile; la continuità riguarda la capacità di erogare un livello minimo concordato dopo un evento disastroso, e si misura in RTO e RPO.",
+  "fonte": "ITIL 4 Foundation",
+  "riferimento": "Availability e service continuity management"
+ },
+ {
+  "id": "ITIL-15",
+  "tema": "governance",
+  "domanda": "Che cos'è la governance nel Service Value System e in cosa differisce dal management?",
+  "risposta": "La governance è il sistema con cui l'organizzazione è diretta e controllata: valuta, indirizza e monitora. Il management esegue all'interno di quella direzione. Confondere i due livelli è la causa più comune di funzioni IT che operano senza mandato.",
+  "fonte": "ITIL 4 Foundation; cfr. ISO/IEC 38500",
+  "riferimento": "Governance in the SVS"
+ },
+ {
+  "id": "ISO-01",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è un ISMS secondo la ISO/IEC 27001?",
+  "risposta": "Un sistema di gestione della sicurezza delle informazioni: un insieme documentato di politiche, processi e controlli, con ambito definito, guidato dal rischio e soggetto a miglioramento continuo secondo il ciclo Plan-Do-Check-Act.",
+  "fonte": "ISO/IEC 27001:2022",
+  "riferimento": "Clausole 4-10"
+ },
+ {
+  "id": "ISO-02",
+  "tema": "sicurezza",
+  "domanda": "Quali sono i tre attributi fondamentali della sicurezza delle informazioni?",
+  "risposta": "Riservatezza, integrità e disponibilità. Molti quadri aggiungono autenticità, non ripudio e tracciabilità, ma i tre restano il nucleo rispetto a cui si classifica ogni rischio.",
+  "fonte": "ISO/IEC 27000",
+  "riferimento": "Termini e definizioni"
+ },
+ {
+  "id": "ISO-03",
+  "tema": "sicurezza",
+  "domanda": "Come sono organizzati i controlli dell'Allegato A nella versione 2022?",
+  "risposta": "In quattro temi: organizzativi, relativi alle persone, fisici e tecnologici, per un totale di 93 controlli, rispetto agli oltre cento raggruppati in quattordici categorie della versione precedente.",
+  "fonte": "ISO/IEC 27001:2022",
+  "riferimento": "Annex A"
+ },
+ {
+  "id": "ISO-04",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è la Dichiarazione di Applicabilità e perché è il documento centrale della certificazione?",
+  "risposta": "Il documento che elenca tutti i controlli dell'Allegato A indicando quali si applicano, come sono attuati e, per gli esclusi, la giustificazione dell'esclusione. È centrale perché collega esplicitamente la valutazione del rischio alle misure adottate.",
+  "fonte": "ISO/IEC 27001:2022",
+  "riferimento": "Clausola 6.1.3 d"
+ },
+ {
+  "id": "ISO-05",
+  "tema": "sicurezza",
+  "domanda": "Quali sono le quattro opzioni di trattamento del rischio?",
+  "risposta": "Modificare il rischio applicando controlli; mantenerlo accettandolo consapevolmente; evitarlo eliminando l'attività che lo genera; condividerlo tramite assicurazione o esternalizzazione. Nessuna delle quattro è di per sé sbagliata: sbagliato è non decidere.",
+  "fonte": "ISO/IEC 27005",
+  "riferimento": "Risk treatment options"
+ },
+ {
+  "id": "ISO-06",
+  "tema": "sicurezza",
+  "domanda": "Che differenza c'è tra ISO/IEC 27001 e ISO/IEC 27002?",
+  "risposta": "La 27001 contiene i requisiti certificabili del sistema di gestione; la 27002 è una guida che descrive come attuare i singoli controlli. Ci si certifica sulla 27001, si lavora con la 27002 in mano.",
+  "fonte": "ISO/IEC 27001:2022 e 27002:2022",
+  "riferimento": "Rapporto fra le norme"
+ },
+ {
+  "id": "ISO-07",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è la ISO/IEC 27701 e a chi serve?",
+  "risposta": "Un'estensione della 27001 e della 27002 per la gestione delle informazioni sulla privacy, che introduce requisiti e controlli per titolari e responsabili del trattamento. Serve a chi vuole dimostrare in modo certificabile l'allineamento fra sicurezza e protezione dei dati personali.",
+  "fonte": "ISO/IEC 27701",
+  "riferimento": "Privacy information management extension"
+ },
+ {
+  "id": "ISO-08",
+  "tema": "sicurezza",
+  "domanda": "Cita almeno cinque controlli introdotti nella revisione 2022.",
+  "risposta": "Threat intelligence; sicurezza per l'uso di servizi cloud; preparazione ICT per la continuità operativa; monitoraggio della sicurezza fisica; gestione della configurazione; cancellazione delle informazioni; mascheramento dei dati; prevenzione della fuga di dati; attività di monitoraggio; filtraggio web; codifica sicura.",
+  "fonte": "ISO/IEC 27001:2022",
+  "riferimento": "Annex A — nuovi controlli"
+ },
+ {
+  "id": "ISO-09",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è il principio del minimo privilegio e come si verifica nella pratica?",
+  "risposta": "Ogni utente o processo dispone dei soli permessi necessari alle sue funzioni, per il solo tempo necessario. Si verifica con revisioni periodiche degli accessi, confrontando i permessi effettivi con i ruoli dichiarati e rimuovendo quelli accumulati per cambi di mansione.",
+  "fonte": "ISO/IEC 27002:2022",
+  "riferimento": "Controllo — Access rights"
+ },
+ {
+  "id": "ISO-10",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è la separazione dei compiti e quale rischio mitiga?",
+  "risposta": "La suddivisione di attività critiche fra persone diverse in modo che nessuno possa completare da solo un'azione ad alto impatto. Mitiga sia la frode sia l'errore: chi sviluppa non dovrebbe poter rilasciare in produzione senza un secondo controllo.",
+  "fonte": "ISO/IEC 27002:2022",
+  "riferimento": "Controllo — Segregation of duties"
+ },
+ {
+  "id": "ISO-11",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è una non conformità maggiore in un audit di certificazione?",
+  "risposta": "L'assenza totale di un requisito, o un fallimento sistematico che compromette la capacità dell'ISMS di raggiungere i propri obiettivi. Blocca la certificazione fino alla risoluzione, a differenza della minore che si gestisce con un piano di azione correttiva.",
+  "fonte": "ISO/IEC 17021 / prassi di audit",
+  "riferimento": "Classificazione dei rilievi"
+ },
+ {
+  "id": "ISO-12",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è il rischio residuo e chi lo approva?",
+  "risposta": "Il rischio che permane dopo l'applicazione dei controlli. Deve essere valutato, documentato e approvato formalmente dalla direzione: è una decisione di business, non una scelta tecnica del responsabile della sicurezza.",
+  "fonte": "ISO/IEC 27001:2022",
+  "riferimento": "Clausola 6.1.3 e-f"
+ },
+ {
+  "id": "ISO-13",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è la classificazione delle informazioni e perché precede ogni altro controllo?",
+  "risposta": "L'attribuzione di un livello di sensibilità a ciascuna informazione, con regole di trattamento associate. Precede gli altri controlli perché senza sapere cosa si protegge e quanto vale, ogni misura è o sovradimensionata o insufficiente.",
+  "fonte": "ISO/IEC 27002:2022",
+  "riferimento": "Controllo — Classification of information"
+ },
+ {
+  "id": "ISO-14",
+  "tema": "sicurezza",
+  "domanda": "Che cos'è la NIS2 e in che cosa differisce dalla ISO/IEC 27001?",
+  "risposta": "È una direttiva europea che impone obblighi di gestione del rischio informatico e di notifica degli incidenti a soggetti essenziali e importanti in settori individuati, con responsabilità diretta degli organi di gestione. La 27001 è una norma volontaria e certificabile; la NIS2 è legge, e la conformità alla norma può supportarla ma non la sostituisce.",
+  "fonte": "Direttiva (UE) 2022/2555",
+  "riferimento": "NIS2 — obblighi e ambito"
+ },
+ {
+  "id": "ISO-15",
+  "tema": "sicurezza",
+  "domanda": "Qual è la sequenza corretta delle fasi di risposta a un incidente di sicurezza?",
+  "risposta": "Preparazione; rilevazione e analisi; contenimento, eradicazione e ripristino; attività post-incidente. La fase più trascurata è la prima, e quella che determina il valore di lungo periodo è l'ultima.",
+  "fonte": "NIST SP 800-61 Rev. 2",
+  "riferimento": "Computer security incident handling guide"
+ },
+ {
+  "id": "DHIS-01",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è un data element in DHIS2?",
+  "risposta": "L'unità atomica di raccolta: ciò che viene effettivamente registrato, per esempio «casi di malaria confermati». È distinto dall'indicatore, che è una formula calcolata a partire da data element.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Data elements"
+ },
+ {
+  "id": "DHIS-02",
+  "tema": "salute_digitale",
+  "domanda": "Qual è la differenza tra data element e indicator in DHIS2?",
+  "risposta": "Il data element è un dato grezzo raccolto; l'indicator è una formula con numeratore e denominatore, calcolata a runtime, che produce tassi, percentuali e rapporti. Gli indicator non si raccolgono: si derivano.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Indicators"
+ },
+ {
+  "id": "DHIS-03",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è una category combination e a che cosa serve?",
+  "risposta": "Un meccanismo di disaggregazione che moltiplica un data element per una o più dimensioni — per esempio sesso ed età — generando le combinazioni effettive di raccolta. Evita di creare manualmente un data element per ogni combinazione.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Category combinations"
+ },
+ {
+  "id": "DHIS-04",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è la gerarchia delle organisation unit?",
+  "risposta": "L'albero delle unità organizzative — paese, regione, distretto, struttura — che definisce la dimensione geografica di ogni dato. È la dimensione conforme per eccellenza del sistema: cambiarla a posteriori è l'operazione più costosa in DHIS2.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Organisation unit hierarchy"
+ },
+ {
+  "id": "DHIS-05",
+  "tema": "salute_digitale",
+  "domanda": "Qual è la differenza tra dati aggregati e Tracker in DHIS2?",
+  "risposta": "I dati aggregati registrano conteggi per unità organizzativa e periodo; il Tracker segue singole entità nel tempo, con eventi e stadi di programma. Il Tracker comporta dati individuali e quindi un regime di protezione dei dati completamente diverso.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Aggregate vs tracker data models"
+ },
+ {
+  "id": "DHIS-06",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è un data set in DHIS2?",
+  "risposta": "Un insieme di data element raccolti insieme con la stessa periodicità e assegnati a specifiche unità organizzative: corrisponde in pratica al modulo di raccolta.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Data sets"
+ },
+ {
+  "id": "DHIS-07",
+  "tema": "salute_digitale",
+  "domanda": "Che cosa sono le analytics tables e perché il dato nuovo non compare subito nei cruscotti?",
+  "risposta": "Sono tabelle precalcolate generate da un processo periodico per rendere veloci le interrogazioni analitiche. Finché l'analytics non viene rigenerata, i dati appena inseriti non compaiono nei report: è la causa più frequente di segnalazioni di «dato mancante» che non sono errori.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Analytics tables generation"
+ },
+ {
+  "id": "DHIS-08",
+  "tema": "salute_digitale",
+  "domanda": "Quali strumenti di qualità del dato offre DHIS2 nativamente?",
+  "risposta": "Regole di validazione fra data element, analisi min-max per valori anomali, analisi degli outlier basata su deviazione standard o scarto interquartile, controllo di completezza e tempestività della segnalazione, e analisi di follow-up.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Data quality module"
+ },
+ {
+  "id": "DHIS-09",
+  "tema": "salute_digitale",
+  "domanda": "Come funziona la raccolta offline con l'app Android di DHIS2?",
+  "risposta": "I metadati vengono scaricati e memorizzati localmente; la raccolta avviene nel database locale del dispositivo e la sincronizzazione è avviata quando torna la connettività. Ne consegue che i metadati devono essere stabili: una modifica lato server durante una missione crea conflitti di sincronizzazione.",
+  "fonte": "DHIS2 Android Capture — documentazione",
+  "riferimento": "Offline capability e sincronizzazione"
+ },
+ {
+  "id": "DHIS-10",
+  "tema": "salute_digitale",
+  "domanda": "Qual è l'endpoint API principale per l'invio di dati aggregati?",
+  "risposta": "Il servizio dataValueSets dell'API web, che accetta insiemi di valori in JSON, XML o CSV identificati da data element, periodo, unità organizzativa e combinazione di categoria; per il Tracker si usano invece gli endpoint dedicati agli eventi e alle entità tracciate.",
+  "fonte": "DHIS2 — Web API documentation",
+  "riferimento": "Data values — dataValueSets"
+ },
+ {
+  "id": "DHIS-11",
+  "tema": "salute_digitale",
+  "domanda": "Che cosa sono i WHO metadata package per DHIS2?",
+  "risposta": "Pacchetti di metadati preconfigurati e allineati agli standard OMS per specifici programmi — sorveglianza, immunizzazione, salute materna — che permettono di avviare un sistema con definizioni standardizzate invece di costruirle da zero.",
+  "fonte": "DHIS2 / WHO — metadata packages",
+  "riferimento": "Standard configuration packages"
+ },
+ {
+  "id": "DHIS-12",
+  "tema": "salute_digitale",
+  "domanda": "Perché la scelta del period type in DHIS2 è una decisione difficilmente reversibile?",
+  "risposta": "Perché determina la granularità con cui il dato viene storicizzato: passare da mensile a settimanale non consente di disaggregare retroattivamente i dati già raccolti, mentre il percorso inverso perde definitivamente il dettaglio.",
+  "fonte": "DHIS2 — documentazione ufficiale",
+  "riferimento": "Period types"
+ },
+ {
+  "id": "FHIR-01",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è FHIR e su quali principi è costruito?",
+  "risposta": "Uno standard HL7 per lo scambio di informazioni sanitarie basato su risorse modulari, API REST e formati web comuni come JSON e XML. Il principio guida è che l'80% dei casi d'uso sia coperto dal nucleo della risorsa, lasciando il resto alle estensioni.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Overview e principi di design"
+ },
+ {
+  "id": "FHIR-02",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è una risorsa FHIR?",
+  "risposta": "L'unità atomica di scambio: un oggetto identificabile con un tipo definito, un identificativo, un contenuto strutturato e una rappresentazione standard. Patient, Encounter, Observation e Condition sono fra le più usate.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Resource definitions"
+ },
+ {
+  "id": "FHIR-03",
+  "tema": "salute_digitale",
+  "domanda": "Quali risorse FHIR corrispondono a paziente, visita, diagnosi, esame e vaccinazione?",
+  "risposta": "Rispettivamente Patient, Encounter, Condition, Observation e Immunization.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Clinical resources"
+ },
+ {
+  "id": "FHIR-04",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è un Bundle in FHIR?",
+  "risposta": "Un contenitore che raggruppa più risorse in un unico messaggio: si usa per risultati di ricerca, documenti, messaggi e transazioni atomiche in cui tutte le operazioni riescono o falliscono insieme.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Bundle resource"
+ },
+ {
+  "id": "FHIR-05",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è un profilo FHIR e perché è quasi sempre necessario?",
+  "risposta": "Una restrizione o estensione di una risorsa base che vincola cardinalità, terminologie e campi obbligatori per un contesto specifico. È necessario perché la risorsa base è deliberatamente permissiva: senza profilo, due sistemi «conformi a FHIR» possono restare incompatibili.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Profiling e StructureDefinition"
+ },
+ {
+  "id": "FHIR-06",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è una Implementation Guide?",
+  "risposta": "Un insieme coerente e pubblicato di profili, terminologie, esempi e regole di conformità che definisce come FHIR va usato in un dato dominio o giurisdizione. È il documento su cui si verifica l'interoperabilità reale.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Implementation guides"
+ },
+ {
+  "id": "FHIR-07",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è un CodeableConcept?",
+  "risposta": "Un tipo di dato che rappresenta un concetto clinico con uno o più codici provenienti da sistemi terminologici, più un eventuale testo libero. Permette di trasportare contemporaneamente la codifica formale e la dicitura originale.",
+  "fonte": "HL7 FHIR — specifica ufficiale",
+  "riferimento": "Data types — CodeableConcept"
+ },
+ {
+  "id": "FHIR-08",
+  "tema": "salute_digitale",
+  "domanda": "Qual è la differenza d'uso fra ICD-10, SNOMED CT e LOINC?",
+  "risposta": "ICD-10 classifica diagnosi e cause di morte a fini statistici ed epidemiologici; SNOMED CT è una terminologia clinica granulare per la documentazione del caso; LOINC identifica esami di laboratorio e osservazioni. Non sono alternative: coprono livelli diversi.",
+  "fonte": "WHO ICD-10; SNOMED International; Regenstrief LOINC",
+  "riferimento": "Ambiti d'uso delle terminologie"
+ },
+ {
+  "id": "FHIR-09",
+  "tema": "salute_digitale",
+  "domanda": "Che differenza c'è tra HL7 versione 2 e FHIR?",
+  "risposta": "HL7 v2 usa messaggi con segmenti delimitati da barre verticali, orientati all'evento e molto diffusi nei sistemi ospedalieri esistenti; FHIR usa risorse e API REST ed è pensato per il web e il mobile. Molte integrazioni reali fanno convivere i due con un livello di traduzione.",
+  "fonte": "HL7 — specifiche v2 e FHIR",
+  "riferimento": "Confronto fra standard"
+ },
+ {
+  "id": "FHIR-10",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è ICD-11 e qual è la differenza strutturale rispetto a ICD-10?",
+  "risposta": "La revisione più recente della classificazione OMS, progettata come sistema digitale con una fondazione ontologica che consente codifica post-coordinata tramite estensioni, anziché la sola struttura gerarchica a codici fissi di ICD-10.",
+  "fonte": "WHO ICD-11",
+  "riferimento": "Reference guide"
+ },
+ {
+  "id": "FHIR-11",
+  "tema": "salute_digitale",
+  "domanda": "Perché i dati FHIR non sono per definizione anonimi?",
+  "risposta": "Perché le risorse cliniche contengono riferimenti incrociati e dettagli temporali e geografici che permettono la re-identificazione anche in assenza di nome. La de-identificazione richiede un intervento esplicito su identificativi, date e granularità geografica.",
+  "fonte": "HL7 FHIR — Security and privacy module",
+  "riferimento": "De-identification"
+ },
+ {
+  "id": "FHIR-12",
+  "tema": "salute_digitale",
+  "domanda": "Che cos'è SMART on FHIR?",
+  "risposta": "Un profilo che combina FHIR con OAuth 2.0 e OpenID Connect per consentire ad applicazioni di terze parti di accedere in modo autorizzato ai dati clinici, con ambiti di accesso espliciti e consenso dell'utente.",
+  "fonte": "SMART Health IT / HL7",
+  "riferimento": "SMART App Launch framework"
+ },
+ {
+  "id": "STAT-01",
+  "tema": "statistica",
+  "domanda": "Quando la mediana è preferibile alla media?",
+  "risposta": "Quando la distribuzione è asimmetrica o contiene valori estremi: la media viene trascinata dalla coda, la mediana no. Per tempi di attesa, costi e redditi la mediana descrive meglio il caso tipico.",
+  "fonte": "Statistica descrittiva — testi standard",
+  "riferimento": "Misure di tendenza centrale"
+ },
+ {
+  "id": "STAT-02",
+  "tema": "statistica",
+  "domanda": "Qual è la differenza tra deviazione standard ed errore standard?",
+  "risposta": "La deviazione standard misura la dispersione dei valori nella popolazione o nel campione; l'errore standard misura la precisione della stima di un parametro e diminuisce all'aumentare della numerosità campionaria. Confonderli porta a intervalli di confidenza sbagliati.",
+  "fonte": "Statistica inferenziale — testi standard",
+  "riferimento": "Standard deviation vs standard error"
+ },
+ {
+  "id": "STAT-03",
+  "tema": "statistica",
+  "domanda": "Che cosa significa esattamente un intervallo di confidenza al 95%?",
+  "risposta": "Che se si ripetesse il campionamento molte volte con lo stesso metodo, circa il 95% degli intervalli così costruiti conterrebbe il valore vero. Non significa che ci sia il 95% di probabilità che il valore vero stia in quel particolare intervallo.",
+  "fonte": "Statistica inferenziale — testi standard",
+  "riferimento": "Interpretazione degli intervalli di confidenza"
+ },
+ {
+  "id": "STAT-04",
+  "tema": "statistica",
+  "domanda": "Che cosa misura un valore p e che cosa non misura?",
+  "risposta": "Misura la probabilità di osservare dati almeno altrettanto estremi assumendo vera l'ipotesi nulla. Non misura la probabilità che l'ipotesi nulla sia vera, né la dimensione dell'effetto, né la sua rilevanza pratica.",
+  "fonte": "American Statistical Association",
+  "riferimento": "Statement on p-values (2016)"
+ },
+ {
+  "id": "STAT-05",
+  "tema": "statistica",
+  "domanda": "Qual è la differenza tra errore di primo e di secondo tipo?",
+  "risposta": "Il primo tipo è rifiutare un'ipotesi nulla vera, cioè vedere un effetto che non c'è; il secondo tipo è non rifiutare un'ipotesi nulla falsa, cioè non vedere un effetto reale. Ridurre uno aumenta l'altro a parità di numerosità.",
+  "fonte": "Statistica inferenziale — testi standard",
+  "riferimento": "Verifica delle ipotesi"
+ },
+ {
+  "id": "STAT-06",
+  "tema": "statistica",
+  "domanda": "Che cos'è la potenza statistica e da che cosa dipende?",
+  "risposta": "La probabilità di rilevare un effetto reale della dimensione ipotizzata. Dipende dalla numerosità campionaria, dalla dimensione dell'effetto, dalla variabilità e dal livello di significatività scelto. Uno studio sottodimensionato non «dimostra l'assenza di effetto».",
+  "fonte": "Statistica inferenziale — testi standard",
+  "riferimento": "Power analysis"
+ },
+ {
+  "id": "STAT-07",
+  "tema": "statistica",
+  "domanda": "Che cos'è il design effect in un'indagine a grappoli?",
+  "risposta": "Il fattore per cui va moltiplicata la numerosità campionaria rispetto a un campionamento casuale semplice, per compensare la minore variabilità interna ai grappoli. Ignorarlo produce intervalli di confidenza artificiosamente stretti.",
+  "fonte": "Metodologia SMART / indagini a grappoli",
+  "riferimento": "Design effect e calcolo campionario"
+ },
+ {
+  "id": "STAT-08",
+  "tema": "statistica",
+  "domanda": "Come è strutturata un'indagine SMART?",
+  "risposta": "Tipicamente come un campionamento a grappoli in due stadi: nel primo si selezionano i grappoli con probabilità proporzionale alla dimensione, nel secondo si selezionano le famiglie all'interno del grappolo. Serve a stimare prevalenza di malnutrizione e tassi di mortalità.",
+  "fonte": "SMART Methodology",
+  "riferimento": "Sampling design"
+ },
+ {
+  "id": "STAT-09",
+  "tema": "statistica",
+  "domanda": "Qual è la differenza tra prevalenza e incidenza?",
+  "risposta": "La prevalenza è la proporzione di casi esistenti in una popolazione in un dato momento; l'incidenza è il numero di casi nuovi che insorgono in un intervallo, rapportato alla popolazione a rischio. La prevalenza dipende anche dalla durata della condizione.",
+  "fonte": "Epidemiologia — testi standard",
+  "riferimento": "Misure di frequenza"
+ },
+ {
+  "id": "STAT-10",
+  "tema": "statistica",
+  "domanda": "Qual è la differenza tra proporzione, rapporto e tasso?",
+  "risposta": "Nella proporzione il numeratore è incluso nel denominatore; nel rapporto le due quantità sono indipendenti; nel tasso il denominatore incorpora una dimensione temporale, come persona-tempo a rischio.",
+  "fonte": "Epidemiologia — testi standard",
+  "riferimento": "Misure di frequenza"
+ },
+ {
+  "id": "STAT-11",
+  "tema": "statistica",
+  "domanda": "Che cos'è il confondimento?",
+  "risposta": "La distorsione di un'associazione dovuta a una terza variabile associata sia all'esposizione sia all'esito, senza essere un anello causale intermedio. Si controlla per disegno, con restrizione o appaiamento, oppure in analisi con stratificazione o modelli multivariati.",
+  "fonte": "Epidemiologia — testi standard",
+  "riferimento": "Confounding"
+ },
+ {
+  "id": "STAT-12",
+  "tema": "statistica",
+  "domanda": "Che cos'è il paradosso di Simpson?",
+  "risposta": "Il fenomeno per cui un'associazione osservata nei dati aggregati si inverte quando si analizzano i sottogruppi. È la manifestazione più drammatica del confondimento e la ragione per cui un dato aggregato senza disaggregazione può indurre in errore.",
+  "fonte": "Simpson (1951)",
+  "riferimento": "The interpretation of interaction in contingency tables"
+ },
+ {
+  "id": "STAT-13",
+  "tema": "statistica",
+  "domanda": "Che cos'è la regressione verso la media e come genera falsi successi?",
+  "risposta": "La tendenza di valori estremi a essere seguiti da valori più vicini alla media per effetto della sola variabilità casuale. Un intervento avviato dove la situazione era peggiore mostrerà un miglioramento anche se è totalmente inefficace.",
+  "fonte": "Statistica — testi standard; Kahneman, Thinking Fast and Slow",
+  "riferimento": "Regression to the mean"
+ },
+ {
+  "id": "STAT-14",
+  "tema": "statistica",
+  "domanda": "Che cos'è il bias di selezione?",
+  "risposta": "La distorsione che nasce quando il modo di selezionare i soggetti è associato sia all'esposizione sia all'esito, rendendo il campione non rappresentativo rispetto alla domanda posta. Nessuna dimensione campionaria lo corregge.",
+  "fonte": "Epidemiologia — testi standard",
+  "riferimento": "Selection bias"
+ },
+ {
+  "id": "STAT-15",
+  "tema": "statistica",
+  "domanda": "Che cos'è il bias del sopravvissuto e come si manifesta nei dati di programma?",
+  "risposta": "La distorsione dovuta all'analisi dei soli casi che sono rimasti osservabili. Nei dati di programma si manifesta valutando gli esiti solo di chi ha completato il percorso, escludendo abbandoni e trasferimenti che sono spesso proprio gli esiti peggiori.",
+  "fonte": "Metodologia della ricerca",
+  "riferimento": "Survivorship bias"
+ },
+ {
+  "id": "STAT-16",
+  "tema": "statistica",
+  "domanda": "Quali sono i tre meccanismi di dato mancante?",
+  "risposta": "Completamente casuale, quando l'assenza è indipendente da tutto; casuale condizionatamente, quando dipende da variabili osservate; non casuale, quando dipende dal valore mancante stesso. Solo i primi due si gestiscono adeguatamente con le tecniche standard di imputazione.",
+  "fonte": "Rubin (1976); Little & Rubin",
+  "riferimento": "MCAR, MAR, MNAR"
+ },
+ {
+  "id": "STAT-17",
+  "tema": "statistica",
+  "domanda": "Perché sostituire i valori mancanti con la media è una pratica sconsigliata?",
+  "risposta": "Perché riduce artificiosamente la varianza, attenua le correlazioni e produce intervalli di confidenza troppo stretti, dando una falsa impressione di precisione. È preferibile l'imputazione multipla o l'esplicita esclusione documentata.",
+  "fonte": "Little & Rubin, Statistical Analysis with Missing Data",
+  "riferimento": "Single imputation — limiti"
+ },
+ {
+  "id": "STAT-18",
+  "tema": "statistica",
+  "domanda": "Qual è la differenza tra un valore anomalo e un errore?",
+  "risposta": "L'anomalo è un valore estremo ma potenzialmente vero, che può contenere l'informazione più importante del dataset; l'errore è un valore sbagliato. Eliminare gli anomali senza indagarli è il modo più rapido per cancellare un segnale epidemiologico reale.",
+  "fonte": "Statistica esplorativa — testi standard",
+  "riferimento": "Outlier analysis"
+ },
+ {
+  "id": "STAT-19",
+  "tema": "statistica",
+  "domanda": "Che cos'è lo scarto interquartile e perché è preferito nella rilevazione di anomalie su dati asimmetrici?",
+  "risposta": "La differenza fra terzo e primo quartile. È preferito perché non dipende dall'ipotesi di normalità e non viene esso stesso trascinato dai valori estremi, a differenza della regola basata sulle deviazioni standard.",
+  "fonte": "Tukey, Exploratory Data Analysis",
+  "riferimento": "IQR e boxplot"
+ },
+ {
+  "id": "STAT-20",
+  "tema": "statistica",
+  "domanda": "Che cos'è l'asimmetria di una distribuzione e che effetto ha sull'analisi?",
+  "risposta": "La misura in cui la distribuzione si allunga da un lato. Con forte asimmetria positiva media e mediana divergono, i test che assumono normalità perdono validità, e spesso conviene una trasformazione o un metodo non parametrico.",
+  "fonte": "Statistica descrittiva — testi standard",
+  "riferimento": "Skewness"
+ },
+ {
+  "id": "STAT-21",
+  "tema": "statistica",
+  "domanda": "Che cos'è uno z-score?",
+  "risposta": "Il numero di deviazioni standard che separano un valore dalla media di riferimento. In ambito nutrizionale gli z-score rispetto agli standard di crescita OMS sono il criterio per classificare la malnutrizione acuta.",
+  "fonte": "WHO Child Growth Standards",
+  "riferimento": "Z-scores e classificazione nutrizionale"
+ },
+ {
+  "id": "STAT-22",
+  "tema": "statistica",
+  "domanda": "Perché correlazione non implica causalità, e quali criteri aiutano a valutare la plausibilità causale?",
+  "risposta": "Perché l'associazione può derivare da confondimento, causalità inversa o caso. I criteri di Bradford Hill — forza, coerenza, specificità, temporalità, gradiente, plausibilità, coerenza teorica, evidenza sperimentale, analogia — offrono un quadro di valutazione, non una prova.",
+  "fonte": "Bradford Hill (1965)",
+  "riferimento": "The environment and disease: association or causation?"
+ },
+ {
+  "id": "STAT-23",
+  "tema": "statistica",
+  "domanda": "Che cos'è il campionamento con probabilità proporzionale alla dimensione?",
+  "risposta": "Un metodo in cui la probabilità di selezione di un'unità primaria è proporzionale alla sua popolazione, così che ogni individuo abbia la stessa probabilità complessiva di essere selezionato nel disegno a due stadi.",
+  "fonte": "Metodologia del campionamento",
+  "riferimento": "PPS sampling"
+ },
+ {
+  "id": "STAT-24",
+  "tema": "statistica",
+  "domanda": "Che cos'è il sampling frame e qual è l'errore che genera quando è incompleto?",
+  "risposta": "L'elenco da cui si estrae il campione. Se non copre l'intera popolazione target genera errore di copertura: le unità escluse hanno probabilità zero di essere selezionate e nessuna ponderazione a posteriori può correggere l'omissione.",
+  "fonte": "Metodologia del campionamento",
+  "riferimento": "Coverage error"
+ },
+ {
+  "id": "STAT-25",
+  "tema": "statistica",
+  "domanda": "Che cos'è la standardizzazione di un tasso e perché serve nel confronto fra popolazioni?",
+  "risposta": "L'aggiustamento di un tasso grezzo rispetto a una struttura di popolazione di riferimento, tipicamente per età. Serve perché due popolazioni con strutture demografiche diverse producono tassi grezzi non confrontabili anche a parità di rischio effettivo.",
+  "fonte": "Epidemiologia — testi standard",
+  "riferimento": "Direct e indirect standardization"
+ },
+ {
+  "id": "STAT-26",
+  "tema": "statistica",
+  "domanda": "Perché un aumento del numero registrato di casi non equivale a un aumento dell'incidenza?",
+  "risposta": "Perché può riflettere un cambiamento nella capacità di rilevazione: più strutture attive, migliore accesso, nuovi criteri diagnostici o semplicemente una migliore segnalazione. Senza denominatore e senza sforzo di sorveglianza costante, la serie storica non è interpretabile.",
+  "fonte": "Epidemiologia — sorveglianza",
+  "riferimento": "Artefatti di sorveglianza"
+ }
+]

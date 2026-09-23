@@ -1,0 +1,306 @@
+[
+ {
+  "nome": "EDPB — News",
+  "url": "https://www.edpb.europa.eu/feed/news_en",
+  "metodo": "rss",
+  "categoria": "governance",
+  "lingua": "en",
+  "peso": 0.95
+ },
+ {
+  "nome": "Garante Privacy — Comunicati",
+  "url": "https://www.garanteprivacy.it/web/guest/home/docweb",
+  "metodo": "scrape",
+  "categoria": "governance",
+  "lingua": "it",
+  "peso": 0.95
+ },
+ {
+  "nome": "EUR-Lex — Nuovi atti",
+  "url": "https://eur-lex.europa.eu/EN/index.htm",
+  "metodo": "scrape",
+  "categoria": "governance",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "AI Act Explorer / Future of Life",
+  "url": "https://artificialintelligenceact.eu/feed/",
+  "metodo": "rss",
+  "categoria": "governance",
+  "lingua": "en",
+  "peso": 0.8
+ },
+ {
+  "nome": "ENISA — Publications",
+  "url": "https://www.enisa.europa.eu/media/news-items/news-wires/RSS",
+  "metodo": "rss",
+  "categoria": "sicurezza",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "noyb",
+  "url": "https://noyb.eu/en/rss.xml",
+  "metodo": "rss",
+  "categoria": "governance",
+  "lingua": "en",
+  "peso": 0.7
+ },
+ {
+  "nome": "Agenda Digitale",
+  "url": "https://www.agendadigitale.eu/feed/",
+  "metodo": "rss",
+  "categoria": "governance",
+  "lingua": "it",
+  "peso": 0.7
+ },
+ {
+  "nome": "Guerre di Rete",
+  "url": "https://guerredirete.substack.com/feed",
+  "metodo": "rss",
+  "categoria": "sicurezza",
+  "lingua": "it",
+  "peso": 0.8
+ },
+ {
+  "nome": "dbt Labs — Blog",
+  "url": "https://www.getdbt.com/blog/rss.xml",
+  "metodo": "rss",
+  "categoria": "dati",
+  "lingua": "en",
+  "peso": 0.8
+ },
+ {
+  "nome": "DuckDB — Blog",
+  "url": "https://duckdb.org/feed.xml",
+  "metodo": "rss",
+  "categoria": "dati",
+  "lingua": "en",
+  "peso": 0.8
+ },
+ {
+  "nome": "MotherDuck — Blog",
+  "url": "https://motherduck.com/blog/rss.xml",
+  "metodo": "rss",
+  "categoria": "dati",
+  "lingua": "en",
+  "peso": 0.7
+ },
+ {
+  "nome": "Jack Vanlightly",
+  "url": "https://jack-vanlightly.com/feed",
+  "metodo": "rss",
+  "categoria": "dati",
+  "lingua": "en",
+  "peso": 0.8
+ },
+ {
+  "nome": "Data Engineering Weekly",
+  "url": "https://www.dataengineeringweekly.com/feed",
+  "metodo": "rss",
+  "categoria": "dati",
+  "lingua": "en",
+  "peso": 0.7
+ },
+ {
+  "nome": "Simon Willison",
+  "url": "https://simonwillison.net/atom/everything/",
+  "metodo": "rss",
+  "categoria": "ia",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Seattle Data Guy",
+  "url": "https://seattledataguy.substack.com/feed",
+  "metodo": "rss",
+  "categoria": "dati",
+  "lingua": "en",
+  "peso": 0.55
+ },
+ {
+  "nome": "Hugging Face — Daily Papers",
+  "url": "https://huggingface.co/papers",
+  "metodo": "scrape",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.9
+ },
+ {
+  "nome": "arXiv cs.DB",
+  "url": "http://export.arxiv.org/rss/cs.DB",
+  "metodo": "rss",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.75
+ },
+ {
+  "nome": "arXiv cs.CL",
+  "url": "http://export.arxiv.org/rss/cs.CL",
+  "metodo": "rss",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.75
+ },
+ {
+  "nome": "arXiv cs.SE",
+  "url": "http://export.arxiv.org/rss/cs.SE",
+  "metodo": "rss",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.7
+ },
+ {
+  "nome": "OpenAlex API",
+  "url": "https://api.openalex.org/works",
+  "metodo": "api",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Semantic Scholar API",
+  "url": "https://api.semanticscholar.org/graph/v1",
+  "metodo": "api",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Anthropic — Engineering",
+  "url": "https://www.anthropic.com/engineering",
+  "metodo": "scrape",
+  "categoria": "ia",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Import AI — Jack Clark",
+  "url": "https://importai.substack.com/feed",
+  "metodo": "rss",
+  "categoria": "ia",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Ahead of AI — Sebastian Raschka",
+  "url": "https://magazine.sebastianraschka.com/feed",
+  "metodo": "rss",
+  "categoria": "ia",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Google Scholar — Avvisi via email",
+  "url": "mailto:percorso-alerts",
+  "metodo": "email",
+  "categoria": "ricerca",
+  "lingua": "en",
+  "peso": 0.9
+ },
+ {
+  "nome": "OCHA Centre for Humanitarian Data",
+  "url": "https://centre.humdata.org/feed/",
+  "metodo": "rss",
+  "categoria": "umanitario",
+  "lingua": "en",
+  "peso": 0.95
+ },
+ {
+  "nome": "ICRC — Humanitarian Law & Policy",
+  "url": "https://blogs.icrc.org/law-and-policy/feed/",
+  "metodo": "rss",
+  "categoria": "umanitario",
+  "lingua": "en",
+  "peso": 0.9
+ },
+ {
+  "nome": "MSF Field Research",
+  "url": "https://fieldresearch.msf.org/rss",
+  "metodo": "rss",
+  "categoria": "umanitario",
+  "lingua": "en",
+  "peso": 0.95
+ },
+ {
+  "nome": "Epicentre",
+  "url": "https://epicentre.msf.org/en/rss.xml",
+  "metodo": "rss",
+  "categoria": "umanitario",
+  "lingua": "en",
+  "peso": 0.9
+ },
+ {
+  "nome": "The New Humanitarian",
+  "url": "https://www.thenewhumanitarian.org/rss.xml",
+  "metodo": "rss",
+  "categoria": "umanitario",
+  "lingua": "en",
+  "peso": 0.75
+ },
+ {
+  "nome": "ALNAP",
+  "url": "https://www.alnap.org/rss.xml",
+  "metodo": "rss",
+  "categoria": "umanitario",
+  "lingua": "en",
+  "peso": 0.8
+ },
+ {
+  "nome": "DHIS2 — News",
+  "url": "https://dhis2.org/feed/",
+  "metodo": "rss",
+  "categoria": "salute",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "Lancet Digital Health",
+  "url": "https://www.thelancet.com/rssfeed/landig_current.xml",
+  "metodo": "rss",
+  "categoria": "salute",
+  "lingua": "en",
+  "peso": 0.9
+ },
+ {
+  "nome": "BMJ Health & Care Informatics",
+  "url": "https://informatics.bmj.com/rss/current.xml",
+  "metodo": "rss",
+  "categoria": "salute",
+  "lingua": "en",
+  "peso": 0.85
+ },
+ {
+  "nome": "WHO — Bulletin",
+  "url": "https://www.who.int/rss-feeds/news-english.xml",
+  "metodo": "rss",
+  "categoria": "salute",
+  "lingua": "en",
+  "peso": 0.8
+ },
+ {
+  "nome": "MIT Sloan Management Review",
+  "url": "https://sloanreview.mit.edu/feed/",
+  "metodo": "rss",
+  "categoria": "gestione",
+  "lingua": "en",
+  "peso": 0.75
+ },
+ {
+  "nome": "CIO Dive",
+  "url": "https://www.ciodive.com/feeds/news/",
+  "metodo": "rss",
+  "categoria": "gestione",
+  "lingua": "en",
+  "peso": 0.6
+ },
+ {
+  "nome": "Google SRE — Blog",
+  "url": "https://sre.google/",
+  "metodo": "scrape",
+  "categoria": "gestione",
+  "lingua": "en",
+  "peso": 0.7
+ }
+]

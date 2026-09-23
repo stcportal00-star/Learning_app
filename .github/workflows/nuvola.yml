@@ -1,0 +1,240 @@
+# Porta la rassegna del giorno su Supabase: articoli catalogati, PDF scaricati,
+# testo estratto, tutto dentro lo schema `percorso` e il deposito `biblioteca`.
+#
+# È il secondo anello della catena. `rassegna.yml` costruisce il catalogo e lo
+# conserva nella release "rassegna"; `nuvola.yml` lo riprende, lo pubblica e
+# rimette a posto lo stato. Sono separati perché la rassegna deve continuare a
+# girare anche il giorno in cui Supabase è irraggiungibile: un archivio che non
+# risponde fa perdere un giorno di letture, ma un catalogo mai costruito fa
+# perdere quel giorno per sempre.
+#
+# Lo stato viaggia nella stessa release a tag fisso di `rassegna.yml`, non in un
+# commit: una corsa al giorno per un anno sono trecentosessantacinque commit di
+# rumore. I due workflow non si pestano i piedi grazie al gruppo di concorrenza
+# qui sotto, non alle ore: `rassegna.yml` non ha più un cron proprio — si avvia
+# solo a mano — quindi separare gli orari non proteggerebbe niente.
+name: nuvola
+
+on:
+  # Tre cron per un lavoro quotidiano sembrano un errore. Non lo sono.
+  #
+  # L'obiettivo è le 08:00 locali dell'utente: Città del Messico fino al
+  # 2 ottobre 2026 escluso, Roma da lì in poi. GitHub Actions accetta solo cron
+  # in UTC e non sa nulla dei fusi, tanto meno dell'ora legale. Quindi si
+  # accendono tutte e tre le ore UTC che in qualche configurazione valgono le
+  # 08:00 locali, e il primo passo del job — quello sì con zoneinfo — decide se
+  # questa è la corsa giusta e chiude subito le altre due.
+  #
+  # Ne passa sempre esattamente una, e il ritorno all'ora solare di Roma del
+  # 25 ottobre 2026 si sistema da solo: da quel giorno è il cron delle 07:00 a
+  # cadere sulle 08:00 e quello delle 06:00 a essere scartato. Nessuno deve
+  # ricordarsi di riaprire questo file mentre è in viaggio.
+  schedule:
+    - cron: "0 14 * * *"   # 08:00 a Città del Messico (UTC-6 tutto l'anno, lì l'ora legale è abolita)
+    - cron: "0 6 * * *"    # 08:00 a Roma con l'ora legale (CEST, UTC+2)
+    - cron: "0 7 * * *"    # 08:00 a Roma con l'ora solare (CET, UTC+1)
+  workflow_dispatch:
+    inputs:
+      giorni:
+        description: "Ampiezza della finestra in giorni"
+        default: "1"
+      diagnosi:
+        description: "si = solo la diagnosi dei permessi, in mezzo minuto"
+        default: "no"
+  push:
+    paths:
+      - "strumenti/nuvola/**"
+      - ".github/workflows/nuvola.yml"
+      # È la via con cui si carica un PDF a mano: lo si lascia cadere in
+      # biblioteca-manuale/ e da lì segue esattamente la stessa strada di un PDF
+      # trovato dalla rassegna — stesso deposito, stessa estrazione del testo,
+      # stessa riga in biblioteca. Non esiste un secondo percorso da mantenere.
+      - "biblioteca-manuale/**"
+
+# Stesso gruppo di `rassegna.yml`: i due toccano lo stesso `stato.tar` sulla
+# stessa release, e due corse in parallelo lascerebbero lo stato di chi finisce
+# per ultimo, buttando via il lavoro dell'altra. Con un gruppo solo si mettono
+# in fila.
+concurrency:
+  group: rassegna
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  nuvola:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # La decisione vive in strumenti/nuvola/cancello.py, non qui: dentro un
+      # workflow non si può provare, e un cancello sbagliato non fa rumore —
+      # la rassegna semplicemente non esce, e ce ne si accorge dopo giorni, in
+      # viaggio, quando è tardi. Là è provata su millecinquecento giorni, con
+      # la regola che conta: ogni giorno ESATTAMENTE una corsa, alle otto
+      # locali, col fuso giusto per la data.
+      - name: Cancello dell'orario
+        id: orario
+        env:
+          # Il cron che ha acceso questa corsa; vuoto su dispatch e su push.
+          CRON: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.diagnosi }}" = "si" ]; then
+            echo "Solo diagnosi: si salta tutto il resto."
+            echo "esegui=si" >> "$GITHUB_OUTPUT"
+            echo "solo=si" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "solo=no" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            echo "Avvio $GITHUB_EVENT_NAME: il cancello non si applica, si corre."
+            echo "esegui=si" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 strumenti/nuvola/cancello.py --cron "$CRON"
+
+      # Prima di qualunque passo di rete, e senza rete: una conduttura rotta
+      # non deve poter scrivere sul database. Un upsert sbagliato su
+      # `biblioteca` si ripara a mano, e da qui non c'è nessuna mano.
+      - name: Verifica della conduttura (nessuna rete)
+        if: steps.orario.outputs.esegui == 'si'
+        run: python3 strumenti/nuvola/verifica_nuvola.py
+
+      # Gira sempre, prima di toccare gli archivi: se i permessi non ci sono,
+      # il motivo resta scritto qui invece di essere dedotto da un rapporto
+      # mancante. continue-on-error perche' e' una diagnosi, non un cancello:
+      # il cancello vero e' `pubblica.py`, che si ferma da se'.
+      - name: Diagnosi dei permessi su Supabase
+        if: steps.orario.outputs.esegui == 'si'
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
+        run: python3 strumenti/nuvola/diagnosi.py
+
+      - name: Stato precedente della rassegna
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
+        id: stato
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p rassegna
+          if gh release download rassegna --repo "$GITHUB_REPOSITORY" \
+               --pattern "stato.tar" --dir . 2>/dev/null; then
+            tar -xf stato.tar
+            echo "Ripreso: $(python3 -c "import json;print(len(json.load(open('rassegna/catalogo.json'))))" 2>/dev/null || echo 0) voci in catalogo"
+          else
+            echo "Nessuno stato precedente: si prosegue lo stesso, il catalogo si ricostruisce."
+          fi
+
+      - name: Catalogo delle nuove uscite
+        id: catalogo
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
+        env:
+          PERCORSO_CONTATTO: ${{ secrets.PERCORSO_CONTATTO }}
+          GIORNI: ${{ github.event.inputs.giorni || '1' }}
+        run: |
+          set -euo pipefail
+          python3 strumenti/rassegna/catalogo.py --cartella rassegna --giorni "$GIORNI"
+
+      - name: Ricerca delle copie accessibili
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          # Unpaywall lo pretende: senza, non parte affatto e ogni voce con DOI
+          # perde la fonte che da sola dice se ne esiste una copia aperta.
+          PERCORSO_CONTATTO: ${{ secrets.PERCORSO_CONTATTO }}
+        run: |
+          set -euo pipefail
+          # Venticinque voci e dieci minuti. Il tetto di tempo è quello che
+          # conta: ogni voce interroga fino a sei archivi con trenta secondi di
+          # attesa ciascuno, quindi il numero di voci non dice quanto durerà.
+          # Senza, questo passo si mangia il job e non si arriva a pubblicare.
+          python3 strumenti/rassegna/ricercatore.py \
+            --catalogo rassegna/catalogo.json \
+            --solo-senza-testo --massimo 25 --minuti 10 \
+            --uscita rassegna/trovati.json
+
+      - name: Pubblicazione su Supabase
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
+        env:
+          # Se il segreto non è impostato la variabile resta vuota e il modulo
+          # ricade sulla chiave publishable incorporata in cliente.py. È voluto:
+          # quella chiave è la stessa che finisce dentro l'APK, ciò che protegge
+          # i dati sono le regole RLS dello schema `percorso`. Il segreto serve
+          # solo a ruotarla senza ripubblicare il codice.
+          SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
+        run: |
+          set -euo pipefail
+          python3 strumenti/nuvola/pubblica.py \
+            --cartella rassegna --manuale biblioteca-manuale
+
+      # Si salva appena il catalogo è stato costruito, ANCHE se Supabase non ha
+      # risposto. È il motivo per cui i due workflow sono separati (vedi in
+      # testa): il catalogo è l'unica copia della raccolta del giorno. La
+      # finestra di `catalogo.py` è mobile — `finestra()` parte da adesso meno
+      # `--giorni` e `setaccia()` scarta come "fuori_finestra" tutto ciò che è
+      # più vecchio — quindi una voce raccolta oggi e non salvata domani NON si
+      # rifà: le fonti non la restituiscono più. Tenerla costa nulla, perché
+      # `pubblica.py` salta ciò che è già in archivio e riprende dal catalogo
+      # quello che ieri non è riuscito a scrivere.
+      - name: Stato aggiornato nella release
+        if: always() && steps.orario.outputs.esegui == 'si' && steps.catalogo.outcome == 'success' && steps.orario.outputs.solo != 'si'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -f rassegna/catalogo.json ] || [ ! -f rassegna/visti.json ]; then
+            echo "Catalogo o elenco dei visti mancante: non ripubblico uno stato parziale."
+            exit 0
+          fi
+          tar -cf stato.tar rassegna/catalogo.json rassegna/visti.json
+          # Lo zip leggibile dal telefono: è ciò che `rassegna.yml` pubblicava
+          # quando aveva ancora un cron suo. Il segnalibro alla release non
+          # deve smettere di funzionare solo perché il lavoro ha cambiato casa.
+          zip -q -r rassegna.zip rassegna -x "rassegna/visti.json"
+
+          note=$(printf '%s\n\n---\n\n%s\n' \
+            "Catalogo aggiornato al $(date -u '+%d/%m/%Y %H:%M') UTC." \
+            "$(head -n 40 rassegna/nuvola.txt 2>/dev/null || echo 'Nessun rapporto di pubblicazione.')")
+
+          if gh release view rassegna --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit rassegna --repo "$GITHUB_REPOSITORY" --notes "$note"
+          else
+            gh release create rassegna --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "Rassegna — nuove pubblicazioni" --notes "$note"
+          fi
+          # nuvola.txt ha un nome tutto suo: `rassegna.yml` carica rapporto.txt
+          # sulla stessa release e due workflow che si sovrascrivono lo stesso
+          # asset lasciano un rapporto che non si sa di chi sia.
+          #
+          # I rapporti si caricano solo se esistono: `pubblica.py` esce senza
+          # scrivere nuvola.txt quando Supabase non risponde, e `gh release
+          # upload` fallisce in blocco su un percorso inesistente — si
+          # perderebbe anche stato.tar, cioè proprio la raccolta che questo
+          # passo esiste per mettere in salvo.
+          carica=(stato.tar rassegna.zip)
+          for f in rassegna/nuvola.txt rassegna/catalogo.md rassegna/rapporto.txt; do
+            if [ -f "$f" ]; then carica+=("$f"); fi
+          done
+          gh release upload rassegna "${carica[@]}" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      # always(): il rapporto serve soprattutto quando qualcosa è caduto, ed è
+      # l'unica cosa che l'utente legge dal telefono.
+      - name: Riepilogo
+        if: always() && steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
+        run: |
+          set -euo pipefail
+          {
+            echo "## Nuvola"
+            echo ""
+            echo '```'
+            cat rassegna/nuvola.txt 2>/dev/null || echo "Nessun rapporto: pubblica.py non è arrivato a scriverlo."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,99 @@
+/**
+ * Tentativo automatico di scambio quando l'app torna in primo piano.
+ *
+ * Con entrambi i dispositivi in tasca, questo è il meccanismo che evita la
+ * divergenza: prendi il telefono, l'app si riallinea prima che tu cominci.
+ * Se non ci riesce, non disturba: lo dirà il riquadro nella schermata Oggi.
+ */
+import { useEffect, useRef, useState } from "react";
+import { AppState, AppStateStatus } from "react-native";
+import { daSincronizzare, segnaSincronizzati, database, inTransazione, assorbiRemoto } from "../db";
+import { sincronizza, DiarioSync } from "./trasporto";
+import { TrasportoFile } from "./file";
+import { TrasportoWifi } from "./wifi";
+import { TrasportoVicinanza } from "./vicinanza";
+import { fondi } from "./fusione";
+import { applica } from "../nuvola/proiezione";
+import { EventoSerializzato } from "./pacchetto";
+import { decisioneCorrente, passphraseCorrente, registraScambio } from "./stato";
+
+export function useAutoSync(dispositivo: string) {
+  const [ultimoDiario, setUltimoDiario] = useState<DiarioSync>([]);
+  const inCorso = useRef(false);
+
+  async function tenta(forzato = false) {
+    if (inCorso.current) return;
+    const decisione = await decisioneCorrente(false);
+    if (!forzato && !decisione.tenta) return;
+
+    const passphrase = await passphraseCorrente();
+    if (!passphrase) return;
+
+    inCorso.current = true;
+    try {
+      const daInviare = (await daSincronizzare()) as unknown as EventoSerializzato[];
+      const r = await sincronizza(
+        [
+          new TrasportoVicinanza(dispositivo),
+          new TrasportoWifi(dispositivo),
+          // Il file richiede due tocchi: in automatico si prova solo se forzato.
+          ...(forzato ? [new TrasportoFile(dispositivo)] : []),
+        ],
+        daInviare,
+        { passphrase, timeoutMs: 15_000 }
+      );
+      setUltimoDiario(r.diario);
+
+      if (r.esito) {
+        // Prima di tutto l'orologio: assorbire il tempo del pacchetto è ciò
+        // che impedisce alla prossima modifica scritta qui di nascere più
+        // vecchia di quella appena ricevuta (invariante 2). Va fatto anche
+        // quando non arriva niente di nuovo, perché è l'ORA dell'altro
+        // dispositivo a contare, non la novità degli eventi.
+        await assorbiRemoto(r.esito.ricevuti.map((e) => e.hlc));
+        const d = database();
+        const locali = await d.getAllAsync<EventoSerializzato>(
+          "SELECT id, hlc, dispositivo, entita, entita_id, tipo, payload FROM eventi"
+        );
+        const f = fondi(locali, r.esito.ricevuti);
+        // In coda come le scritture dell'utente: un pacchetto che arriva
+        // mentre si salva una nota non deve più potersi accavallare.
+        await inTransazione(async (d) => {
+          for (const e of f.nuovi) {
+            await d.runAsync(
+              `INSERT OR IGNORE INTO eventi
+               (id, hlc, dispositivo, entita, entita_id, tipo, payload, sincronizzato)
+               VALUES (?,?,?,?,?,?,?,1)`,
+              [e.id, e.hlc, e.dispositivo, e.entita, e.entita_id, e.tipo, e.payload]
+            );
+          }
+          // E QUI la proiezione, nella stessa transazione degli eventi.
+          // Senza, questi tre trasporti scrivevano nel registro e lasciavano le
+          // tabelle operative com'erano: una nota scritta sul tablet arrivava
+          // sul telefono e restava invisibile. Sono proprio i trasporti che
+          // funzionano senza internet, cioè gli unici che ci saranno nei due
+          // mesi di viaggio; aspettare un passaggio da Supabase per veder
+          // comparire la riga significa non vederla mai.
+          await applica(d, f.entitaToccate);
+        });
+        await segnaSincronizzati(daInviare.map((e) => e.id));
+      }
+      await registraScambio(Boolean(r.esito));
+    } catch {
+      await registraScambio(false);
+    } finally {
+      inCorso.current = false;
+    }
+  }
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (s: AppStateStatus) => {
+      if (s === "active") void tenta(false);
+    });
+    void tenta(false);
+    const timer = setInterval(() => void tenta(false), 5 * 60_000);
+    return () => { sub.remove(); clearInterval(timer); };
+  }, [dispositivo]);
+
+  return { ultimoDiario, sincronizzaOra: () => tenta(true) };
+}
