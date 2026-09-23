@@ -16,6 +16,7 @@ rete esce dalla macchina: il server è locale e il modulo punta lì.
 import json
 import os
 import sys
+import time
 import threading
 import tempfile
 import shutil
@@ -61,6 +62,18 @@ class VincoloViolato(Exception):
 # delle esclusioni redazionali; la classifica dei dieci strumenti non prende
 # nessun tema e si ferma da sé. Un feed di redazione porta molto più rumore di
 # un archivio accademico, quindi qui i due filtri contano di più, non di meno.
+# Le tre pagine del sito senza feed. Il corpo deve superare i millecinquecento
+# caratteri e dominare la pagina: è così che `sintetizar_feed` distingue un
+# articolo da un elenco di collegamenti, ed è la distinzione su cui ReliefWeb
+# l'aveva ingannata.
+_CORPO_PIANO = ("Execution plan and cardinality estimation in a vectorized "
+                "execution engine over columnar storage. ") * 30
+SENZA_FEED = {
+    "piano-uno": ("Query plan regressions on columnar storage", _CORPO_PIANO),
+    "stima": ("Cardinality estimation after a schema migration", _CORPO_PIANO),
+    "costi": ("Cost model tuning for vectorized execution", _CORPO_PIANO),
+}
+
 FINTO_FEED = b"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
@@ -187,7 +200,7 @@ VERO_FALSO_NULLO = {"true": True, "false": False, "null": None}
 
 
 def filtra(righe, query):
-    """I due operatori che la conduttura usa: `col=eq.valore` e `col=is.true`.
+    """I tre operatori che la conduttura usa: `eq.`, `is.` e `in.(a,b)`.
 
     Un operatore che non è qui solleva invece di essere ignorato: il giorno in
     cui qualcuno aggiunge `col=gt.3` deve accorgersene subito, non scoprire fra
@@ -205,6 +218,12 @@ def filtra(righe, query):
                     raise FiltroSconosciuto("%s=%s" % (chiave, v))
                 atteso = VERO_FALSO_NULLO[v[3:]]
                 righe = [r for r in righe if r.get(chiave) is atteso]
+            elif v.startswith("in.(") and v.endswith(")"):
+                # PostgREST ammette le virgolette attorno ai valori; la
+                # conduttura non le usa, ma toglierle costa una riga e evita
+                # che un domani il filtro sembri non funzionare.
+                ammessi = {x.strip().strip('"') for x in v[4:-1].split(",")}
+                righe = [r for r in righe if str(r.get(chiave)) in ammessi]
             else:
                 raise FiltroSconosciuto("%s=%s" % (chiave, v))
     return righe
@@ -238,9 +257,39 @@ class FintoSupabase(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(dati)
 
+    def _sito_senza_feed(self, percorso):
+        """Un sito vero che non ha, e non ha mai avuto, un feed.
+
+        Non c'è nessun XML da scaricare: c'è un sitemap e ci sono pagine, ed è
+        con quelli che `fonti_core.sintetizar_feed` costruisce il feed. È la
+        forma che l'autoriparazione scrive in `url_feed` come `sitemap:`, e
+        senza questa strada quella riparazione produrrebbe una fonte attiva che
+        nessuno legge.
+        """
+        radice = "http://" + self.headers.get("Host", "127.0.0.1")
+        if percorso == "/sitemap.xml":
+            return ("<urlset>" + "".join(
+                "<url><loc>%s/note/%s</loc><lastmod>2026-01-01</lastmod></url>"
+                % (radice, nome) for nome in SENZA_FEED
+            ) + "</urlset>").encode("utf-8"), "application/xml"
+        nome = percorso[len("/note/"):] if percorso.startswith("/note/") else ""
+        if nome in SENZA_FEED:
+            titolo, corpo = SENZA_FEED[nome]
+            quando = time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                   time.gmtime(time.time() - 86400))
+            return ('<meta property="og:title" content="%s">'
+                    '<meta property="article:published_time" content="%s">'
+                    "<article>%s</article>" % (titolo, quando, corpo)
+                    ).encode("utf-8"), "text/html"
+        return None, None
+
     def do_GET(self):
         self._annota(None)
         u = urlparse(self.path)
+        corpo, tipo = self._sito_senza_feed(u.path)
+        if corpo is not None:
+            self._rispondi(200, corpo, tipo)
+            return
         if u.path.startswith("/rest/v1/"):
             tabella = u.path[len("/rest/v1/"):]
             righe = RICEVUTO["tabelle"].get(tabella, [])
@@ -402,6 +451,15 @@ def principale():
         "nome": "spenta", "url_feed": base + "/feed-che-non-esiste.xml",
         "url_sito": None, "metodo": "rss", "categoria": "gdpr", "lingua": "en",
         "peso": 0.9, "attiva": False,
+    }, {
+        # Un sito senza feed, riparato da `verifica_fonti.py` con `sitemap:`.
+        # Se il filtro dei metodi tornasse a `metodo=eq.rss` questa riga
+        # sparirebbe in silenzio — non fra i non riusciti, proprio via — e la
+        # riparazione risulterebbe applicata mentre non produce nulla.
+        "nome": "senza feed", "url_feed": "sitemap:" + base + "/",
+        "url_sito": base + "/", "metodo": "sitemap",
+        "categoria": "ottimizzazione", "lingua": "en",
+        "peso": 0.7, "attiva": True,
     }]
 
     # Un PDF vero quanto basta: i byte magici sono l'unica cosa che il
@@ -458,7 +516,8 @@ def principale():
     # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
     # una strada propria questo numero resterebbe due e le righe comparirebbero
     # da un'altra parte.
-    prova("cinque articoli: tre dal catalogo, due dal feed", len(articoli), 5)
+    prova("otto articoli: tre dal catalogo, due dal feed, tre dal sitemap",
+          len(articoli), 8)
     prova_vero(
         "il NUL e' stato tolto invece di far cadere il lotto",
         all("\x00" not in (r.get("abstract") or "") for r in articoli),
@@ -479,13 +538,13 @@ def principale():
     prova("un evento per ogni riga", len(eventi), len(articoli) + len(volumi))
 
     # ------------------------------------------------------------- il feed
-    prova("una fonte letta", rapporto["feed_letti"], 1)
+    prova("due fonti lette: una rss e una sitemap", rapporto["feed_letti"], 2)
     prova_vero(
         "la fonte spenta non è stata nemmeno chiesta",
         not any("spenta" in f for f in rapporto["falliti"]),
         repr(rapporto["falliti"]),
     )
-    prova("tre voci hanno superato la classificazione", rapporto["voci_da_feed"], 3)
+    prova("sei voci hanno superato la classificazione", rapporto["voci_da_feed"], 6)
     prova("e il comunicato stampa è stato tolto come rumore",
           rapporto["rumore_feed"], 1)
     prova_vero(
@@ -495,7 +554,18 @@ def principale():
         "esclusioni redazionali non viene applicato alle voci RSS",
     )
     da_feed = [r for r in articoli if (r.get("fonte") or "").startswith("rss[")]
-    prova("due articoli del feed sono arrivati in tabella", len(da_feed), 2)
+    prova("cinque articoli dalle fonti sono arrivati in tabella", len(da_feed), 5)
+
+    # Il sito senza feed non ha un XML: queste tre righe esistono solo se il
+    # sitemap è stato letto, le pagine scaricate e il feed costruito. Contarle
+    # a parte dice QUALE metodo ha funzionato; il totale da solo no.
+    da_sitemap = sorted(r.get("titolo") for r in articoli
+                        if (r.get("fonte") or "") == "rss[senza feed]")
+    prova("il sito senza feed ha prodotto le sue tre pagine",
+          da_sitemap,
+          ["Cardinality estimation after a schema migration",
+           "Cost model tuning for vectorized execution",
+           "Query plan regressions on columnar storage"])
 
     # Le due voci senza <link> ripiegano entrambe sull'indirizzo del feed e
     # arrivano qui con lo stesso url e due chiavi diverse. `articoli` ha un
@@ -636,8 +706,8 @@ def principale():
     # torna identica. A fermarla è la deduplica per chiave, cioè lo stesso
     # meccanismo che ferma gli archivi. Senza questa riga la prova sopra
     # passerebbe anche se il feed non fosse stato letto affatto.
-    prova("il feed è stato riletto", rapporto2["feed_letti"], 1)
-    prova("e le stesse voci non si depositano due volte", rapporto2["voci_da_feed"], 3)
+    prova("i feed sono stati riletti", rapporto2["feed_letti"], 2)
+    prova("e le stesse voci non si depositano due volte", rapporto2["voci_da_feed"], 6)
 
     server.shutdown()
     shutil.rmtree(cartella, ignore_errors=True)

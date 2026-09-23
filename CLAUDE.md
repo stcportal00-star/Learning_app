@@ -96,7 +96,8 @@ rassegna.
 ### I feed RSS
 
 Nella stessa corsa entrano i feed dichiarati in `percorso.fonti`
-(`metodo = 'rss'`, `attiva = true`, in ordine di `peso` decrescente).
+(`metodo` fra `'rss'` e `'sitemap'`, `attiva = true`, in ordine di `peso`
+decrescente).
 `strumenti/nuvola/feed.py` legge RSS 2.0, Atom e RDF con lo stesso lettore,
 classifica le voci con la tassonomia della rassegna e le **innesta nel
 catalogo** prima della deduplica: da lì in giù una voce RSS è una voce come le
@@ -118,6 +119,23 @@ all'estrazione del testo — e un catalogo di titoli senza testo, in aereo, non
 si legge. Una fonte che non risponde non ferma le altre: finisce fra i «non
 riusciti» del rapporto.
 
+C'è una terza strada, stretta di proposito: **l'esplorazione**. Al massimo
+cinque voci al giorno (`temi_config.ESPLORAZIONE_MAX_DIA`) che nessun tema ha
+preso ma che sono articoli veri — almeno millecinquecento caratteri di testo,
+oppure un segnale di genere come «lessons learned» o «post-mortem» — entrano
+sotto lo slug `esplorazione`, che non è il diciottesimo tema: non sta in
+`modello_temi`, non ha trimestre, e ha rilevanza zero apposta, così se il tetto
+degli ottanta articoli taglia, taglia queste per prime. Un margine che ruba il
+posto al programma di studio smette di essere un margine.
+
+`'sitemap'` non è un secondo modo di leggere un feed: è ciò che resta quando un
+sito che vale la pena leggere non ne ha uno. `url_feed` vale allora
+`sitemap:https://sito/`, e `feed.scarica_fonte()` costruisce il feed dal sitemap
+e dalle pagine vere con `consegna_code/fonti_core.py` — lo stesso codice che gira
+nella verifica settimanale, perché due definizioni di «che cosa è un articolo»
+divergerebbero al primo sito strano. Quella riga la scrive l'autoriparazione di
+`verifica_fonti.py`, non la si compila a mano.
+
 Per aggiungere una fonte basta una riga in `percorso.fonti`: `nome`,
 `url_feed`, `categoria` (uno degli slug di `modello_temi`), `peso` fra 0 e 1.
 La categoria non entra nella classificazione — sarebbe un'etichetta che si
@@ -127,6 +145,50 @@ Per provare la lista prima di fidarsene:
 `nuvola.yml` con `diagnosi: si`. Dice quali rispondono, quante voci portano e
 quante di quelle prendono un tema: una fonte che risponde 200 e non porta
 niente in biblioteca è un guasto quanto un 404, e si vede solo così.
+
+### La verifica delle fonti (settimanale)
+
+`.github/workflows/fonti.yml` gira il lunedì alle 04:00 UTC — prima di tutti e
+tre i cron di `nuvola.yml`, qualunque sia il fuso di quella settimana — e il
+primo del mese va anche a cercarne di nuove. Sta fuori dalla corsa quotidiana
+perché scarica ogni feed, apre tre articoli per fonte per cercare il muro di
+pagamento e legge le pagine dei termini: un'ora di rete, che dentro le 08:00
+sarebbe una rassegna persa ogni mattina.
+
+`consegna_code/verifica_fonti.py` guarda e scrive un rapporto; non tocca la
+base. Decide `programma_fonti.py`, e decide poco: con 0 e 2 applica, con 2
+lancia anche lo scouting per i temi che `salud.md` marca ⚠️, con 3
+**non scrive niente** — l'interruttore è scattato, l'ambiente è rotto, e
+applicare quella lista spegnerebbe fonti sane — e al terzo 3 di fila avvisa.
+Con 1 avvisa e basta.
+
+Due cose senza le quali non funziona:
+
+- **La cartella `lavoro-fonti/` deve sopravvivere fra una corsa e l'altra.**
+  Viaggia in `stato-fonti.tar` sulla release `fonti`. Dentro ci sono
+  `estado_verifica.json` e `programma_fonti.json`: senza, l'interruttore di
+  crollo non ha con cosa confrontare e non scatta mai, cioè è una protezione
+  che sembra esserci.
+- **Si applica in una transazione sola**, con la funzione
+  `percorso.applica_fonti(jsonb)` della migrazione 004. Venti PATCH di
+  PostgREST sono venti transazioni: se la decima fallisce, la tabella resta
+  come nessuno ha deciso. La funzione riceve dati, mai SQL.
+
+Il primo del mese lo scouting propone fonti nuove, e le **inserisce spente**
+con `percorso.proponi_fonti(jsonb)`. Accenderle non è cosa sua: lo decide la
+verifica del lunedì dopo. È la gamba per cui la lista migliora da sola invece
+di invecchiare.
+
+**Non c'è nessun interruttore da girare a mano, ed è voluto.** Un permesso da
+concedere è proprio la cosa che dal 2 ottobre lascerebbe il sistema fermo senza
+che nessuno lo sappia: la rete non c'è, dal telefono non si aprono le Actions,
+e una fonte morta resterebbe morta fino a novembre. A proteggere sono i due
+interruttori, che misurano da soli se la corsa è credibile. `applica: no`
+sull'avvio manuale serve solo a guardare senza toccare.
+
+Setup fatto una volta sola, e già fatto: le migrazioni
+`strumenti/db/004_fonti_sitemap_e_applica.sql` (il CHECK con `sitemap` e le due
+funzioni) e `consegna_code/fonti_v4.sql` (le 57 fonti, tutte `attiva = false`).
 
 ### Se Supabase rifiuta
 

@@ -347,6 +347,23 @@ class Nuvola:
                 f"aggiungi l'intestazione giusta o togli il filtro")
         return dati
 
+    def chiama(self, funzione, argomenti=None):
+        """Una funzione del database via PostgREST: `POST /rest/v1/rpc/<nome>`.
+
+        È l'unico modo di fare più scritture in UNA transazione. Ogni PATCH è
+        una transazione per conto suo: a metà di venti PATCH la tabella resta
+        in uno stato che nessuno ha deciso, e non c'è modo di sapere quale metà
+        è passata senza rileggerle tutte.
+
+        Qui viaggiano dati, mai SQL. Una funzione che eseguisse il testo che le
+        arriva sarebbe una porta aperta con la chiave publishable che sta anche
+        dentro l'APK.
+        """
+        url = f"{self.base}/rest/v1/rpc/{urllib.parse.quote(funzione, safe='')}"
+        corpo = json.dumps(argomenti or {}, ensure_ascii=False).encode("utf-8")
+        _, risposta = self._esegui("POST", url, corpo, self._testate_scrittura())
+        return _da_json(risposta, f"chiamata a {funzione}") if risposta else None
+
     def innesta(self, tabella, righe, su_conflitto):
         """Upsert. `su_conflitto` sono le colonne del vincolo, es. "utente_id,url".
 

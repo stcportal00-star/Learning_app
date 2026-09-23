@@ -133,7 +133,7 @@ def prova_fonti():
 
     print("5 fonti RSS (%d attive)" % len(righe))
     if not righe:
-        print("    nessuna riga con metodo='rss' e attiva=true: la conduttura")
+        print("    nessuna riga attiva con metodo rss o sitemap: la conduttura")
         print("    girera' sui soli archivi aperti. Non e' un guasto.")
         return []
 
@@ -146,7 +146,10 @@ def prova_fonti():
             guasti.append("fonte %s" % nome)
             continue
         try:
-            dati, _ = scarica(url, massimo_byte=feed.MASSIMO_BYTE, timeout=15)
+            # `scarica_fonte` e non `scarica`: una fonte con metodo 'sitemap' non
+            # ha un XML da scaricare, ce l'ha da costruire. Provarla con lo
+            # scaricatore normale direbbe «404» di una fonte perfettamente sana.
+            dati = feed.scarica_fonte(url)
             voci = feed.analizza(dati, r.get("url_sito") or url)
         except Exception as e:  # noqa: BLE001
             print("  %-28s ---  NO  %s" % (nome, str(e)[:110]))
