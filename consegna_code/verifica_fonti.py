@@ -1,6 +1,7 @@
 """Verifica §8 (p0-p9) con AUTORREPARACIÓN de url_feed.
 Uso: python3 verifica_fonti.py fonti.sql [--sin-parche] [--licencia-estricta] [--sin-muro]
-Salidas: informe.csv, activar.sql (reparar -> activar -> desactivar), estado_verifica.json, salud.md
+Salidas: informe.csv, activar.sql (reparar -> activar -> desactivar), activar.json
+(los mismos cambios para percorso.applica_fonti), estado_verifica.json, salud.md
 Códigos de salida: 0 ok · 2 ok con avisos (tema sin fuentes / REVISAR) · 3 DISYUNTOR (no se escribió activar.sql) · 1 error de uso
   --sin-parche      solo si lessico_patch.MEDIDO NO está fusionado en el clasificador real
   --licencia-amplia decisión A: acepta 'Copyright/©' como licencia declarada
@@ -161,6 +162,35 @@ def sql_salida(rows):
         elif not r['motivo'].startswith('TRANSITORIO'): out.append(f"update percorso.fonti set attiva = false where url_feed = '{u}';  -- {com(r['motivo'][:80])}")
     return '\n'.join(out) + '\n'
 
+def cambios(rows):
+    """Las MISMAS decisiones de sql_salida(), en forma de datos.
+
+    `activar.sql` lo lee una persona; esto lo aplica `percorso.applica_fonti` en
+    una sola transacción. No se parsea el SQL para reconstruirlo: dos lecturas
+    del mismo texto acaban discrepando en el caso raro, que es justo el que
+    importa. Las dos salidas nacen de `rows`, y `test_adversarial` comprueba que
+    cubren exactamente las mismas fuentes.
+    """
+    out = []
+    for r in rows:
+        c = {'url_feed': r['url_feed']}
+        if r.get('url_nuevo'):
+            c['url_nuevo'] = r['url_nuevo']
+            if r.get('url_sito_nuevo'):
+                c['url_sito'] = r['url_sito_nuevo']
+            if r['url_nuevo'].startswith('sitemap:'):
+                c['metodo'] = 'sitemap'
+        if not r['motivo'].startswith('TRANSITORIO'):
+            # TRANSITORIO no toca `attiva`: una caída de red de hoy no apaga una
+            # fuente que ayer funcionaba. La reparación sí se aplica: no depende
+            # del estado de la red de esta corrida.
+            c['attiva'] = r['motivo'] == 'ACEPTADA'
+            c['motivo'] = com(r['motivo'])[:200]
+        if len(c) > 1:
+            out.append(c)
+    return out
+
+
 def estado(rows):
     est = json.load(open(ESTADO)) if os.path.exists(ESTADO) else {}
     for r in rows:
@@ -200,11 +230,13 @@ def salud(rows, motivo_disyuntor, path='salud.md'):
     open(path, 'w').write('\n'.join(L) + '\n')
     return avisos
 
-def escribir(rows, csv_path='informe.csv', sql_path='activar.sql'):
+def escribir(rows, csv_path='informe.csv', sql_path='activar.sql', json_path='activar.json'):
     campos = list(dict.fromkeys(k for r in rows for k in r))
     with open(csv_path, 'w', newline='') as fh:
         w = csv.DictWriter(fh, campos); w.writeheader(); w.writerows(rows)
     open(sql_path, 'w').write(sql_salida(rows))
+    with open(json_path, 'w', encoding='utf-8') as fh:
+        json.dump(cambios(rows), fh, ensure_ascii=False, indent=1)
 
 def verifica_segura(*a, **kw):
     try: return verifica(*a, **kw)
@@ -227,6 +259,9 @@ if __name__ == '__main__':
         with open('informe.csv', 'w', newline='') as fh:
             w = csv.DictWriter(fh, list(dict.fromkeys(k for r in rows for k in r))); w.writeheader(); w.writerows(rows)
         open('activar.sql', 'w').write(f'-- DISYUNTOR: {corte}. Sin cambios.\n')
+        # Vacío, no ausente: un programador que no encuentra el archivo no sabe
+        # si la corrida no llegó a escribirlo o si decidió no cambiar nada.
+        open('activar.json', 'w').write('[]\n')
         print(f'DISYUNTOR: {corte} -> activar.sql vacío, ver salud.md'); sys.exit(3)
     estado(rows); escribir(rows)
     est = json.load(open(ESTADO)); est['__aceptadas__'] = sum(r['motivo'] == 'ACEPTADA' for r in rows); json.dump(est, open(ESTADO, 'w'), indent=1)

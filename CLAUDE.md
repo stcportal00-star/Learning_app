@@ -146,6 +146,39 @@ Per provare la lista prima di fidarsene:
 quante di quelle prendono un tema: una fonte che risponde 200 e non porta
 niente in biblioteca è un guasto quanto un 404, e si vede solo così.
 
+### La verifica delle fonti (settimanale)
+
+`.github/workflows/fonti.yml` gira il lunedì alle 04:00 UTC — prima di tutti e
+tre i cron di `nuvola.yml`, qualunque sia il fuso di quella settimana — e il
+primo del mese va anche a cercarne di nuove. Sta fuori dalla corsa quotidiana
+perché scarica ogni feed, apre tre articoli per fonte per cercare il muro di
+pagamento e legge le pagine dei termini: un'ora di rete, che dentro le 08:00
+sarebbe una rassegna persa ogni mattina.
+
+`consegna_code/verifica_fonti.py` guarda e scrive un rapporto; non tocca la
+base. Decide `programma_fonti.py`, e decide poco: con 0 e 2 applica, con 2
+lancia anche lo scouting per i temi che `salud.md` marca ⚠️, con 3
+**non scrive niente** — l'interruttore è scattato, l'ambiente è rotto, e
+applicare quella lista spegnerebbe fonti sane — e al terzo 3 di fila avvisa.
+Con 1 avvisa e basta.
+
+Due cose senza le quali non funziona:
+
+- **La cartella `lavoro-fonti/` deve sopravvivere fra una corsa e l'altra.**
+  Viaggia in `stato-fonti.tar` sulla release `fonti`. Dentro ci sono
+  `estado_verifica.json` e `programma_fonti.json`: senza, l'interruttore di
+  crollo non ha con cosa confrontare e non scatta mai, cioè è una protezione
+  che sembra esserci.
+- **Si applica in una transazione sola**, con la funzione
+  `percorso.applica_fonti(jsonb)` della migrazione 004. Venti PATCH di
+  PostgREST sono venti transazioni: se la decima fallisce, la tabella resta
+  come nessuno ha deciso. La funzione riceve dati, mai SQL.
+
+Di default il workflow gira **a secco**: calcola tutto, pubblica `salud.md` e
+`informe.csv` sulla release, e non scrive. Per abilitare la scrittura serve la
+variabile di repository `FONTI_APPLICA = si`, e prima va applicata la
+migrazione `strumenti/db/004_fonti_sitemap_e_applica.sql`.
+
 ### Se Supabase rifiuta
 
 Prima cosa: `python3 strumenti/nuvola/diagnosi.py`, oppure l'avvio a mano di

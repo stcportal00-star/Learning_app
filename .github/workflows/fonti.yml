@@ -1,0 +1,152 @@
+# La verifica delle fonti: settimanale, e una volta al mese va anche a cercarne
+# di nuove per i temi rimasti scoperti.
+#
+# È il terzo anello, e sta fuori dalla corsa delle 08:00 apposta. `nuvola.yml`
+# deve restare corta e prevedibile: legge le fonti che trova accese e non
+# discute. Qui invece si scarica ogni feed, si aprono tre articoli per fonte per
+# cercare il muro di pagamento e si leggono le pagine dei termini — un'ora di
+# rete per cinquantasette fonti, che dentro la corsa quotidiana sarebbe una
+# rassegna persa ogni mattina.
+#
+# Gira il lunedì alle 04:00 UTC: prima di tutti e tre i cron di `nuvola.yml`
+# (06:00, 07:00 e 14:00), qualunque sia il fuso dell'utente quella settimana.
+# Così la corsa del lunedì mattina legge già le fonti riparate.
+name: fonti
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"    # settimanale: verifica e riparazione
+    - cron: "0 3 1 * *"    # mensile: scouting per i temi senza nessuna fonte
+  workflow_dispatch:
+    inputs:
+      applica:
+        description: "si = scrive davvero in percorso.fonti; no = marcia a secco"
+        default: "no"
+
+# `verifica_fonti.py` non scrive in `percorso.articoli` né tocca `stato.tar`, ma
+# `applica_fonti` cambia proprio la tabella che `nuvola.yml` sta leggendo: due
+# corse in parallelo e la rassegna legge una lista a metà strada.
+concurrency:
+  group: rassegna
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  fonti:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      # L'unica dipendenza di terze parti di tutto il progetto, e vive solo qui.
+      # `feedparser` serve a `fonti_core.feed()`; la conduttura delle 08:00 non
+      # lo usa e continua a girare con python3 nudo.
+      - name: feedparser
+        run: pip install --quiet feedparser
+
+      # La cartella di lavoro DEVE sopravvivere fra una corsa e l'altra: dentro
+      # ci sono `estado_verifica.json` (quante corse di fila una fonte ha
+      # fallito, e quante erano accettate la volta scorsa) e
+      # `programma_fonti.json` (quanti disyuntori di fila). Senza, l'interruttore
+      # di crollo non ha con cosa confrontare e non scatta mai — cioè una
+      # protezione che sembra esserci e non c'è.
+      - name: Stato precedente della verifica
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p lavoro-fonti
+          if gh release download fonti --repo "$GITHUB_REPOSITORY" \
+               --pattern "stato-fonti.tar" --dir . 2>/dev/null; then
+            tar -xf stato-fonti.tar
+            echo "Ripreso lo stato: $(ls lavoro-fonti | tr '\n' ' ')"
+          else
+            echo "Prima corsa: nessuno stato precedente. L'interruttore di crollo"
+            echo "non avrà un confronto questa volta, e va bene: lo avrà dalla prossima."
+          fi
+
+      # Il cancello vero della prima scrittura. Finché la variabile di
+      # repository FONTI_APPLICA non vale «si», qui si calcola tutto e non si
+      # tocca niente: il rapporto esce lo stesso e si legge dal telefono. La
+      # prima scrittura in una base che nessuno sorveglia è una decisione
+      # dell'utente, non un effetto collaterale di un merge.
+      - name: Verifica e applicazione
+        id: verifica
+        env:
+          SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
+          APPLICA: ${{ github.event.inputs.applica || vars.FONTI_APPLICA || 'no' }}
+        run: |
+          set -euo pipefail
+          secco=(--senza-applicare)
+          if [ "$APPLICA" = "si" ]; then
+            secco=()
+            echo "Applicazione ABILITATA: le decisioni finiscono in percorso.fonti."
+          else
+            echo "Marcia a secco: nessuna scrittura. Per abilitarla, imposta la"
+            echo "variabile di repository FONTI_APPLICA = si (Settings → Variables)."
+          fi
+          python3 consegna_code/programma_fonti.py consegna_code/fonti_v4.sql \
+            --lavoro lavoro-fonti "${secco[@]}"
+
+      # Solo il primo del mese. Il programmatore lancia già lo scouting quando la
+      # verifica esce con 2, cioè quando un tema resta senza fonti: questo passo
+      # serve al caso opposto, quello in cui nessun tema è scoperto ma la lista
+      # invecchia lo stesso. `proponer.sql` esce con attiva=false e peso 0.3:
+      # nessuna fonte si accende senza passare da `verifica_fonti.py`.
+      - name: Scouting mensile
+        if: github.event.schedule == '0 3 1 * *'
+        continue-on-error: true
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          temi=$(python3 consegna_code/programma_fonti.py \
+                   --temi-scoperti lavoro-fonti/salud.md)
+          if [ -z "$temi" ]; then
+            echo "Nessun tema scoperto: niente da cercare questo mese."
+            exit 0
+          fi
+          echo "Temi senza fonti: $temi"
+          cd lavoro-fonti
+          python3 ../consegna_code/scopri_fonti.py \
+            ../consegna_code/fonti_v4.sql --temi "$temi"
+
+      - name: Stato aggiornato nella release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ ! -d lavoro-fonti ]; then
+            echo "Nessuna cartella di lavoro: non ripubblico uno stato che non c'è."
+            exit 0
+          fi
+          tar -cf stato-fonti.tar lavoro-fonti
+          nota=$(printf '%s\n\n---\n\n%s\n' \
+            "Verifica delle fonti del $(date -u '+%d/%m/%Y %H:%M') UTC." \
+            "$(head -n 40 lavoro-fonti/salud.md 2>/dev/null || echo 'Nessun rapporto di salute.')")
+          if gh release view fonti --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit fonti --repo "$GITHUB_REPOSITORY" --notes "$nota"
+          else
+            gh release create fonti --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "Fonti — verifica settimanale" --notes "$nota"
+          fi
+          carica=(stato-fonti.tar)
+          for f in lavoro-fonti/salud.md lavoro-fonti/informe.csv \
+                   lavoro-fonti/activar.sql lavoro-fonti/proponer.sql; do
+            if [ -f "$f" ]; then carica+=("$f"); fi
+          done
+          gh release upload fonti "${carica[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Riepilogo
+        if: always()
+        run: |
+          set -euo pipefail
+          {
+            echo "## Fonti"
+            echo ""
+            echo '```'
+            cat lavoro-fonti/salud.md 2>/dev/null || echo "Nessun salud.md: la verifica non è arrivata a scriverlo."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

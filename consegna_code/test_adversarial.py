@@ -1,5 +1,5 @@
 """Pruebas ADVERSARIALES: cada una intenta romper una garantía. python3 test_adversarial.py"""
-import time, email.utils, json, importlib, pglast, feedparser
+import time, email.utils, json, importlib, os, shutil, tempfile, pglast, feedparser
 import fonti_core as K, verifica_fonti as V, scopri_fonti as S, temi_config as C
 K.configurar(parche=True)
 def d(sec): return email.utils.formatdate(time.time() - sec)
@@ -256,4 +256,87 @@ b2 = K.sintetizar_feed('https://relief.example.int/')
 n2 = b2.count(b'<item>') if b2 else 0
 ok(b2 is not None and n2 == 3 and b'countries' not in b2,
    f"H11 3 fechas de publicación recientes forman feed: {n2} voces")
+# ---------------------------------------------------------------- programador
+# El código 3 es el que justifica el archivo entero: el disyuntor salta cuando el
+# entorno está roto y media lista parece muerta. Aplicar esa lista apagaría
+# fuentes sanas, y volver a encenderlas exige saber cuáles eran.
+import programma_fonti as PR
+
+def _programa(codigo, lavoro, activar=None, salud='', est=None):
+    """Corre el programador con un verificador falso. Devuelve (hecho, aplicados, avisos)."""
+    with open(os.path.join(lavoro, 'activar.json'), 'w', encoding='utf-8') as fh:
+        json.dump(activar if activar is not None else [], fh)
+    with open(os.path.join(lavoro, 'salud.md'), 'w', encoding='utf-8') as fh:
+        fh.write(salud)
+    aplicados, avisos, buscados = [], [], []
+    hecho = PR.programar(
+        'fonti.sql', lavoro,
+        verificar=lambda sql, l: codigo,
+        aplicar=lambda c: aplicados.append(c),
+        descubrir=lambda t, sql, l: buscados.append(list(t)),
+        avisar=lambda t: avisos.append(t))
+    return hecho, aplicados, avisos, buscados
+
+CAMBIO = [{'url_feed': 'https://blog.ejemplo.org/feed.xml', 'attiva': True, 'motivo': 'ACEPTADA'}]
+SALUD_AVISO = ('| tema | aceptadas | candidatas | reparadas | revisar |\n'
+               '|---|---|---|---|---|\n'
+               '| ai_act | 0 ⚠️ | 3 | 0 | 0 |\n'
+               '| kpi | 4 | 5 | 0 | 0 |\n')
+
+_trabajo = tempfile.mkdtemp(prefix='fonti-')
+try:
+    h, ap, av, bu = _programa(0, _trabajo, CAMBIO)
+    ok(h['aplicados'] == 1 and ap == [CAMBIO] and not av and not bu,
+       f"S1 código 0: se aplica y nada más · {h}")
+
+    h, ap, av, bu = _programa(2, _trabajo, CAMBIO, SALUD_AVISO)
+    ok(h['aplicados'] == 1 and ap == [CAMBIO] and bu == [['ai_act']] and not av,
+       f"S2 código 2: se aplica y se busca para los temas con ⚠️ · {bu}")
+
+    # El caso que importa: con 3 la base no se toca. Ni una fila.
+    h, ap, av, bu = _programa(3, _trabajo, CAMBIO, SALUD_AVISO)
+    ok(ap == [] and bu == [] and av == [] and h['disyuntores_seguidos'] == 1,
+       f"S3 código 3: la base queda intacta · aplicados={ap} seguidos={h['disyuntores_seguidos']}")
+
+    # El contador vive en la carpeta de trabajo, no en memoria: es la razón por la
+    # que esa carpeta tiene que sobrevivir entre corridas.
+    h2, ap2, av2, _ = _programa(3, _trabajo, CAMBIO)
+    h3, ap3, av3, _ = _programa(3, _trabajo, CAMBIO)
+    ok(h2['disyuntores_seguidos'] == 2 and h3['disyuntores_seguidos'] == 3
+       and ap2 == [] and ap3 == [],
+       f"S4 el contador persiste entre corridas: {h2['disyuntores_seguidos']}, {h3['disyuntores_seguidos']}")
+    ok(av2 == [] and len(av3) == 1 and '3 corridas seguidas' in av3[0],
+       f"S5 se avisa al tercero, no antes: {av3}")
+
+    # Un 0 borra la racha: el disyuntor cuenta seguidos, no acumulados.
+    h, ap, av, bu = _programa(0, _trabajo, CAMBIO)
+    ok(h['disyuntores_seguidos'] == 0 and h['aplicados'] == 1,
+       f"S6 una corrida buena borra la racha · {h['disyuntores_seguidos']}")
+
+    # El 1 es error de uso, no del entorno: avisa y no toca la cuenta.
+    _programa(3, _trabajo, CAMBIO)
+    h, ap, av, bu = _programa(1, _trabajo, CAMBIO)
+    ok(ap == [] and len(av) == 1 and h['disyuntores_seguidos'] == 1,
+       f"S7 código 1: avisa, no aplica y no falsea la racha · {h['disyuntores_seguidos']}")
+finally:
+    shutil.rmtree(_trabajo, ignore_errors=True)
+
+# Las dos salidas nacen de las mismas filas: si un día divergen, diverge lo que
+# lee una persona de lo que aplica la máquina, y eso no se ve hasta que duele.
+_FILAS = [
+    {'nome': 'a', 'url_feed': 'https://a/f', 'motivo': 'ACEPTADA'},
+    {'nome': 'b', 'url_feed': 'https://b/f', 'url_nuevo': 'sitemap:https://b/',
+     'url_sito_nuevo': 'https://b/', 'reparacion': 'feed sintetizado',
+     'motivo': 'ACEPTADA'},
+    {'nome': 'c', 'url_feed': 'https://c/f', 'motivo': 'TRANSITORIO (URLError)'},
+    {'nome': 'd', 'url_feed': 'https://d/f', 'motivo': 'p1 roto (HTTP 404)'},
+]
+_sql = V.sql_salida(_FILAS)
+_js = V.cambios(_FILAS)
+ok({c['url_feed'] for c in _js} == {f['url_feed'] for f in _FILAS if not f['motivo'].startswith('TRANSITORIO')}
+   and all((c['url_feed'] in _sql) for c in _js)
+   and any(c.get('metodo') == 'sitemap' for c in _js)
+   and 'https://c/f' not in {c['url_feed'] for c in _js},
+   f"S8 activar.sql y activar.json cubren las mismas fuentes: {len(_js)} cambios")
+
 print(f'\n{sum(R)}/{len(R)} adversariales OK')
