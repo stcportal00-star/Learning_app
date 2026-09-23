@@ -21,6 +21,8 @@
  *     il suo `url_media`: se un giorno c'è rete e lo si rivuole, si riscarica.
  */
 import { File, Directory, Paths } from "expo-file-system";
+import * as IntentLauncher from "expo-intent-launcher";
+import * as Sharing from "expo-sharing";
 import { database, registra } from "../db";
 import type { Articolo } from "./articoli";
 
@@ -99,6 +101,44 @@ export async function scaricaMedia(
 
   await d.runAsync("UPDATE articoli SET file_media = ? WHERE id = ?", [uri, id]);
   return { stato: "in_cache", byte };
+}
+
+/**
+ * Apre l'allegato con il lettore del sistema, per la stessa strada di
+ * `apriVolume()` in lib/palestra.ts, e per la stessa ragione: nessun modulo
+ * nativo di terze parti.
+ *
+ * `expo-video` sta nel catalogo di Expo e si potrebbe adottare, ma a otto
+ * giorni dalla scadenza un modulo nativo in più è un rischio che si paga tutto
+ * in una volta — un crash nativo, senza PC e senza adb, non lascia niente da
+ * leggere. Android un lettore audio e video ce l'ha già, funziona offline e
+ * ricorda da solo il punto. Dentro l'app si decide che cosa è stato visto, che
+ * è l'unica cosa che l'app deve sapere.
+ */
+export async function apriMedia(
+  id: string
+): Promise<"aperto" | "non_scaricato" | "nessun_lettore"> {
+  const a = await database().getFirstAsync<Articolo>(
+    "SELECT * FROM articoli WHERE id = ?", [id]);
+  if (!a?.file_media) return "non_scaricato";
+  const f = new File(a.file_media);
+  if (!f.exists) return "non_scaricato";
+  const tipo = a.tipo_media || "audio/mpeg";
+  try {
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      data: f.contentUri,
+      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION: il lettore esterno deve poter leggere il file
+      type: tipo,
+    });
+    return "aperto";
+  } catch {
+    // Nessuna app registrata per quel tipo: si passa dal foglio di condivisione.
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(f.uri, { mimeType: tipo });
+      return "aperto";
+    }
+    return "nessun_lettore";
+  }
 }
 
 /** Cancella la copia locale e basta. Non tocca `visto_a`: non è la stessa cosa. */

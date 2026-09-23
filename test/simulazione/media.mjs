@@ -185,6 +185,54 @@ ok("M8 e il file non c'è più", !new fs.File(fileM7).exists);
 uguale("M8 ma NON segna la voce come vista", (await leggi("m7")).visto_a, null);
 uguale("M8 e non scrive eventi", (await eventiDi("m7")).length, 0);
 
+// ================================================================= M9 lettore
+// L'allegato si apre con il lettore del sistema, come i PDF della biblioteca:
+// zero moduli nativi in più, e Android il lettore ce l'ha già. Il ramo che si
+// rompe sul telefono di qualcun altro è il ripiego, quindi si prova tutto.
+const intent = await import("expo-intent-launcher");
+const condivisione = await import("expo-sharing");
+
+fs.azzeraRete();
+intent.azzera();
+condivisione.azzera();
+await inserisci("m9-senza-file");
+uguale("M9 senza copia locale non si apre niente",
+  await media.apriMedia("m9-senza-file"), "non_scaricato");
+uguale("M9 e nessun intent parte", intent.giornale.length, 0);
+
+fs.rispondi(URL_AUDIO, BYTE);
+await inserisci("m9", { tipo_media: "video/mp4" });
+await media.scaricaMedia("m9");
+uguale("M9 con la copia locale si apre", await media.apriMedia("m9"), "aperto");
+const chiamata = intent.giornale.at(-1);
+uguale("M9 con l'azione VIEW", chiamata.azione, "android.intent.action.VIEW");
+uguale("M9 e il tipo che la fonte dichiara", chiamata.parametri.type, "video/mp4");
+// Senza FLAG_GRANT_READ_URI_PERMISSION il lettore esterno riceve un indirizzo
+// che non ha il permesso di leggere, e si apre su un errore invece che sul video.
+uguale("M9 e il permesso di lettura sull'indirizzo", chiamata.parametri.flags, 1);
+
+intent.programmaNessunVisore(true);
+uguale("M9 senza lettore registrato si ripiega sul foglio di condivisione",
+  await media.apriMedia("m9"), "aperto");
+uguale("M9 e il foglio riceve il file",
+  (condivisione.giornale.at(-1) || {}).chiamata, "shareAsync");
+
+condivisione.programmaDisponibilita(false);
+uguale("M9 senza nemmeno il foglio lo dice, invece di fingere",
+  await media.apriMedia("m9"), "nessun_lettore");
+intent.programmaNessunVisore(false);
+condivisione.programmaDisponibilita(true);
+
+// La riga dice che il file c'è, il disco dice di no: una pulizia del sistema.
+// Senza questo controllo l'intent parte su un indirizzo vuoto e il lettore si
+// apre su un errore, che in aereo non si distingue da un'app rotta.
+const contateInizio = intent.giornale.length;
+await base.runAsync("UPDATE articoli SET file_media = ? WHERE id = ?",
+  ["file:///tmp/cartella-che-non-esiste/m9.mp4", "m9"]);
+uguale("M9 con il file sparito dal disco non si apre niente",
+  await media.apriMedia("m9"), "non_scaricato");
+uguale("M9 e nessun intent parte lo stesso", intent.giornale.length, contateInizio);
+
 // ================================================================= ESITO
 if (guasti.length) {
   console.log("SIMULAZIONE DEI MEDIA: ROSSA\n");
