@@ -105,6 +105,25 @@ altre, stessa deduplica per titolo, stessa estrazione del testo, stesso evento.
 Non esiste una seconda strada, e non deve esistere: sarebbe una seconda
 deduplica da tenere allineata alla prima.
 
+**Il lessico parla quattro lingue, e l'inglese resta il riferimento.** I termini
+italiani, spagnoli e francesi stanno nel blocco `ALTRE_LINGUE` di
+`specializzazioni.py` e si fondono in **coda** alle liste inglesi: `scopri_fonti.py`
+e `test_fonti.py` leggono `FUERTES[slug][:2]` e `[:4]` come parole con cui
+interrogare iTunes e Hacker News, e quelle si interrogano in inglese. Chi
+aggiunge termini li mette in quel blocco, non dentro `SPECIALIZZAZIONI`, e mai
+in testa. Due regole: locuzioni e non parole singole, e nessuna stringa che
+tolti gli accenti sia anche una parola comune di un'altra lingua — lo spagnolo
+«red» diventa «red», che in inglese è un colore. Le prove che contano sono in
+`verifica_rassegna.py`, in fondo: quindici testi veri che devono prendere un
+tema e otto che non devono prenderne nessuno. La seconda metà non è decorativa —
+un lessico che assegna un tema a tutto supererebbe la prima.
+
+Prima di cambiare il lessico, misura lo scarto sulle voci vere invece di
+fidarti: `stato.tar` sulla release `rassegna` porta `catalogo.json` con qualche
+migliaio di voci già classificate. Si confrontano le assegnazioni prima e dopo,
+e ogni cambio di tema si guarda a mano. L'ultima volta furono nove su 2637, e
+otto erano correzioni.
+
 Due filtri, che non vanno confusi. Il tema lo assegna `classifica()`: senza
 tema la voce cade. Il rumore redazionale lo toglie `pubblica.py` con
 `assets/contenuti/esclusioni_rassegna.json`, e serve proprio qui, perché un
