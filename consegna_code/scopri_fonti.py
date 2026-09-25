@@ -154,6 +154,12 @@ def proponer_json(rows):
     return [{'nome': r['nome'], 'url_feed': r.get('url_nuevo') or r['url_feed'],
              'url_sito': r['url_sito'], 'metodo': 'sitemap' if str(
                  r.get('url_nuevo') or '').startswith('sitemap:') else 'rss',
+             # `lingua` NON e' una rilevazione: la colonna e' NOT NULL con
+             # default 'en' nello schema, e qui si ripete quel default. Non
+             # leggerla come un dato — contarci le fonti per lingua da' sempre
+             # 'en' e fa sembrare che lo scouting non trovi niente in italiano
+             # o spagnolo, anche quando ne ha trovate (verificato: le trova, e
+             # cadono su p3 e p7, non sulla lingua).
              'categoria': r['categoria'], 'lingua': 'en', 'peso': 0.3}
             for r in rows if r.get('p3_utiles', 0) >= C.UMBRAL_VOCES]
 
@@ -161,6 +167,8 @@ def proponer_json(rows):
 def proponer_sql(rows):
     esc = lambda s: s.replace("'", "''")
     vals = [f"  ('{esc(r['nome'])}', '{esc(r.get('url_nuevo') or r['url_feed'])}', '{esc(r['url_sito'])}', 'rss', "
+            # 'en' e' il default dello schema ripetuto, non una lingua misurata:
+            # vedi il commento in proponer_json().
             f"'{r['categoria']}', 'en', 0.3, false)  -- {r['menciones']} menciones · {V.com(r['motivo'][:60])}"
             for r in rows if r.get('p3_utiles', 0) >= C.UMBRAL_VOCES]
     if not vals: return '-- sin propuestas\n'

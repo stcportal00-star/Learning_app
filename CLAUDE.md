@@ -118,6 +118,14 @@ tolti gli accenti sia anche una parola comune di un'altra lingua — lo spagnolo
 tema e otto che non devono prenderne nessuno. La seconda metà non è decorativa —
 un lessico che assegna un tema a tutto supererebbe la prima.
 
+**`percorso.fonti.lingua` non dice in che lingua è una fonte.** È `NOT NULL`
+con default `'en'`, e lo scouting ripete quel default su ogni candidata: contare
+le fonti per lingua dà sempre «tutte inglesi», anche quando ne ha trovate in
+italiano e in spagnolo. Per sapere se una fonte non inglese è entrata si guarda
+`candidatas.csv` nel tarball di stato, non quella colonna. Ci sono cascato: ho
+usato quel conteggio come prova che lo scouting non trovava fonti non inglesi,
+e non era vero — le trovava, e cadevano su p3 e p7.
+
 Prima di cambiare il lessico, misura lo scarto sulle voci vere invece di
 fidarti: `stato.tar` sulla release `rassegna` porta `catalogo.json` con qualche
 migliaio di voci già classificate. Si confrontano le assegnazioni prima e dopo,
