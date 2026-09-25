@@ -219,9 +219,10 @@ async function apriDispositivo(nome, dispositivoId, copia) {
   const Cliente = await da("lib/nuvola/cliente.ts");
   const Articoli = await da("lib/nuvola/articoli.ts");
   const Segni = await da("lib/nuvola/segni.ts");
+  const Media = await da("lib/nuvola/media.ts");
   const HLC = await da("lib/hlc.ts");
   await Db.apri(dispositivoId);
-  return { nome, dispositivoId, Db, Proiezione, Sincronia, Cliente, Articoli, Segni, HLC };
+  return { nome, dispositivoId, Db, Proiezione, Sincronia, Cliente, Articoli, Segni, Media, HLC };
 }
 
 // Il dispositivo principale gira sui sorgenti VERI del progetto: parti A, B, C.
@@ -1127,6 +1128,47 @@ await scenario("B9 paginazione: con piu' eventi del limite di pagina si fanno pi
   ok("e 501 righe operative sono state scritte", quante.n === 501, String(quante.n));
   ok("la proiezione le conta tutte", esito.proiezione.scritte === 501, String(esito.proiezione.scritte));
   servitoreInUso = servitore;
+});
+
+await scenario("B11 un «visto» arrivato dall'altro dispositivo libera il file rimasto qui", async () => {
+  // Il caso per cui `liberaVisti()` esiste, ed e\u0300 il solo che nessun'altra
+  // parte del codice puo\u0300 coprire: l'episodio e\u0300 stato ascoltato sul telefono,
+  // dove il file non c'era nemmeno; qui sul tablet la copia c'e\u0300 ancora. Senza
+  // questa passata resterebbe li\u0300 per sempre, e la cache dei media smetterebbe
+  // di svuotarsi da sola proprio nei due mesi di viaggio per cui esiste.
+  const fs = await import("expo-file-system");
+  const cartella = tab.Media.cartellaMedia();
+  const copia = new fs.File(cartella, "b-media-1.mp3");
+  if (copia.exists) copia.delete();
+  copia.create();
+  copia.write(Buffer.from("x".repeat(2048)));
+  ok("la copia locale c'e\u0300 prima della sincronizzazione", copia.exists, copia.uri);
+
+  await tab.Db.database().runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato,
+       url_media, tipo_media, byte_media, file_media)
+     VALUES (?, ?, '2026-09-01T00:00:00Z', 0, 0, ?, 'audio/mpeg', 2048, ?)`,
+    ["b-media-1", "Un episodio gia\u0300 ascoltato altrove",
+     "https://pod.esempio/ep.mp3", copia.uri]);
+
+  servitore.semina("eventi", [{
+    id: "ev-visto-1", hlc: hlcRemoto(9000, "telefono"),
+    dispositivo_id: "telefono", entita: "articoli", entita_id: "b-media-1",
+    tipo: "aggiorna", payload: { visto_a: "2026-09-23T12:00:00.000Z" },
+    utente_id: UTENTE_ATTESO,
+  }]);
+  await fissaSegnaposto(tab, "");
+  servitore.azzeraRichieste();
+
+  const esito = await sincronizza(tab, servitore);
+  ok("la sincronizzazione riesce", esito.riuscito, esito.motivo);
+  const art = await riga(tab, "articoli", "id", "b-media-1");
+  uguali("la riga porta il «visto» dell'altro dispositivo e non piu\u0300 il percorso locale",
+    { visto_a: art?.visto_a, file_media: art?.file_media },
+    { visto_a: "2026-09-23T12:00:00.000Z", file_media: null });
+  ok("e il file se ne e\u0300 andato dal disco", !copia.exists, copia.uri);
+  ok("il motivo lo dice a chi guarda la schermata",
+     /allegati gia\u0300 visti/.test(esito.motivo), esito.motivo);
 });
 
 await scenario("B10 CORREZIONE SORVEGLIATA: sincronizzaNuvola non finge di scegliere il mittente", async () => {

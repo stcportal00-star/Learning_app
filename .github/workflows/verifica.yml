@@ -40,7 +40,19 @@ jobs:
       # tornare — evento riscaricato, deduplicato, proiettato nella tabella.
       # È la sequenza esatta che fa comparire sul telefono la rassegna
       # raccolta stanotte. Lascia l'archivio come l'ha trovato.
+      #
+      # Gira solo sui push di questo repository, MAI su una pull request che
+      # arriva da un fork. Su un repository pubblico quella condizione non è
+      # burocrazia: senza, chiunque apre una PR fa eseguire il proprio codice
+      # contro il Supabase VERO, sui minuti di chi possiede il repository. I
+      # secret non vengono passati alle PR dai fork — ma la chiave publishable
+      # sta nel sorgente, quindi il codice di uno sconosciuto arriverebbe
+      # all'archivio lo stesso. Le PR dai fork fanno typecheck e test e basta,
+      # che è esattamente ciò che serve per giudicarle.
       - name: Il giro vero contro Supabase
+        if: >-
+          github.event_name == 'push' ||
+          github.event.pull_request.head.repo.full_name == github.repository
         env:
           SUPABASE_CHIAVE: ${{ secrets.SUPABASE_CHIAVE }}
         timeout-minutes: 5

@@ -35,7 +35,9 @@ Quattro garanzie, nell'ordine in cui contano:
 import hashlib
 import html.parser
 import http.client
+import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -596,6 +598,88 @@ def testo_da_html(html_grezzo):
     return ""
 
 
+# ------------------------------------------------------------- trascrizioni
+
+# Una riga di tempo di VTT o di SRT. La freccia è l'unico segno che i due
+# formati hanno sempre in comune, e basta a riconoscerli senza indovinare dal
+# tipo dichiarato: un feed che dichiara text/html e serve VTT esiste.
+_TEMPO = re.compile(r"-->")
+_CONTATORE_SRT = re.compile(r"^\d+$")
+_INTESTAZIONE_VTT = re.compile(r"^(WEBVTT|NOTE|STYLE|REGION)\b")
+# `<v Alessio>`, `<00:00:04.120>`, `{\an8}`: marcature dentro la battuta.
+_MARCATURE = re.compile(r"<[^>]{0,60}>|\{\\[^}]{0,20}\}")
+
+
+def _da_sottotitoli(testo):
+    """Da VTT o SRT a prosa: via i tempi, i contatori e le battute ripetute."""
+    righe = []
+    for riga in testo.splitlines():
+        riga = riga.strip()
+        if not riga or _TEMPO.search(riga) or _CONTATORE_SRT.match(riga):
+            continue
+        if _INTESTAZIONE_VTT.match(riga):
+            continue
+        riga = _MARCATURE.sub("", riga).strip()
+        # I sottotitoli a scorrimento ripetono la riga precedente a ogni
+        # battuta nuova: senza questo, metà della trascrizione è doppia.
+        if riga and (not righe or righe[-1] != riga):
+            righe.append(riga)
+    return " ".join(righe)
+
+
+def _da_json_podcast(testo):
+    """Il formato JSON del Podcast Namespace: `{"segments": [{"body": ...}]}`."""
+    try:
+        dati = json.loads(testo)
+    except Exception:  # noqa: BLE001 — non è JSON, e non è un guasto
+        return None
+    segmenti = dati.get("segments") if isinstance(dati, dict) else None
+    if not isinstance(segmenti, list):
+        # È JSON, ma non è una trascrizione: una risposta d'errore, o un
+        # formato che non conosciamo. Restituire i byte grezzi vorrebbe dire
+        # depositare `{"error": ...}` come se fosse il testo di un articolo.
+        return ""
+    pezzi = []
+    for s in segmenti:
+        corpo = (s or {}).get("body") if isinstance(s, dict) else None
+        if isinstance(corpo, str) and corpo.strip():
+            if not pezzi or pezzi[-1] != corpo.strip():
+                pezzi.append(corpo.strip())
+    return " ".join(pezzi)
+
+
+def testo_da_trascrizione(dati):
+    """La trascrizione che l'autore pubblica -> testo leggibile senza rete.
+
+    È la sola strada per cui un podcast o una conferenza diventano
+    *studiabili* in aereo: l'audio si ascolta, ma non si cerca dentro, non si
+    annota una frase e non si rilegge un passaggio. Il file che l'editore mette
+    online apposta risolve tutte e tre le cose, e non costa né una chiave né
+    una quota — il giorno in cui un servizio di trascrizione risponde 429 è il
+    giorno in cui si è in volo.
+
+    Il formato si riconosce dal contenuto e non dal tipo dichiarato: VTT, SRT,
+    il JSON del Podcast Namespace, HTML, o testo semplice.
+    """
+    if isinstance(dati, bytes):
+        testo = dati.decode("utf-8", "replace")
+    else:
+        testo = dati or ""
+    testo = testo.lstrip("\ufeff").strip()
+    if not testo:
+        return ""
+    if _TEMPO.search(testo):
+        return _comprimi(_da_sottotitoli(testo))
+    da_json = _da_json_podcast(testo)
+    if da_json is not None:
+        return _comprimi(da_json)
+    if "<" in testo and ">" in testo:
+        piano = testo_da_html(testo)
+        if piano:
+            return piano
+    return _comprimi(testo)
+
+
 def riassunto(testo, caratteri=280):
     """Le prime `caratteri` battute, tagliate al confine di parola.
 
@@ -843,6 +927,51 @@ def _autoverifica():
     _prova("una parola lunghissima si taglia di netto",
            riassunto("a " + "b" * 24, 10), "a bbbbbbb…")
     _prova("limite zero", riassunto("qualunque cosa", 0), "")
+
+    # ------------------------------------------------- trascrizioni dell'autore
+    _vtt = (
+        "WEBVTT\n\nNOTE un commento\n\n1\n"
+        "00:00:01.000 --> 00:00:04.000\n"
+        "<v Relatore>Il triage non e\u0300 una fila.\n\n2\n"
+        "00:00:04.000 --> 00:00:07.000\n"
+        "Il triage non e\u0300 una fila.\nSi decide chi passa prima.\n"
+    )
+    # Le tre cose che un VTT porta e che non sono parole: l'intestazione, i
+    # tempi e i contatori. E la quarta, che e\u0300 quella che si dimentica: i
+    # sottotitoli a scorrimento ripetono la battuta precedente, e senza la
+    # deduplica meta\u0300 della trascrizione arriva doppia.
+    _prova("da VTT resta solo la prosa, senza righe doppie",
+           testo_da_trascrizione(_vtt),
+           "Il triage non e\u0300 una fila. Si decide chi passa prima.")
+    _prova("da SRT, che ha la virgola nei tempi e nessuna intestazione",
+           testo_da_trascrizione(
+               "1\n00:00:01,000 --> 00:00:04,000\nPrima.\n\n"
+               "2\n00:00:04,000 --> 00:00:07,000\nSeconda.\n"),
+           "Prima. Seconda.")
+    _prova("dal JSON del Podcast Namespace",
+           testo_da_trascrizione(
+               '{"version":"1.0.0","segments":['
+               '{"speaker":"A","body":"Ciao."},{"body":"Ciao."},{"body":"Come va?"}]}'),
+           "Ciao. Come va?")
+    # Il tipo dichiarato non decide niente: si guarda che cosa e\u0300 arrivato.
+    _prova("una trascrizione in HTML passa dall'estrattore vero",
+           testo_da_trascrizione(
+               "<html><body><article><p>Un paragrafo.</p><p>E un secondo.</p>"
+               "</article></body></html>"),
+           "Un paragrafo.\n\nE un secondo.")
+    _prova("testo semplice resta testo, con gli spazi compressi",
+           testo_da_trascrizione("Solo testo,   con   spazi."),
+           "Solo testo, con spazi.")
+    _prova("byte utf-8 si decodificano", testo_da_trascrizione("pero\u0300 s\u00ec".encode("utf-8")),
+           "pero\u0300 s\u00ec")
+    _prova("niente non diventa niente", testo_da_trascrizione(None), "")
+    # Un JSON che non e\u0300 una trascrizione non e\u0300 il testo di un articolo: una
+    # risposta d'errore depositata come testo si leggerebbe in aereo al posto
+    # della conferenza, e sarebbe indistinguibile da un guasto dell'app.
+    _prova("un JSON che non e\u0300 una trascrizione non diventa testo",
+           testo_da_trascrizione('{"errore": "non trovato"}'), "")
+    _prova("una trascrizione JSON senza battute utili nemmeno",
+           testo_da_trascrizione('{"segments": [{"body": "   "}]}'), "")
 
     # ------------------------------------------------------- scarica, senza rete
     _solleva("scarica rifiuta uno schema non http", scarica, "ftp://esempio.it/x.pdf")

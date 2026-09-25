@@ -169,9 +169,20 @@ def programar(sql, lavoro, verificar=verificar_real, aplicar=aplicar_real,
         if codigo == 2:
             temas = temas_sin_fuentes(_texto(os.path.join(lavoro, SALUD)))
             if temas:
-                descubrir(temas, sql, lavoro)
+                fallo = descubrir(temas, sql, lavoro)
                 hecho['temas'] = temas
                 hecho['propuestas'] = _proponer(lavoro, proponer)
+                # Un scouting que revienta y un scouting que no encuentra nada
+                # escriben el mismo «propuestas 0». La diferencia es que el
+                # primero deja muerta la pata que hace mejorar la lista, y sin
+                # esta línea nadie se entera nunca. Corrida real del 23-09:
+                # KeyError en explorar(), y el informe decía 0 tan tranquilo.
+                if fallo:
+                    hecho['aviso'] = (
+                        'El scouting ha salido con %s: las propuestas de este mes '
+                        'no existen, y no es que no haya candidatas. Mira el log '
+                        'del paso. La verificación sí se ha aplicado.' % fallo)
+                    avisar(hecho['aviso'])
     elif codigo == 3:
         # Ni se lee activar.json: el archivo está vacío por diseño, y leerlo
         # daría a entender que hay un caso en que sí se aplicaría.

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, Pressable, FlatList, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { elencaArticoli, temiConNovita, Articolo } from "../lib/nuvola/articoli";
+import { descriviByte } from "../lib/nuvola/media";
 
 /**
  * La rassegna: quello che la conduttura ha raccolto stanotte.
@@ -74,7 +75,17 @@ export default function Rassegna() {
             style={{ flex: 1, borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 13,
                      opacity: item.letto ? 0.55 : 1 }}>
             <View style={{ flexDirection: "row", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
-              {item.testo ? (
+              {item.url_media ? (
+                // Un podcast o una conferenza non hanno testo, e senza questa
+                // etichetta sembrerebbero articoli mal riusciti: dice invece
+                // che cos'è la voce e quanto costa portarsela in aereo.
+                <Text style={{ fontSize: 10, fontWeight: "600", color: "#6B3FA0",
+                               backgroundColor: "#F1EAFA", paddingHorizontal: 7, paddingVertical: 2,
+                               borderRadius: 5 }}>
+                  {((item.tipo_media || "").startsWith("video/") ? "video" : "audio")
+                    + (item.file_media ? " · sul telefono" : " · " + descriviByte(item.byte_media))}
+                </Text>
+              ) : item.testo ? (
                 <Text style={{ fontSize: 10, fontWeight: "600", color: "#0F6E56",
                                backgroundColor: "#E8F5EE", paddingHorizontal: 7, paddingVertical: 2,
                                borderRadius: 5 }}>testo intero</Text>

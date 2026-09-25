@@ -133,6 +133,165 @@ verifica("mentre un termine forte nel titolo non è «solo debole»",
          "epidemiologia" not in
          temi_solo_deboli("Cholera outbreak detection in Yemen"))
 
+# ------------------------------------------------- le altre tre lingue
+# Il lessico è stato esteso a italiano, spagnolo e francese perché senza una
+# fonte che pubblica in quelle lingue non entra MAI: prendeva zero temi e il
+# verificatore la scartava. Queste fixture misurano le due direzioni, e sono
+# state scritte PRIMA di conoscere i termini proposti — scriverle dopo, a
+# partire dai termini, avrebbe provato solo se stesse.
+#
+# Prima dell'estensione: 4 attese su 15 e 8 rumori su 8.
+#
+# Si usa `classifica` e non `punteggi`, perché è la funzione che la conduttura
+# chiama davvero ed è l'unica che applica la soglia: misurare senza soglia
+# farebbe passare per successo un tema a 0,40, che non verrebbe assegnato.
+ATTESI_ALTRE_LINGUE = [
+    (
+        'it',
+        'qualita_dati',
+        'Come si controlla che i dati raccolti sul campo siano buoni',
+        "Parliamo di validazione dei dati e di che cosa fare quando un valore manca. La riproducibilita di un'analisi dipende da queste verifiche piu che dal modello scelto.",
+    ),
+    (
+        'es',
+        'qualita_dati',
+        'Calidad de los datos en las organizaciones humanitarias',
+        'Hablamos de la validacion de datos, de los datos faltantes y de como hacer reproducible un analisis recogido sobre el terreno.',
+    ),
+    (
+        'fr',
+        'qualita_dati',
+        'La qualite des donnees dans les enquetes de terrain',
+        "Nous parlons de la validation des donnees, des donnees manquantes et de la reproductibilite d'une analyse.",
+    ),
+    (
+        'it',
+        'gdpr',
+        'Il trattamento dei dati personali nelle organizzazioni non profit',
+        "La base giuridica del trattamento, la minimizzazione dei dati e i diritti dell'interessato secondo il regolamento generale sulla protezione dei dati.",
+    ),
+    (
+        'es',
+        'gdpr',
+        'Proteccion de datos personales en las ONG',
+        'La base juridica del tratamiento, la minimizacion de datos y los derechos del interesado segun el reglamento general de proteccion de datos.',
+    ),
+    (
+        'fr',
+        'gdpr',
+        'La protection des donnees personnelles dans les ONG',
+        'La base legale du traitement, la minimisation des donnees et les droits de la personne concernee selon le reglement general sur la protection des donnees.',
+    ),
+    (
+        'it',
+        'epidemiologia',
+        "Sorveglianza delle malattie infettive dopo un'alluvione",
+        'Come si costruisce un sistema di sorveglianza epidemiologica, come si legge il tasso di incidenza e come si riconosce un focolaio.',
+    ),
+    (
+        'es',
+        'epidemiologia',
+        'Vigilancia epidemiologica despues de una inundacion',
+        'Como se construye un sistema de vigilancia, como se lee la tasa de incidencia y como se detecta un brote.',
+    ),
+    (
+        'fr',
+        'epidemiologia',
+        'Surveillance epidemiologique apres une inondation',
+        "Comment construire un systeme de surveillance, lire le taux d'incidence et detecter une flambee epidemique.",
+    ),
+    (
+        'it',
+        'sicurezza',
+        'Che cosa fare nelle prime ore di un attacco informatico',
+        'La risposta agli incidenti, la gestione delle vulnerabilita e il modello di minaccia di una piccola organizzazione.',
+    ),
+    (
+        'es',
+        'sicurezza',
+        'Que hacer en las primeras horas de un ciberataque',
+        'La respuesta a incidentes, la gestion de vulnerabilidades y el modelado de amenazas de una organizacion pequena.',
+    ),
+    (
+        'fr',
+        'sicurezza',
+        "Que faire dans les premieres heures d'une cyberattaque",
+        'La reponse aux incidents, la gestion des vulnerabilites et la modelisation des menaces.',
+    ),
+    (
+        'it',
+        'sql_base',
+        'Imparare a interrogare una base di dati relazionale',
+        'Il piano di esecuzione di una interrogazione, le tabelle collegate e il motore relazionale che le tiene insieme.',
+    ),
+    (
+        'es',
+        'sql_base',
+        'Aprender a consultar una base de datos relacional',
+        'El plan de ejecucion de una consulta, las tablas relacionadas y el motor relacional que las mantiene.',
+    ),
+    (
+        'fr',
+        'sql_base',
+        'Apprendre a interroger une base de donnees relationnelle',
+        "Le plan d'execution d'une requete, les tables liees et le moteur relationnel.",
+    ),
+]
+
+RUMORE_ALTRE_LINGUE = [
+    (
+        'it',
+        'Il derby di domenica finisce in parita dopo un secondo tempo confuso',
+        "L'allenatore ha parlato di una squadra stanca e di scelte che non hanno dato i risultati sperati. La societa valuta il mercato di gennaio.",
+    ),
+    (
+        'es',
+        'La receta de la abuela para el arroz con leche',
+        'Los datos de la cocina tradicional dicen que el secreto esta en la canela y en la paciencia. Un plato sencillo que sale bien si se respeta el tiempo.',
+    ),
+    (
+        'fr',
+        'Le conseil municipal vote le budget de la voirie',
+        "Les elus ont debattu pendant trois heures avant d'approuver le plan de rénovation des trottoirs du centre-ville.",
+    ),
+    (
+        'it',
+        'Acme annuncia il lancio della sua nuova piattaforma per le imprese',
+        'La soluzione integrata promette di trasformare il modo in cui le aziende lavorano, con un approccio innovativo e orientato al cliente.',
+    ),
+    (
+        'es',
+        'El tiempo para el fin de semana: lluvia en el norte',
+        'Se esperan precipitaciones en la cornisa cantabrica y temperaturas suaves en el resto del pais.',
+    ),
+    (
+        'fr',
+        'Ouverture de la saison des marches de Noel',
+        "Les commercants attendent une frequentation en hausse par rapport a l'annee derniere malgre la meteo incertaine.",
+    ),
+    (
+        'it',
+        'Il nuovo romanzo che racconta la provincia italiana degli anni ottanta',
+        'Una storia di famiglia raccontata con una lingua asciutta, in un paese dove tutti si conoscono e nessuno dice quello che pensa.',
+    ),
+    (
+        'es',
+        'Entrevista con el director de la orquesta municipal',
+        'Habla de su formacion, del repertorio de la temporada y de como se prepara un concierto con musicos jovenes.',
+    ),
+]
+
+for _lingua, _atteso, _titolo, _testo in ATTESI_ALTRE_LINGUE:
+    _temi = classifica(_titolo, _testo)
+    verifica("%s: un testo su %s prende il suo tema" % (_lingua, _atteso),
+             bool(_temi) and _temi[0][0] == _atteso)
+
+# L'altra direzione, e senza di lei la prima non vuol dire niente: un lessico
+# che assegna un tema a tutto passerebbe le quindici prove qui sopra.
+for _lingua, _titolo, _testo in RUMORE_ALTRE_LINGUE:
+    verifica("%s: «%s» non prende nessun tema" % (_lingua, _titolo[:34]),
+             not classifica(_titolo, _testo))
+
 # ---------------------------------------------------------------- chiavi e deduplicazione
 verifica("il DOI normalizza l'URL completo",
          fonti.chiave_di("https://doi.org/10.1/AB", "x") == fonti.chiave_di("10.1/ab", "y"))

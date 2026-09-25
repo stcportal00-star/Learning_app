@@ -354,6 +354,28 @@ try:
     ok(PR._fuente(V.DESDE_NUBE) == V.DESDE_NUBE
        and PR._fuente('fonti_v4.sql').endswith('/fonti_v4.sql'),
        "S12 --da-nuvola es una bandera, no una ruta")
+    # Caso real de la corrida del 23-09: el scouting revienta y el informe dice
+    # «propuestas 0», igual que si no hubiera encontrado nada. La pata que hace
+    # mejorar la lista queda muerta y nadie se entera.
+    def _programa_roto(codigo, lavoro, salud):
+        with open(os.path.join(lavoro, 'activar.json'), 'w', encoding='utf-8') as fh:
+            json.dump(CAMBIO, fh)
+        with open(os.path.join(lavoro, 'salud.md'), 'w', encoding='utf-8') as fh:
+            fh.write(salud)
+        avisos = []
+        hecho = PR.programar(
+            'fonti.sql', lavoro,
+            verificar=lambda sql, l: codigo,
+            aplicar=lambda c: None,
+            descubrir=lambda t, sql, l: 1,     # como subprocess.run(...).returncode
+            avisar=lambda t: avisos.append(t),
+            proponer=lambda p: None)
+        return hecho, avisos
+
+    h, av = _programa_roto(2, _trabajo, SALUD_AVISO)
+    ok(h['propuestas'] == 0 and len(av) == 1 and 'scouting' in av[0].lower(),
+       f"S14 un scouting che esplode non si confonde con «nessuna candidata»: {av}")
+
     _vera = V.filas_de_nuvola
     V.filas_de_nuvola = lambda *a, **k: [('N', 'https://nueva.example/f',
                                           'https://nueva.example/', 'ia')]
@@ -363,6 +385,28 @@ try:
            f"{S.conocidos(V.DESDE_NUBE)}")
     finally:
         V.filas_de_nuvola = _vera
+
+    # La fila que reventó el scouting: `verifica()` sale antes de p3 -REVISAR
+    # por redirección a otro dominio- y no tiene 'p3_utiles'. Una sola así
+    # mataba la corrida entera.
+    _vv, _vd = V.verifica, K.descubrir
+    K.descubrir = lambda home, r=None: (['https://%s/feed' % K.host(home)], None)
+    _filas = iter([
+        {'nome': 'a', 'url_feed': 'https://a/f', 'url_sito': 'https://a/',
+         'categoria': 'ia', 'motivo': 'REVISAR redirección a otro dominio: b.com'},
+        {'nome': 'b', 'url_feed': 'https://b/f', 'url_sito': 'https://b/',
+         'categoria': 'ia', 'motivo': 'ACEPTADA', 'p3_utiles': 7},
+    ])
+    V.verifica = lambda *a, **k: next(_filas)
+    try:
+        props = S.explorar('ia', [('a.example', 3), ('b.example', 2)], 1)
+        ok([p['nome'] for p in props] == ['b'],
+           f"S15 una fila senza punteggio non è una candidata, e non ferma il resto: "
+           f"{[p['nome'] for p in props]}")
+    except KeyError as e:
+        ok(False, f"S15 explorar è esploso su una fila senza punteggio: {e!r}")
+    finally:
+        V.verifica, K.descubrir = _vv, _vd
 finally:
     shutil.rmtree(_trabajo, ignore_errors=True)
 
@@ -383,5 +427,83 @@ ok({c['url_feed'] for c in _js} == {f['url_feed'] for f in _FILAS if not f['moti
    and any(c.get('metodo') == 'sitemap' for c in _js)
    and 'https://c/f' not in {c['url_feed'] for c in _js},
    f"S8 activar.sql y activar.json cubren las mismas fuentes: {len(_js)} cambios")
+
+# ------------------------------------------------- perfiles y podcasts
+# Nada de esto INVENTA una dirección: cada candidata sale de una página que
+# acabamos de descargar, o de un `feedUrl` que la API devuelve. PROMPT-FONTI §8:
+# «No inventar un indirizzo: un url_feed finto costa una corsa quotidiana».
+HOME = (b'<html><head>'
+        b'<link rel="me" href="https://mastodon.social/@divulgatore">'
+        b'<link rel="alternate" type="application/rss+xml" href="/feed.xml">'
+        b'</head><body>'
+        b'<a href="https://www.youtube.com/@divulgatore">il canale</a>'
+        b'<a href="https://example.com/altro">un link qualunque</a>'
+        b'<a rel="nofollow" href="https://sponsor.example/">sponsor</a>'
+        b'</body></html>')
+ok(K.perfiles(HOME, 'https://blog.ejemplo.org/') ==
+   ['https://mastodon.social/@divulgatore', 'https://www.youtube.com/@divulgatore'],
+   f"S16 solo i profili che il sito dichiara suoi: {K.perfiles(HOME, 'https://blog.ejemplo.org/')}")
+
+ok(K.feed_de_perfil('https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv') ==
+   ('https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv',
+    'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv'),
+   'S17 da /channel/UC… il feed si deriva per regola, senza scaricare niente')
+
+reset()
+WEB['https://www.youtube.com/@divulgatore'] = (
+    b'<html><script>var x = {"channelId":"UCabcdefghijklmnopqrstuv","other":1};</script></html>')
+ok(K.feed_de_perfil('https://www.youtube.com/@divulgatore')[0] ==
+   'https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv',
+   'S18 da un handle il channelId si LEGGE dalla pagina')
+
+WEB['https://www.youtube.com/@mutolo'] = b'<html>niente channelId qui dentro</html>'
+ok(K.feed_de_perfil('https://www.youtube.com/@mutolo') == (None, None),
+   'S19 e se la pagina non lo dichiara non si inventa: nessun feed')
+
+ok(K.feed_de_perfil('https://mastodon.social/@tizio') ==
+   ('https://mastodon.social/@tizio.rss', 'https://mastodon.social/@tizio'),
+   'S20 un profilo Mastodon ha la sua RSS per regola documentata')
+
+reset()
+WEB['https://blog.ejemplo.org/'] = HOME
+WEB['https://www.youtube.com/@divulgatore'] = (
+    b'<html><script>{"channelId":"UCabcdefghijklmnopqrstuv"}</script></html>')
+cands = S.candidatos_feed('blog.ejemplo.org')
+ok([c[0] for c in cands] == [
+       'https://blog.ejemplo.org/feed.xml',
+       'https://mastodon.social/@divulgatore.rss',
+       'https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv']
+   and cands[2][2] == 'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv',
+   f"S21 il blog e i suoi profili sono tre fonti, ognuna con il SUO sito: {[c[0] for c in cands]}")
+
+reset()
+WEB['https://itunes.apple.com/search?media=podcast&limit=20&term=data%20quality&country=it'] = json.dumps(
+    {'results': [{'feedUrl': 'https://pod.example/rss', 'collectionName': 'Dati e qualità'},
+                 {'collectionName': 'Senza feed'},
+                 {'feedUrl': 'non-un-indirizzo', 'collectionName': 'Rotto'}]}).encode()
+ok(S.podcast('data quality', 'it') == [('https://pod.example/rss', 'Dati e qualità', None)],
+   f"S22 dalla ricerca podcast solo i feedUrl veri: {S.podcast('data quality', 'it')}")
+
+# Sin esto p7 rechaza todos los canales, y con razón mientras se guarde el
+# texto. La declaración vale porque el pipeline la cumple: `feed.solo_metadati`
+# marca la voz y `pubblica.py` no le extrae nada.
+ok(V.licencia_plataforma('https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv')
+   and V.licencia_plataforma('https://mastodon.social/@tizio.rss')
+   and V.licencia_plataforma('https://blog.ejemplo.org/feed.xml') is None
+   and V.licencia_plataforma('https://youtube.com.evil.example/feeds/videos.xml?channel_id=UCx') is None,
+   'S23 la licenza di piattaforma vale solo per le forme dichiarate')
+
+reset()
+WEB['https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv'] = (
+    b'<html><title>Chi parla</title>niente licenza qui dentro</html>')
+WEB['https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv'] = rss(
+    BUENOS, link='https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv')
+for i in range(10):
+    WEB[f'https://blog.ejemplo.org/p{i}'] = ART
+r = V.verifica('Chi parla',
+               'https://www.youtube.com/feeds/videos.xml?channel_id=UCabcdefghijklmnopqrstuv',
+               'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv', 'ia')
+ok(r['motivo'] == 'ACEPTADA' and 'solo metadati' in r['p7_licencia'],
+   f"S24 un canale senza licenza sul sito passa p7 come «solo metadati»: {r['motivo']} · {r['p7_licencia'][:44]}")
 
 print(f'\n{sum(R)}/{len(R)} adversariales OK')
