@@ -211,6 +211,18 @@ uguale("M9 e il tipo che la fonte dichiara", chiamata.parametri.type, "video/mp4
 // che non ha il permesso di leggere, e si apre su un errore invece che sul video.
 uguale("M9 e il permesso di lettura sull'indirizzo", chiamata.parametri.flags, 1);
 
+// Un tipo che non è audio né video non arriva all'intent: con il permesso di
+// installare pacchetti, `application/vnd.android.package-archive` scritto in un
+// evento remoto aprirebbe l'installatore di Android su un file qualunque.
+for (const [nome, t] of [["un APK", "application/vnd.android.package-archive"],
+                         ["un PDF", "application/pdf"], ["un tipo malformato", "video/"]]) {
+  await base.runAsync("UPDATE articoli SET tipo_media = ? WHERE id = ?", [t, "m9"]);
+  await media.apriMedia("m9");
+  uguale(`M9 ${nome} dichiarato dalla fonte si apre come audio`,
+    intent.giornale.at(-1).parametri.type, "audio/mpeg");
+}
+await base.runAsync("UPDATE articoli SET tipo_media = ? WHERE id = ?", ["video/mp4", "m9"]);
+
 intent.programmaNessunVisore(true);
 uguale("M9 senza lettore registrato si ripiega sul foglio di condivisione",
   await media.apriMedia("m9"), "aperto");

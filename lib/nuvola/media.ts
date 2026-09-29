@@ -123,7 +123,13 @@ export async function apriMedia(
   if (!a?.file_media) return "non_scaricato";
   const f = new File(a.file_media);
   if (!f.exists) return "non_scaricato";
-  const tipo = a.tipo_media || "audio/mpeg";
+  // Solo audio e video. `tipo_media` arriva dagli eventi remoti e nessuno lo
+  // controlla prima di qui; da quando l'app dichiara REQUEST_INSTALL_PACKAGES
+  // (lib/aggiornamenti.ts), un evento con il tipo di un APK farebbe aprire
+  // l'installatore di Android su un file qualunque. Il solo tipo APK che
+  // l'app usa è una costante in `aggiornamenti.installa`, mai un dato.
+  const dichiarato = a.tipo_media ?? "";
+  const tipo = /^(audio|video)\/[A-Za-z0-9.+-]+$/.test(dichiarato) ? dichiarato : "audio/mpeg";
   try {
     await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
       data: f.contentUri,
