@@ -173,6 +173,20 @@ PIATTAFORME_METADATI = [
      'solo metadati e collegamento; su Mastodon la licenza è di chi pubblica, voce per voce'),
 ]
 
+# Los podcasts son el mismo caso -la licencia de cada episodio es de quien lo
+# publica- pero NO se reconocen por la dirección: 88 de los 113 que p7 rechazó
+# en el scouting del 24 de septiembre estaban en un host con una sola candidata.
+# Se reconocen por el CONTENIDO del feed: al menos esta fracción de las voces
+# trae un adjunto `audio/` o `video/`, la misma regla con la que `feed.py`
+# decide qué es un adjunto. Solo se aplica cuando el sitio no declara licencia
+# alguna: un podcast con Creative Commons sigue dando el texto de su
+# transcripción. La decisión se guarda en `percorso.fonti.licenza`, porque el
+# pipeline diario no abre el feed para distinguir un caso del otro, y
+# `feed.solo_metadati` lee allí el prefijo «solo metadati».
+LICENCIA_PODCAST = ('solo metadati e collegamento; nei podcast la licenza è di chi '
+                    'pubblica, episodio per episodio')
+PODCAST_ADJUNTOS = 0.5
+
 # --- Producción ------------------------------------------------------------------------------
 LICENCIA_AMPLIA = True      # decisión A aplicada: licencia declarada = CC/OGL/rel=license O aviso de copyright del sitio.
                             # Revertir: False, o ejecutar con --licencia-estricta.

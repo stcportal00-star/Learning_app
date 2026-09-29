@@ -506,4 +506,70 @@ r = V.verifica('Chi parla',
 ok(r['motivo'] == 'ACEPTADA' and 'solo metadati' in r['p7_licencia'],
    f"S24 un canale senza licenza sul sito passa p7 come «solo metadati»: {r['motivo']} · {r['p7_licencia'][:44]}")
 
+# ------------------------------------------------- podcasts sin licencia
+# Un podcast no se reconoce por la dirección sino por sus adjuntos. Cada prueba
+# rompe una mitad distinta: si la regla se aplicara a todo, el blog sin
+# licencia pasaría; si se aplicara antes de la detección, el podcast con CC
+# perdería el texto de su transcripción; si contara cualquier adjunto, una
+# revista con un PDF por artículo entraría «solo metadatos».
+def pod(n, tipo='audio/mpeg', sitio='https://pod.ejemplo.fm/'):
+    it = ''.join(
+        f'<item><title>{t}</title><link>{sitio}ep{i}</link><pubDate>{d(i * 86400)}</pubDate>'
+        f'<description>{s}</description>'
+        + (f'<enclosure url="{sitio}ep{i}.bin" type="{tipo}" length="1000"/>' if i < n else '')
+        + '</item>' for i, (t, _, s) in enumerate(BUENOS))
+    return (f'<?xml version="1.0"?><rss version="2.0"><channel><title>Pod</title>'
+            f'<link>{sitio}</link>{it}</channel></rss>').encode()
+
+def verifica_pod(feed, portada=b'<html><title>Pod</title>nessuna licenza qui</html>'):
+    reset()
+    WEB['https://pod.ejemplo.fm/'] = portada
+    WEB['https://pod.ejemplo.fm/feed.xml'] = feed
+    for i in range(10):
+        WEB[f'https://pod.ejemplo.fm/ep{i}'] = ART
+    return V.verifica('Pod', 'https://pod.ejemplo.fm/feed.xml', 'https://pod.ejemplo.fm/', 'ia')
+
+r = verifica_pod(pod(10))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati')
+   and 'podcast' in r['p7_licencia'],
+   f"S25 un podcast senza licenza passa p7 come «solo metadati»: {r['motivo']} · {r['p7_licencia'][:50]}")
+_c = V.cambios([r])
+ok(len(_c) == 1 and _c[0].get('licenza', '').startswith('solo metadati')
+   and "licenza = 'solo metadati" in V.sql_salida([r]),
+   f"S26 e la decisione arriva a percorso.fonti.licenza, in tutte e due le uscite: {_c}")
+
+r = verifica_pod(pod(10, tipo='video/mp4'))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S27 un video-podcast è un podcast: {r['motivo']}")
+
+r = verifica_pod(pod(5))
+ok(r['motivo'] == 'ACEPTADA', f"S28 metà degli episodi con l'audio basta: {r['motivo']}")
+r = verifica_pod(pod(4))
+ok('p7 sin licencia' in r['motivo'] and r['p7_licencia'] == '',
+   f"S29 ma quattro su dieci no, è un blog con qualche episodio: {r['motivo']}")
+
+r = verifica_pod(pod(10, tipo='application/pdf'))
+ok('p7 sin licencia' in r['motivo'],
+   f"S30 una rivista con un PDF per articolo non è un podcast: {r['motivo']}")
+
+r = verifica_pod(pod(0))
+ok('p7 sin licencia' in r['motivo'] and 'licenza = null' in V.sql_salida([r])
+   and V.cambios([r])[0].get('licenza') == '',
+   f"S31 un blog senza licenza continua a cadere, e la licenza vecchia si toglie: {r['motivo']}")
+
+r = verifica_pod(pod(10), portada=b'<html><title>Pod</title><footer>'
+                 b'<a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>'
+                 b'</footer></html>')
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('CC BY')
+   and V.cambios([r])[0].get('licenza', '').startswith('CC BY'),
+   f"S32 un podcast con CC tiene la sua CC, e la trascrizione resta testo: {r['p7_licencia'][:60]}")
+
+# Una fila que se paró antes de p7 no sabe nada de la licencia: no debe
+# borrar la que había. TRANSITORIO no toca nada más que la reparación.
+_filas = [{'nome': 'x', 'url_feed': 'https://x/f', 'motivo': 'p1 roto (HTTP 404)'},
+          {'nome': 'y', 'url_feed': 'https://y/f', 'motivo': 'TRANSITORIO p9 (x)',
+           'p7_licencia': 'CC BY | https://y/'}]
+ok(all('licenza' not in c for c in V.cambios(_filas)) and 'licenza' not in V.sql_salida(_filas),
+   f"S33 senza misura di p7 la licenza non si tocca: {V.cambios(_filas)}")
+
 print(f'\n{sum(R)}/{len(R)} adversariales OK')

@@ -39,6 +39,28 @@ def licencia_plataforma(url_feed):
             return texto, url_feed
     return None
 
+def licencia_podcast(d, url_feed):
+    """Un podcast sin licencia de sitio entra como un canal: solo metadatos. -> (texto, url) o None.
+
+    Se reconoce por el contenido y no por la dirección: al menos
+    `PODCAST_ADJUNTOS` de las diez primeras voces traen un adjunto `audio/` o
+    `video/`. Es la misma regla con la que `feed.py` decide qué es un adjunto,
+    y no por elegancia: si aquí contara un PDF o un player de Flash, una revista
+    con un PDF por artículo entraría «solo metadatos» y perdería su texto.
+
+    Se consulta DESPUÉS de la detección automática. Un podcast que declara una
+    Creative Commons tiene que seguir dando el texto de su transcripción, y
+    dándole esta licencia antes se la quitaría.
+    """
+    es = d.entries[:10]
+    if not es:
+        return None
+    con = sum(any((x.get('type') or '').strip().lower().startswith(('audio/', 'video/'))
+                  for x in (e.get('enclosures') or ())) for e in es)
+    if con < len(es) * C.PODCAST_ADJUNTOS:
+        return None
+    return C.LICENCIA_PODCAST, url_feed
+
 def filas_de_nuvola(massimo=500):
     """Las fuentes tal como están HOY en percorso.fonti, activas y apagadas.
 
@@ -125,6 +147,7 @@ def verifica(nome, url, url_sito, cat, amplia=False, con_muro=True):
             lic = K.licencia(pag.body, pag.url, modo) or next(
                 (x for x in (K.licencia_pagina(p2.body, p2.url, modo) for p2 in terminos() if p2.body) if x), None)
             if lic: break
+    lic = lic or licencia_podcast(d, ef)
     r['p7_licencia'] = f'{lic[0]} | {lic[1]}' if lic else ''
     if con_muro:
         n, tot, det, trans = K.muro(links); r['p9_muro'] = f'{n}/{tot}'; r['p9_detalle'] = det
@@ -201,6 +224,9 @@ def sql_salida(rows):
         u = esc(r.get('url_nuevo') or r['url_feed'])
         if r['motivo'] == 'ACEPTADA': out.append(f"update percorso.fonti set attiva = true where url_feed = '{u}';")
         elif not r['motivo'].startswith('TRANSITORIO'): out.append(f"update percorso.fonti set attiva = false where url_feed = '{u}';  -- {com(r['motivo'][:80])}")
+        if 'p7_licencia' in r and not r['motivo'].startswith('TRANSITORIO'):
+            lic = f"'{esc(r['p7_licencia'])}'" if r['p7_licencia'] else 'null'
+            out.append(f"update percorso.fonti set licenza = {lic} where url_feed = '{u}';")
     return '\n'.join(out) + '\n'
 
 def cambios(rows):
@@ -227,6 +253,14 @@ def cambios(rows):
             # del estado de la red de esta corrida.
             c['attiva'] = r['motivo'] == 'ACEPTADA'
             c['motivo'] = com(r['motivo'])[:200]
+            # La licencia con la que se decidió, para que el pipeline diario
+            # sepa si puede extraer el texto sin volver a abrir el feed. Solo
+            # si p7 se midió de verdad: una fila que se paró antes (p1 roto,
+            # REVISAR) no sabe nada de la licencia y no debe borrar la que
+            # había. Vacía sí se escribe: una fuente que PIERDE la licencia
+            # pierde también el trato que esa licencia le daba.
+            if 'p7_licencia' in r:
+                c['licenza'] = r['p7_licencia']
         if len(c) > 1:
             out.append(c)
     return out
