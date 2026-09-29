@@ -252,9 +252,23 @@ def senza_doppioni(voci, rapporto, gia_noti=()):
     return [v for v in voci if id(v) in tenute]
 
 
+# Quanto sommario resta di una fonte «solo metadati»: cinquecento caratteri,
+# la lunghezza che RSS 0.91 dava al `<description>` di una voce. È la misura di
+# un sommario secondo il formato stesso, non una scelta nostra. Senza tetto il
+# campo arrivava intero fino ai 4000 di `fonti_aperte.voce()`, e le note di un
+# episodio a quella lunghezza sono un articolo: la prima rassegna vera ne ha
+# depositati sette, tutti a 4000, uno quasi un saggio. La classificazione legge
+# comunque il sommario intero, prima di qui: si taglia ciò che si CONSERVA e
+# arriva al telefono, non ciò che si legge per decidere il tema.
+SOMMARIO_SOLO_METADATI = 500
+
+
 def riga_articolo(v, testo, rapporto):
     """Da una voce del catalogo alla riga di `percorso.articoli`."""
     autori = [a for a in (v.get("autori") or []) if a][:12]
+    abstract = v.get("abstract") or None
+    if abstract and v.get("solo_metadati"):
+        abstract = riassunto(abstract, SOMMARIO_SOLO_METADATI) or None
     return {
         "chiave": v["chiave"],
         "titolo": (v.get("titolo") or "(senza titolo)")[:2000],
@@ -262,7 +276,7 @@ def riga_articolo(v, testo, rapporto):
         "url_pdf": v.get("url_pdf"),
         "autori": autori,
         "fonte": v.get("fonte"),
-        "abstract": (v.get("abstract") or None),
+        "abstract": abstract,
         "testo": testo,
         "tema_slug": v.get("tema_slug"),
         "trimestre": v.get("trimestre"),

@@ -454,6 +454,10 @@ def principale():
     os.makedirs(os.path.join(cartella, "rassegna"))
     os.makedirs(manuale)
 
+    # Due sommari lunghi quanto le note di un episodio vero. Quello «solo
+    # metadati» deve arrivare corto, quello con licenza intero.
+    SOMMARIO_Y1 = "Why the optimizer gets row counts wrong. " + "Show notes and links. " * 60
+    SOMMARIO_P1 = "Note dell'episodio, lunghe. " * 60
     catalogo = [
         {
             "chiave": "openalex:W1", "titolo": "Primo studio", "autori": ["Rossi", "Bianchi"],
@@ -483,10 +487,14 @@ def principale():
             # testo non deve nemmeno essere tentata: `niente_rete` la farebbe
             # fallire, e un fallimento nei «non riusciti» sarebbe il segno che
             # la dichiarazione non viene rispettata.
+            #
+            # Il sommario è lungo apposta, come le note di un episodio vero: se
+            # ne conserva il principio, non tutto.
             "chiave": "rss:Y1", "titolo": "Cardinality estimation, explained",
             "autori": ["Chi parla"], "url": "https://www.youtube.com/watch?v=AbCdEf",
             "data": "2026-09-20", "fonte": "rss[Chi parla]", "tema_slug": "ottimizzazione",
             "trimestre": "T1", "rilevanza": 2.0, "solo_metadati": True,
+            "abstract": SOMMARIO_Y1,
         },
         {
             # Un episodio di podcast con la trascrizione che l'autore pubblica.
@@ -496,6 +504,7 @@ def principale():
             # verde su una scelta sbagliata.
             "chiave": "podcast:P1", "titolo": "Che cosa decide chi passa prima",
             "autori": ["Chi conduce"], "url": base + "/episodio",
+            "abstract": SOMMARIO_P1,
             "url_trascrizione": base + "/trascrizione.vtt",
             "data": "2026-09-21", "fonte": "podcast[Chi conduce]", "tema_slug": "triage",
             "trimestre": "T1", "rilevanza": 1.8,
@@ -651,6 +660,29 @@ def principale():
         len(solo_meta) == 1 and not solo_meta[0].get("testo")
         and solo_meta[0].get("url") == "https://www.youtube.com/watch?v=AbCdEf",
         repr(solo_meta),
+    )
+    # Il sommario di una fonte «solo metadati» si conserva fino a 500
+    # caratteri, tagliato a fine parola, e nell'evento — che è ciò che il
+    # telefono riceve — è lo stesso della tabella. Quello di una voce con
+    # licenza resta intero: il tetto non è di tutti.
+    ev_y1 = [e for e in eventi if e["entita"] == "articoli" and e["entita_id"] == "rss:Y1"]
+    ab_y1 = (solo_meta[0].get("abstract") or "") if len(solo_meta) == 1 else ""
+    prova_vero(
+        "il sommario «solo metadati» si ferma a 500 caratteri, a fine parola",
+        0 < len(ab_y1) <= 500 and ab_y1.endswith("…")
+        and SOMMARIO_Y1.startswith(ab_y1[:-1]) and SOMMARIO_Y1[len(ab_y1) - 1] == " ",
+        repr(ab_y1[-40:]) + " len=%d" % len(ab_y1),
+    )
+    prova_vero(
+        "e l'evento porta lo stesso sommario corto",
+        len(ev_y1) == 1 and ev_y1[0]["payload"].get("abstract") == ab_y1,
+        repr([e["payload"].get("abstract", "")[-30:] for e in ev_y1]),
+    )
+    ab_p1 = [r.get("abstract") or "" for r in articoli if r.get("chiave") == "podcast:P1"]
+    prova_vero(
+        "mentre il sommario di una voce con licenza resta intero",
+        ab_p1 == [SOMMARIO_P1],
+        repr([len(a) for a in ab_p1]),
     )
     prova_vero(
         "nessun fallimento di rete per lei",
