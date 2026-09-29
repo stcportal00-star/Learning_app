@@ -174,19 +174,22 @@ def pregio(v):
     ripetuti e per gli url ripetuti: due criteri diversi si contraddirebbero
     sulla stessa coppia di voci.
 
-    «Da leggere» è ciò che si CONSERVA, non ciò che il feed porta. Una copia
-    «solo metadati» perde sempre contro una che non lo è: di lei non si estrae
-    il testo e del sommario restano `SOMMARIO_SOLO_METADATI` caratteri, mentre
-    dell'altra si prova il testo intero. Misurare il sommario prima del taglio
-    faceva vincere un video con 2400 caratteri di descrizione contro la stessa
-    pubblicazione in CC BY con 1200 di sommario e il testo: poi se ne
-    conservavano 500, e nient'altro.
+    «Da leggere» è il sommario che si CONSERVA, non quello che il feed porta:
+    di una copia «solo metadati» ne restano `SOMMARIO_SOLO_METADATI`
+    caratteri. Misurato prima del taglio, un video con 2400 caratteri di
+    descrizione batteva la stessa pubblicazione in CC BY con 1200 di sommario
+    e il testo, e poi se ne conservavano 500. A parità di sommario conservato
+    decide la lunghezza intera, come prima: fuori dal caso da correggere, la
+    scelta resta quella di sempre.
+
+    Nessuna priorità di classe. «La copia "solo metadati" perde sempre» è stata
+    provata e tolta: fa vincere un post di una riga contro l'episodio con
+    l'audio e la trascrizione, e fa vincere nel passaggio sui titoli una copia
+    che quello sugli url poi scarta, e l'episodio sparisce del tutto.
     """
-    sommario = len(v.get("abstract") or "")
-    if v.get("solo_metadati"):
-        sommario = min(sommario, SOMMARIO_SOLO_METADATI)
-    return (not v.get("solo_metadati"), bool(v.get("url_pdf")), sommario,
-            float(v.get("rilevanza") or 0))
+    intero = len(v.get("abstract") or "")
+    conservato = min(intero, SOMMARIO_SOLO_METADATI) if v.get("solo_metadati") else intero
+    return (bool(v.get("url_pdf")), conservato, intero, float(v.get("rilevanza") or 0))
 
 
 def senza_url_ripetuti(voci, rapporto, url_gia=()):
