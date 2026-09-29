@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { View, Text, Pressable, ActivityIndicator } from "react-native";
 import Constants from "expo-constants";
 import {
-  Stato, statoNoto, controlla, scaricaRelease, installa, megabyte,
+  Stato, statoNoto, controlla, scaricaRelease, installa, megabyte, numeroCorsa,
 } from "../lib/aggiornamenti";
 
 /** Il numero di corsa di QUESTA build, o null se è stata compilata a mano. */
@@ -71,7 +71,12 @@ export default function Aggiornamento({ compatto = false }: { compatto?: boolean
     : stato.tipo === "disponibile"
       ? `Nuova versione: build ${stato.ultima.corsa} (${megabyte(stato.ultima.byte)}). Stai usando la ${CORSA}.`
     : stato.tipo === "aggiornata"
-      ? `Aggiornata: la build ${CORSA} è la più recente di main (ultima: ${stato.ultima.corsa}).`
+      // Due casi, da non confondere: sul telefono c'è l'ultima di main, oppure
+      // una build di un ramo più recente. Dire «la più recente di main» nel
+      // secondo caso era falso: il test di fumo l'ha mostrato sulla build 28.
+      ? ((numeroCorsa(CORSA) ?? 0) > stato.ultima.corsa
+        ? `Aggiornata: questa build (${CORSA}) è più recente dell'ultima di main (${stato.ultima.corsa}).`
+        : `Aggiornata: è l'ultima build di main (${stato.ultima.corsa}).`)
     : stato.tipo === "locale"
       ? `Build compilata a mano. L'ultima di main è la ${stato.ultima.corsa} (${megabyte(stato.ultima.byte)}): installala solo se è più recente di questa.`
       : `Non so se ci sono aggiornamenti: ${stato.motivo}.`;
