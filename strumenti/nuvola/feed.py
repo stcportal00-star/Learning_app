@@ -616,7 +616,8 @@ def voci_da(fonte, dati):
     # "../articolo" risolverebbe altrimenti una cartella più in là.
     url_base = (fonte.get("url_sito") or fonte.get("url_feed") or "").strip()
 
-    metadati = solo_metadati((fonte.get("url_feed") or "").strip())
+    metadati = solo_metadati((fonte.get("url_feed") or "").strip(),
+                             fonte.get("licenza"))
     uscite = []
     for elemento in analizza(dati, url_base):
         v = fonti.voce(
@@ -704,7 +705,7 @@ def classifica_voce(v):
     return v
 
 
-def solo_metadati(url_feed):
+def solo_metadati(url_feed, licenza=None):
     """Questa fonte è una piattaforma dove la licenza è di chi pubblica?
 
     Da un canale YouTube o da un profilo Mastodon si tiene il titolo, la
@@ -713,10 +714,20 @@ def solo_metadati(url_feed):
     passare p7. Dichiararla e poi estrarre il testo lo stesso sarebbe dire una
     cosa e farne un'altra.
 
-    L'elenco vive in `consegna_code/temi_config.py`. Se quella cartella non c'è,
-    nessuna fonte è di questo tipo: nessuna di esse sarebbe potuta entrare in
-    tabella senza passare da lì.
+    Due strade, perché le fonti di questo tipo sono di due tipi. YouTube e
+    Mastodon si riconoscono dall'indirizzo, e l'elenco vive in
+    `consegna_code/temi_config.py`. Un podcast no: si riconosce dal contenuto
+    del feed, e fra i podcast c'è chi dichiara una licenza e chi no — dal solo
+    URL non si distinguono. Per quelli decide la verifica, una volta, e scrive
+    la sua decisione in `percorso.fonti.licenza`; qui la si legge e basta.
+    Ricalcolarla sarebbe una seconda definizione da tenere allineata alla prima.
+
+    Se `consegna_code/` non c'è, nessuna fonte è di questo tipo per indirizzo:
+    nessuna sarebbe potuta entrare in tabella senza passare da lì. La colonna
+    invece vale sempre, perché è la tabella a portarla.
     """
+    if (licenza or "").strip().lower().startswith("solo metadati"):
+        return True
     for patron, _ in getattr(_CONF, "PIATTAFORME_METADATI", ()) or ():
         if re.match(patron, url_feed or ""):
             return True
@@ -1310,6 +1321,29 @@ def _autoverifica():
            voci_da(canale, _FEED_YOUTUBE)[0].get("solo_metadati"), True)
     _prova("mentre una voce di un blog normale non lo porta",
            "solo_metadati" in voci_da(motori, _FEED_RSS2)[0], False)
+    # Un podcast non si riconosce dall'indirizzo: la decisione la prende la
+    # verifica e la lascia in `licenza`. Le due metà contano allo stesso modo —
+    # un podcast che dichiara una Creative Commons deve continuare a dare il
+    # testo della sua trascrizione, e se questa funzione guardasse solo la
+    # parola «podcast» o solo l'host lo spegnerebbe insieme agli altri.
+    _prova("un podcast accettato «solo metadati» non si estrae",
+           (solo_metadati("https://feeds.ejemplo.fm/show.xml",
+                          "solo metadati e collegamento; nei podcast la licenza "
+                          "è di chi pubblica | https://feeds.ejemplo.fm/show.xml"),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml",
+                          "  Solo metadati e collegamento"),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml",
+                          "CC BY 4.0 | https://creativecommons.org/licenses/by/4.0/"),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml", None),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml", "")),
+           (True, True, False, False, False))
+    podcast = dict(motori, url_feed="https://feeds.ejemplo.fm/show.xml",
+                   licenza="solo metadati e collegamento; prova")
+    _prova("e la licenza salvata arriva fino alla voce",
+           (voci_da(podcast, _FEED_RSS2)[0].get("solo_metadati"),
+            "solo_metadati" in voci_da(dict(podcast, licenza="CC BY 4.0 | x"),
+                                       _FEED_RSS2)[0]),
+           (True, False))
 
     video = classifica_voce(voci_da(canale, _FEED_YOUTUBE)[0])
     _prova("la descrizione di un video YouTube non si perde",
