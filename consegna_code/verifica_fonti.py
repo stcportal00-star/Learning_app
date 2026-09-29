@@ -281,11 +281,24 @@ def estado(rows):
     json.dump(est, open(ESTADO, 'w'), indent=1)
 
 RED = re.compile(r'HTTP 403|HTTP 5\d\d|status=None|anti-bot|URLError|timeout|NO_DESCARGADA|sin texto accesible|TRANSITORIO')
+def aceptadas_de_sitio(rows):
+    """Las aceptadas cuya licencia depende de poder leer el sitio: la base del disyuntor de caída.
+
+    Una fuente «solo metadatos» -canal, perfil, podcast sin licencia- se
+    acepta sin leer la portada, así que no cae cuando las portadas dejan de
+    responder. Contarla diluiría justo la caída que el disyuntor existe para
+    ver: con 20 blogs y 20 podcasts, una semana de portadas en 403 lleva las
+    aceptadas de 40 a 20, que no llega al 50%, y los 20 blogs sanos se
+    apagarían por «p7 sin licencia», un motivo que RED no reconoce como red.
+    """
+    return sum(r['motivo'] == 'ACEPTADA'
+               and not (r.get('p7_licencia') or '').startswith('solo metadati') for r in rows)
+
 def disyuntor(rows, previo):
     """Protege la producción de un entorno roto (proxy corporativo, caída de red, bloqueo de IP)."""
     n = len(rows) or 1
     red = sum(bool(RED.search(r['motivo'])) for r in rows)
-    ok = sum(r['motivo'] == 'ACEPTADA' for r in rows)
+    ok = aceptadas_de_sitio(rows)
     if red / n >= C.DISYUNTOR_RED: return f'{red}/{n} fuentes fallan por red o bloqueo (umbral {C.DISYUNTOR_RED:.0%})'
     if previo and previo >= 5 and ok < previo * (1 - C.DISYUNTOR_CAIDA): return f'aceptadas caen de {previo} a {ok}'
     return ''
@@ -339,7 +352,12 @@ if __name__ == '__main__':
         if len(fs) != esperadas:
             sys.exit(f'ERROR: leídas {len(fs)} filas de {esperadas} con metodo rss; formato no reconocido. No se genera activar.sql.')
     rows = [verifica_segura(n, u, s, c, amplia, '--sin-muro' not in sys.argv) for n, u, s, c in fs]
-    previo = (json.load(open(ESTADO)).get('__aceptadas__') if os.path.exists(ESTADO) else None)
+    # `__aceptadas__` es la base de antes, que contaba también las «solo
+    # metadatos»: vale como base una sola vez, en la primera corrida con este
+    # código. Da un previo un poco más alto, es decir, un disyuntor un poco
+    # más sensible esa semana, que es el lado seguro.
+    _est = json.load(open(ESTADO)) if os.path.exists(ESTADO) else {}
+    previo = _est.get('__aceptadas_sitio__', _est.get('__aceptadas__'))
     corte = disyuntor(rows, previo)
     avisos = salud(rows, corte)
     if corte:
@@ -351,7 +369,8 @@ if __name__ == '__main__':
         open('activar.json', 'w').write('[]\n')
         print(f'DISYUNTOR: {corte} -> activar.sql vacío, ver salud.md'); sys.exit(3)
     estado(rows); escribir(rows)
-    est = json.load(open(ESTADO)); est['__aceptadas__'] = sum(r['motivo'] == 'ACEPTADA' for r in rows); json.dump(est, open(ESTADO, 'w'), indent=1)
+    est = json.load(open(ESTADO)); est['__aceptadas__'] = sum(r['motivo'] == 'ACEPTADA' for r in rows)
+    est['__aceptadas_sitio__'] = aceptadas_de_sitio(rows); json.dump(est, open(ESTADO, 'w'), indent=1)
     for r in rows:
         rep = f"  [reparado: {r['reparacion']}]" if r.get('url_nuevo') else ''
         print(f"{r['nome'][:22]:22} {str(r.get('p3_utiles', '-')):>2}/10  {r['motivo']}{rep}")

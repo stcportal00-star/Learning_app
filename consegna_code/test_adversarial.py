@@ -612,6 +612,21 @@ ok(all(j == q for _, j, q in _par)
                                    "Copyright (todos los derechos reservados) | https://f/"],
    f"S36 activar.json y activar.sql dicen la misma licencia de cada fuente: {_par}")
 
+# El disyuntor de caída cuenta solo las aceptadas cuya licencia sale del sitio.
+# Escena: 20 blogs con CC y 20 podcasts «solo metadati»; una semana las
+# portadas responden 403 y feeds y artículos no. Los blogs caen en «p7 sin
+# licencia», que RED no reconoce; los podcasts siguen aceptados porque su
+# licencia no lee la portada. Contándolos, 40 -> 20 no llega al 50% y los 20
+# blogs sanos se apagarían. La semana normal, en cambio, no debe saltar.
+_blog = lambda i, m, l: {'url_feed': f'https://b{i}/f', 'motivo': m, 'p7_licencia': l}
+_pods = [{'url_feed': f'https://p{i}/f', 'motivo': 'ACEPTADA',
+          'p7_licencia': C.LICENCIA_PODCAST + f' | https://p{i}/f'} for i in range(20)]
+_normal = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + _pods
+_portadas_403 = [_blog(i, 'p7 sin licencia', '') for i in range(20)] + _pods
+_previo = V.aceptadas_de_sitio(_normal)
+ok(_previo == 20 and V.disyuntor(_portadas_403, _previo) and not V.disyuntor(_normal, _previo),
+   f"S37 i podcast «solo metadati» non annacquano il disgiuntore di crollo: "
+   f"previo={_previo} · {V.disyuntor(_portadas_403, _previo)!r}")
 # Una fila que se paró antes de p7 no sabe nada de la licencia: no debe
 # borrar la que había. TRANSITORIO no toca nada más que la reparación.
 _filas = [{'nome': 'x', 'url_feed': 'https://x/f', 'motivo': 'p1 roto (HTTP 404)'},
