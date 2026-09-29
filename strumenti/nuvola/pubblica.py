@@ -172,8 +172,20 @@ def url_di(v):
 def pregio(v):
     """Fra due copie vince chi ha più da leggere. Stesso criterio per i titoli
     ripetuti e per gli url ripetuti: due criteri diversi si contraddirebbero
-    sulla stessa coppia di voci."""
-    return (bool(v.get("url_pdf")), len(v.get("abstract") or ""),
+    sulla stessa coppia di voci.
+
+    «Da leggere» è ciò che si CONSERVA, non ciò che il feed porta. Una copia
+    «solo metadati» perde sempre contro una che non lo è: di lei non si estrae
+    il testo e del sommario restano `SOMMARIO_SOLO_METADATI` caratteri, mentre
+    dell'altra si prova il testo intero. Misurare il sommario prima del taglio
+    faceva vincere un video con 2400 caratteri di descrizione contro la stessa
+    pubblicazione in CC BY con 1200 di sommario e il testo: poi se ne
+    conservavano 500, e nient'altro.
+    """
+    sommario = len(v.get("abstract") or "")
+    if v.get("solo_metadati"):
+        sommario = min(sommario, SOMMARIO_SOLO_METADATI)
+    return (not v.get("solo_metadati"), bool(v.get("url_pdf")), sommario,
             float(v.get("rilevanza") or 0))
 
 
