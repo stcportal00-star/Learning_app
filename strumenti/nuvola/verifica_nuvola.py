@@ -283,6 +283,48 @@ prova_vero("vince chi ha il PDF, non chi ha il sommario più lungo",
 prova_vero("una voce senza titolo non viene buttata",
            any(v["chiave"] == "e" for v in _tenute),
            "senza titolo non si può confrontare: buttarla sarebbe peggio del doppione")
+# Fra due copie si confronta il sommario che si CONSERVA: di una «solo
+# metadati» ne restano 500 caratteri. Ogni caso rompe una versione sbagliata:
+# il sommario intero (vince il video), la priorità di classe (vince il post di
+# una riga e l'episodio con l'audio si perde), il pareggio deciso da altro che
+# dalla lunghezza di prima.
+_lungo, _medio = "d" * 2400, "m" * 600
+for nome, voci, attesa in (
+    ("perde contro una CC con più sommario conservato",
+     [{"chiave": "yt", "titolo": "Stima", "abstract": _lungo, "solo_metadati": True, "rilevanza": 3},
+      {"chiave": "oa", "titolo": "stima!", "abstract": "c" * 1200, "rilevanza": 1}], "oa"),
+    ("vince contro un post di una riga, con il suo audio",
+     [{"chiave": "post", "titolo": "Ep. 42", "abstract": "Nuova puntata! Ascoltala qui.", "rilevanza": 9},
+      {"chiave": "ep", "titolo": "Ep 42", "abstract": _lungo, "solo_metadati": True,
+       "url_media": "https://pod/42.mp3", "rilevanza": 1}], "ep"),
+    ("con l'audio vince contro un post più lungo di 500: l'mp3 non si perde",
+     [{"chiave": "post", "titolo": "Ep. 42", "abstract": "p" * 800, "rilevanza": 9},
+      {"chiave": "ep", "titolo": "Ep 42", "abstract": _lungo, "solo_metadati": True,
+       "url_media": "https://pod/42.mp3", "rilevanza": 1}], "ep"),
+    ("fra due «solo metadati» a pari sommario conservato decide la lunghezza, come prima",
+     [{"chiave": "a", "titolo": "Stima", "abstract": _medio, "solo_metadati": True, "rilevanza": 9},
+      {"chiave": "b", "titolo": "stima", "abstract": _lungo, "solo_metadati": True, "rilevanza": 1}], "b"),
+):
+    prova("doppioni, una copia «solo metadati» %s" % nome,
+          [v["chiave"] for v in pubblica.senza_doppioni(voci, {})], [attesa])
+prova("e lo stesso criterio vale per lo stesso url",
+      [v["chiave"] for v in pubblica.senza_url_ripetuti(
+          [{"chiave": "yt", "url": "https://x/1", "abstract": _lungo, "solo_metadati": True},
+           {"chiave": "oa", "url": "https://x/1", "abstract": "c" * 1200}], {})],
+      ["oa"])
+# Il caso che la priorità di classe rompeva: il passaggio sui titoli sceglie,
+# quello sugli url scarta. Il post del blog senza <link> ripiega sull'indirizzo
+# del sito, che è già in archivio; l'episodio ha il suo. Deve restare
+# l'episodio, non niente.
+_post = {"chiave": "post", "titolo": "Ep 42: triage", "abstract": "Nuova puntata!",
+         "url": "https://pod.example/"}
+_ep = {"chiave": "ep", "titolo": "Ep. 42 — triage", "abstract": _lungo, "solo_metadati": True,
+       "url": "https://pod.example/episodi/42", "url_media": "https://pod.example/42.mp3"}
+_dopo_titoli = pubblica.senza_doppioni([_post, _ep], {})
+prova("e l'episodio non sparisce fra i due passaggi",
+      [v["chiave"] for v in pubblica.senza_url_ripetuti(_dopo_titoli, {}, ["https://pod.example/"])],
+      ["ep"])
+
 # I doppioni sono di DUE specie, e guardare solo la prima li lascia tornare una
 # mattina dopo l'altra: trentuno su duecentoventitre alla seconda corsa vera.
 # Il conteggio va provato quanto il filtro, perché sommare le due specie era

@@ -172,9 +172,31 @@ def url_di(v):
 def pregio(v):
     """Fra due copie vince chi ha più da leggere. Stesso criterio per i titoli
     ripetuti e per gli url ripetuti: due criteri diversi si contraddirebbero
-    sulla stessa coppia di voci."""
-    return (bool(v.get("url_pdf")), len(v.get("abstract") or ""),
-            float(v.get("rilevanza") or 0))
+    sulla stessa coppia di voci.
+
+    «Da leggere» è il sommario che si CONSERVA, non quello che il feed porta:
+    di una copia «solo metadati» ne restano `SOMMARIO_SOLO_METADATI`
+    caratteri. Misurato prima del taglio, un video con 2400 caratteri di
+    descrizione batteva la stessa pubblicazione in CC BY con 1200 di sommario
+    e il testo, e poi se ne conservavano 500. A parità di sommario conservato
+    decide la lunghezza intera, come prima: fuori dal caso da correggere, la
+    scelta resta quella di sempre.
+
+    Il tetto nel confronto vale solo per le copie «solo metadati» SENZA
+    allegato. Di un episodio con l'audio ciò che conta non è il sommario ma
+    l'audio: misurarlo a 500 farebbe vincere un post con 800 caratteri, e
+    l'mp3 da ascoltare in aereo si perderebbe.
+
+    Nessuna priorità di classe. «La copia "solo metadati" perde sempre» è stata
+    provata e tolta: fa vincere un post di una riga contro l'episodio con
+    l'audio e la trascrizione, e fa vincere nel passaggio sui titoli una copia
+    che quello sugli url poi scarta, e l'episodio sparisce del tutto.
+    """
+    intero = len(v.get("abstract") or "")
+    conservato = intero
+    if v.get("solo_metadati") and not v.get("url_media"):
+        conservato = min(intero, SOMMARIO_SOLO_METADATI)
+    return (bool(v.get("url_pdf")), conservato, intero, float(v.get("rilevanza") or 0))
 
 
 def senza_url_ripetuti(voci, rapporto, url_gia=()):
@@ -252,9 +274,23 @@ def senza_doppioni(voci, rapporto, gia_noti=()):
     return [v for v in voci if id(v) in tenute]
 
 
+# Quanto sommario resta di una fonte «solo metadati»: cinquecento caratteri,
+# la lunghezza che RSS 0.91 dava al `<description>` di una voce. È la misura di
+# un sommario secondo il formato stesso, non una scelta nostra. Senza tetto il
+# campo arrivava intero fino ai 4000 di `fonti_aperte.voce()`, e le note di un
+# episodio a quella lunghezza sono un articolo: la prima rassegna vera ne ha
+# depositati sette, tutti a 4000, uno quasi un saggio. La classificazione legge
+# comunque il sommario intero, prima di qui: si taglia ciò che si CONSERVA e
+# arriva al telefono, non ciò che si legge per decidere il tema.
+SOMMARIO_SOLO_METADATI = 500
+
+
 def riga_articolo(v, testo, rapporto):
     """Da una voce del catalogo alla riga di `percorso.articoli`."""
     autori = [a for a in (v.get("autori") or []) if a][:12]
+    abstract = v.get("abstract") or None
+    if abstract and v.get("solo_metadati"):
+        abstract = riassunto(abstract, SOMMARIO_SOLO_METADATI) or None
     return {
         "chiave": v["chiave"],
         "titolo": (v.get("titolo") or "(senza titolo)")[:2000],
@@ -262,7 +298,7 @@ def riga_articolo(v, testo, rapporto):
         "url_pdf": v.get("url_pdf"),
         "autori": autori,
         "fonte": v.get("fonte"),
-        "abstract": (v.get("abstract") or None),
+        "abstract": abstract,
         "testo": testo,
         "tema_slug": v.get("tema_slug"),
         "trimestre": v.get("trimestre"),
