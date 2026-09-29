@@ -1131,9 +1131,12 @@ _FEED_PODCAST = """<?xml version="1.0" encoding="utf-8"?>
 
 # Il sommario corto e il corpo lungo nella stessa voce, nelle due grammatiche:
 # `<content:encoded>` di RSS e `<content>` di Atom. Il corpo qui è una
-# trascrizione incollata, che è esattamente ciò che certi podcast fanno.
+# trascrizione incollata, che è esattamente ciò che certi podcast fanno. Nella
+# versione RSS i sommari sono due, `<description>` di una parola e
+# `<itunes:summary>` più lungo: fra i sommari vale ancora il più lungo.
 _FEED_CORPO = """<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
   <channel>
     <title>Un podcast</title>
     <link>https://pod.example/</link>
@@ -1141,7 +1144,8 @@ _FEED_CORPO = """<?xml version="1.0" encoding="utf-8"?>
       <title>Why the planner misjudges joins</title>
       <link>https://pod.example/ep/14</link>
       <pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>
-      <description>Two hosts on cardinality estimation.</description>
+      <description>Joins.</description>
+      <itunes:summary>Two hosts on cardinality estimation.</itunes:summary>
       <content:encoded><![CDATA[<p>HOST ONE: Welcome back. Today we read an execution plan line by line, and the cardinality estimation is wrong on every join we look at.</p>]]></content:encoded>
       <enclosure url="https://pod.example/ep/14.mp3" type="audio/mpeg" length="1000"/>
     </item>
@@ -1239,7 +1243,7 @@ class _FintaNuvola:
 
 
 def _autoverifica():
-    global _passate
+    global _passate, _CONF
 
     # I quattro campi dell'allegato si confrontano per intero anche qui, dove
     # non c'è nessun allegato: è il modo di accorgersi il giorno in cui un feed
@@ -1433,16 +1437,39 @@ def _autoverifica():
     # telefono: sarebbe estrarre il testo per un'altra porta, con la licenza
     # dichiarata che dice il contrario. Tutte e due le grammatiche, perché
     # togliere solo `encoded` lascerebbe passare l'Atom.
-    senza_licenza = dict(podcast, licenza="solo metadati e collegamento; prova")
+    solo_meta_prova = "solo metadati e collegamento; prova"
+    senza_licenza = dict(podcast, licenza=solo_meta_prova)
     _prova("una fonte «solo metadati» tiene il sommario e non il corpo",
            (voci_da(senza_licenza, _FEED_CORPO)[0]["abstract"],
             voci_da(senza_licenza, _FEED_CORPO_ATOM)[0]["abstract"]),
            ("Two hosts on cardinality estimation.",
             "Two hosts on cardinality estimation."))
+    # Con una licenza VERA, non con la colonna vuota: dopo la verifica del
+    # lunedì ogni fonte accesa ne ha una, e una regola che guardasse «c'è una
+    # licenza» invece di «la licenza è solo metadati» toglierebbe il corpo a
+    # tutte le fonti licenziate senza che la colonna vuota se ne accorga.
     _prova("mentre una fonte con licenza continua a tenere il più lungo",
-           (voci_da(podcast, _FEED_CORPO)[0]["abstract"][:26],
-            voci_da(podcast, _FEED_CORPO_ATOM)[0]["abstract"][:26]),
-           ("HOST ONE: Welcome back. To", "HOST ONE: Welcome back. To"))
+           [(voci_da(dict(podcast, licenza=lic), f)[0]["abstract"][:26])
+            for lic in ("CC BY 4.0 | https://creativecommons.org/licenses/by/4.0/",
+                        "Copyright (todos los derechos reservados) | https://pod.example/",
+                        None)
+            for f in (_FEED_CORPO, _FEED_CORPO_ATOM)],
+           ["HOST ONE: Welcome back. To"] * 6)
+
+    # Senza `consegna_code/` nessuna fonte è «solo metadati» per indirizzo, ma
+    # la colonna vale lo stesso: è la tabella a portarla. Una guardia come
+    # quella di `segna_esplorazione` (`if not _CONF: return False`) spegnerebbe
+    # anche lei, e riaccenderebbe il testo dei podcast.
+    conf = _CONF
+    _CONF = None
+    try:
+        _prova("senza consegna_code la licenza salvata vale ancora",
+               (solo_metadati("https://feeds.ejemplo.fm/show.xml", solo_meta_prova),
+                solo_metadati("https://www.youtube.com/feeds/videos.xml?channel_id=UCx"),
+                voci_da(senza_licenza, _FEED_CORPO)[0]["abstract"]),
+               (True, False, "Two hosts on cardinality estimation."))
+    finally:
+        _CONF = conf
 
     # ------------------------------------------------------- classifica_voce
     classificata = classifica_voce(voci_da(motori, _FEED_RSS2)[0])
