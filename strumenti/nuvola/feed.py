@@ -388,6 +388,71 @@ def _nome_leggibile(testo):
     return testo
 
 
+def _gruppo_media(nodo):
+    """Il `<media:group>` della voce, se c'è.
+
+    `_figli` prende solo i figli diretti, e ha ragione: un `<item>` può
+    contenere `<source><title>`, che è il titolo di un ALTRO feed. Ma
+    `<media:group>` è il blocco della voce stessa — è lì che YouTube mette la
+    descrizione del video — e saltarlo significa depositare in libreria
+    diecimila voci con il solo titolo. Si scende di un livello, e solo lì.
+    """
+    gruppi = _figli(nodo, ("group",))
+    return gruppi[0] if gruppi else None
+
+
+def _media_da(nodo, url_base):
+    """L'allegato riproducibile della voce: (url, tipo, byte) oppure (None, '', 0).
+
+    Tre grammatiche, di nuovo la stessa cosa: RSS ha `<enclosure>`, Atom ha
+    `<link rel="enclosure">`, MRSS ha `<media:content>`.
+
+    Si tiene solo ciò che dichiara `audio/` o `video/`. Il `<media:content>` di
+    YouTube punta a un player Flash (`application/x-shockwave-flash`): prenderlo
+    per un file da scaricare vuol dire mettere in coda diecimila scarichi che
+    falliscono tutti.
+    """
+    candidati = []
+    for figlio in _figli(nodo, ("enclosure",)):
+        candidati.append((figlio.get("url"), figlio.get("type"), figlio.get("length")))
+    for figlio in _figli(nodo, ("link",)):
+        if (figlio.get("rel") or "").strip().lower() == "enclosure":
+            candidati.append((figlio.get("href"), figlio.get("type"), figlio.get("length")))
+    gruppo = _gruppo_media(nodo)
+    for contenitore in (nodo, gruppo) if gruppo is not None else (nodo,):
+        for figlio in _figli(contenitore, ("content",)):
+            if figlio.get("url"):
+                candidati.append((figlio.get("url"), figlio.get("type"),
+                                  figlio.get("fileSize") or figlio.get("filesize")))
+
+    for indirizzo, tipo, lunghezza in candidati:
+        indirizzo = (indirizzo or "").strip()
+        tipo = (tipo or "").strip().lower()
+        if not indirizzo or not tipo.startswith(("audio/", "video/")):
+            continue
+        try:
+            byte = max(0, int(str(lunghezza).strip()))
+        except (TypeError, ValueError):
+            byte = 0
+        return urllib.parse.urljoin(url_base or "", indirizzo), tipo, byte
+    return None, "", 0
+
+
+def _trascrizione_da(nodo, url_base):
+    """`<podcast:transcript url type>`: la trascrizione che l'AUTORE pubblica.
+
+    È l'unica trascrizione che questo progetto usa. Non se ne generano: una
+    trascrizione automatica costa una chiave, una quota e un servizio che un
+    giorno risponde 429 — e quel giorno si è in aereo. Qui invece è un file che
+    l'editore ha messo online apposta, con la sua licenza.
+    """
+    for figlio in _figli(nodo, ("transcript",)):
+        indirizzo = (figlio.get("url") or "").strip()
+        if indirizzo:
+            return urllib.parse.urljoin(url_base or "", indirizzo)
+    return None
+
+
 def _elemento_da(nodo, url_base):
     """Un `<item>` o un `<entry>` -> il dizionario documentato in `analizza`."""
     titoli = _figli(nodo, ("title",))
@@ -406,15 +471,24 @@ def _elemento_da(nodo, url_base):
         if data:
             break
 
-    testi = [_pulisci(_testo_di(f)) for f in _figli(nodo, _CAMPI_TESTO)]
+    fonti_testo = list(_figli(nodo, _CAMPI_TESTO))
+    gruppo = _gruppo_media(nodo)
+    if gruppo is not None:
+        fonti_testo += _figli(gruppo, _CAMPI_TESTO)
+    testi = [_pulisci(_testo_di(f)) for f in fonti_testo]
     abstract = max(testi, key=len) if testi else ""
 
+    media, tipo_media, byte_media = _media_da(nodo, url_base)
     return {
         "titolo": titolo,
         "url": _url_da(nodo, url_base),
         "data": data,
         "abstract": abstract,
         "autori": _autori_da(nodo),
+        "media": media,
+        "tipo_media": tipo_media,
+        "byte_media": byte_media,
+        "trascrizione": _trascrizione_da(nodo, url_base),
     }
 
 
@@ -423,7 +497,9 @@ def analizza(dati, url_base=""):
 
     Ogni elemento è
         {"titolo": str, "url": str|None, "data": "AAAA-MM-GG"|None,
-         "abstract": str, "autori": list[str]}
+         "abstract": str, "autori": list[str],
+         "media": str|None, "tipo_media": str, "byte_media": int,
+         "trascrizione": str|None}
 
     Legge indifferentemente RSS 2.0 (`<rss><channel><item>`), Atom 1.0
     (`<feed><entry>`, con namespace) e RSS 1.0/RDF (`<rdf:RDF><item>`): i tre
@@ -540,6 +616,7 @@ def voci_da(fonte, dati):
     # "../articolo" risolverebbe altrimenti una cartella più in là.
     url_base = (fonte.get("url_sito") or fonte.get("url_feed") or "").strip()
 
+    metadati = solo_metadati((fonte.get("url_feed") or "").strip())
     uscite = []
     for elemento in analizza(dati, url_base):
         v = fonti.voce(
@@ -559,6 +636,17 @@ def voci_da(fonte, dati):
         v["categoria_dichiarata"] = fonte.get("categoria") or ""
         if fonte.get("id"):
             v["fonte_id"] = fonte["id"]
+        # L'allegato e la trascrizione viaggiano con la voce ma NON entrano
+        # nella classificazione: sono modi di consegnare lo stesso contenuto,
+        # non informazione su di che cosa parla.
+        if elemento["media"]:
+            v["url_media"] = elemento["media"]
+            v["tipo_media"] = elemento["tipo_media"]
+            v["byte_media"] = elemento["byte_media"]
+        if elemento["trascrizione"]:
+            v["url_trascrizione"] = elemento["trascrizione"]
+        if metadati:
+            v["solo_metadati"] = True
         uscite.append(v)
     return uscite
 
@@ -614,6 +702,25 @@ def classifica_voce(v):
     if categoria and any(_coincide(t, categoria) for t in v["temi"]):
         v["rilevanza"] = round(v["rilevanza"] * MAGGIORAZIONE_CATEGORIA, 3)
     return v
+
+
+def solo_metadati(url_feed):
+    """Questa fonte è una piattaforma dove la licenza è di chi pubblica?
+
+    Da un canale YouTube o da un profilo Mastodon si tiene il titolo, la
+    descrizione, la data e il collegamento — e mai il testo scaricato. Non è una
+    finezza: è la licenza che la fonte dichiara, ed è ciò che le permette di
+    passare p7. Dichiararla e poi estrarre il testo lo stesso sarebbe dire una
+    cosa e farne un'altra.
+
+    L'elenco vive in `consegna_code/temi_config.py`. Se quella cartella non c'è,
+    nessuna fonte è di questo tipo: nessuna di esse sarebbe potuta entrare in
+    tabella senza passare da lì.
+    """
+    for patron, _ in getattr(_CONF, "PIATTAFORME_METADATI", ()) or ():
+        if re.match(patron, url_feed or ""):
+            return True
+    return False
 
 
 def quota_esplorazione():
@@ -929,6 +1036,62 @@ _FEED_NON_FEED = """<?xml version="1.0" encoding="utf-8"?>
 </html>
 """
 
+# Il feed di un canale YouTube, nella forma vera. Due trappole in una: la
+# descrizione — cioè tutto il testo che esiste — sta dentro <media:group>, e il
+# <media:content> di quel gruppo NON è un file ma un player Flash.
+_FEED_YOUTUBE = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015"
+      xmlns:media="http://search.yahoo.com/mrss/"
+      xmlns="http://www.w3.org/2005/Atom">
+  <title>Un canale qualunque</title>
+  <link rel="alternate" href="https://www.youtube.com/channel/UCx"/>
+  <entry>
+    <id>yt:video:AbCdEf</id>
+    <yt:videoId>AbCdEf</yt:videoId>
+    <title>Cardinality estimation explained, with real query plans</title>
+    <link rel="alternate" href="https://www.youtube.com/watch?v=AbCdEf"/>
+    <author><name>Chi parla</name></author>
+    <published>2026-09-20T15:00:00+00:00</published>
+    <updated>2026-09-21T09:00:00+00:00</updated>
+    <media:group>
+      <media:title>Cardinality estimation explained, with real query plans</media:title>
+      <media:content url="https://www.youtube.com/v/AbCdEf?version=3"
+                     type="application/x-shockwave-flash" width="640" height="390"/>
+      <media:thumbnail url="https://i4.ytimg.com/vi/AbCdEf/hqdefault.jpg"/>
+      <media:description>Why the optimizer gets row counts wrong, how the
+      execution plan changes, and what a columnar storage engine does
+      differently.</media:description>
+    </media:group>
+  </entry>
+</feed>
+"""
+
+# Un podcast con il namespace di Podcast Index: allegato riproducibile e
+# trascrizione pubblicata dall'autore, che è l'unica che questo progetto usa.
+_FEED_PODCAST = """<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  <channel>
+    <title>Un podcast</title>
+    <link>https://pod.example/</link>
+    <item>
+      <title>Data protection impact assessment, in practice</title>
+      <link>https://pod.example/ep/12</link>
+      <pubDate>Sun, 20 Sep 2026 10:00:00 GMT</pubDate>
+      <description>Lawful basis, data minimisation and the humanitarian case.</description>
+      <enclosure url="https://pod.example/ep/12.mp3" type="audio/mpeg" length="41231234"/>
+      <podcast:transcript url="/ep/12.vtt" type="text/vtt"/>
+    </item>
+    <item>
+      <title>Un episodio con un allegato che non è un file</title>
+      <link>https://pod.example/ep/13</link>
+      <pubDate>Sat, 19 Sep 2026 10:00:00 GMT</pubDate>
+      <description>Record linkage and data validation in practice.</description>
+      <enclosure url="https://pod.example/ep/13.html" type="text/html" length="900"/>
+    </item>
+  </channel>
+</rss>
+"""
+
 _FEED_VUOTO = """<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
@@ -1006,6 +1169,12 @@ class _FintaNuvola:
 def _autoverifica():
     global _passate
 
+    # I quattro campi dell'allegato si confrontano per intero anche qui, dove
+    # non c'è nessun allegato: è il modo di accorgersi il giorno in cui un feed
+    # normale cominciasse a produrne uno per sbaglio.
+    SENZA_ALLEGATO = {"media": None, "tipo_media": "", "byte_media": 0,
+                      "trascrizione": None}
+
     # ---------------------------------------------------- 1. RSS 2.0 completo
     _prova(
         "RSS 2.0: CDATA nel titolo, HTML nella description, pubDate RFC 822",
@@ -1015,7 +1184,7 @@ def _autoverifica():
           "data": "2026-09-21",
           "abstract": "Execution plan and cardinality estimation in a vectorized "
                       "execution engine.",
-          "autori": ["Maria Bianchi"]}])
+          "autori": ["Maria Bianchi"], **SENZA_ALLEGATO}])
 
     # ------------------------------------------------- 2. Atom 1.0 con namespace
     _prova(
@@ -1025,12 +1194,12 @@ def _autoverifica():
           "url": "https://esempio.org/voci/inferenza",
           "data": "2026-09-21",
           "abstract": "Estimating the effect with routine surveillance data.",
-          "autori": ["Giulia Verdi"]},
+          "autori": ["Giulia Verdi"], **SENZA_ALLEGATO},
          {"titolo": "Data quality checks that actually run",
           "url": "https://esempio.org/voci/qualita",
           "data": "2026-09-19",
           "abstract": "Record linkage and data validation.",
-          "autori": ["Anna Gialli"]}])
+          "autori": ["Anna Gialli"], **SENZA_ALLEGATO}])
 
     # ------------------------------------------------------- 3. RSS 1.0 / RDF
     _prova(
@@ -1040,7 +1209,7 @@ def _autoverifica():
           "url": "https://esempio.org/rdf/gdpr",
           "data": "2026-09-20",
           "abstract": "A guide to the data protection impact assessment.",
-          "autori": ["Luca Neri"]}])
+          "autori": ["Luca Neri"], **SENZA_ALLEGATO}])
 
     # ----------------------------------------------------- 4. url relativi
     _prova(
@@ -1114,6 +1283,54 @@ def _autoverifica():
     _prova("voci_da regge anche i byte, non solo il testo",
            voci_da(motori, _FEED_RSS2.encode("utf-8"))[0]["titolo"],
            "Query optimization for columnar storage engines")
+
+    # --------------------------------------------- YouTube e podcast
+    #
+    # Un canale YouTube è un feed Atom ufficiale: nessuna chiave, nessuno
+    # strumento esterno. Ma tutto il testo che esiste sta in
+    # <media:group><media:description>, e prendendo solo i figli diretti la
+    # voce arriva in libreria con il titolo e basta. Misurato: 1,8 di rilevanza
+    # senza la descrizione, 4,2 con — la stessa voce, due destini diversi
+    # quando il tetto degli ottanta taglia.
+    canale = {"id": "f-y", "nome": "Chi parla",
+              "url_feed": "https://www.youtube.com/feeds/videos.xml?channel_id=UCx",
+              "url_sito": "https://www.youtube.com/channel/UCx",
+              "categoria": "ottimizzazione", "lingua": "en", "peso": 0.5,
+              "metodo": "rss", "attiva": True}
+    # Da un canale si tiene il metadato e mai il testo: è la licenza con cui
+    # quella fonte è potuta entrare in tabella, e `pubblica.py` la rispetta
+    # saltando l'estrazione. Senza questo marchio la dichiarazione sarebbe una
+    # bugia scritta in `informe.csv`.
+    _prova("una fonte YouTube è dichiarata «solo metadati»",
+           (solo_metadati("https://www.youtube.com/feeds/videos.xml?channel_id=UCx"),
+            solo_metadati("https://mastodon.social/@tizio.rss"),
+            solo_metadati("https://blog.ejemplo.org/feed.xml")),
+           (True, True, False))
+    _prova("e il marchio viaggia su ogni sua voce",
+           voci_da(canale, _FEED_YOUTUBE)[0].get("solo_metadati"), True)
+    _prova("mentre una voce di un blog normale non lo porta",
+           "solo_metadati" in voci_da(motori, _FEED_RSS2)[0], False)
+
+    video = classifica_voce(voci_da(canale, _FEED_YOUTUBE)[0])
+    _prova("la descrizione di un video YouTube non si perde",
+           (video["abstract"][:40], video["rilevanza"]),
+           ("Why the optimizer gets row counts wrong,", 4.2))
+    _prova("e il player Flash di <media:content> non è un file da scaricare",
+           ("url_media" in video, video["url"]),
+           (False, "https://www.youtube.com/watch?v=AbCdEf"))
+
+    podcast = {"id": "f-p", "nome": "Un podcast", "url_feed": "https://pod.example/rss",
+               "url_sito": "https://pod.example/", "categoria": "gdpr",
+               "lingua": "en", "peso": 0.5, "metodo": "rss", "attiva": True}
+    episodi = voci_da(podcast, _FEED_PODCAST)
+    _prova("l'allegato di un podcast viaggia con la voce, con tipo e peso",
+           (episodi[0]["url_media"], episodi[0]["tipo_media"], episodi[0]["byte_media"]),
+           ("https://pod.example/ep/12.mp3", "audio/mpeg", 41231234))
+    _prova("la trascrizione pubblicata dall'autore si risolve contro il sito",
+           episodi[0]["url_trascrizione"], "https://pod.example/ep/12.vtt")
+    _prova("un allegato che non è audio né video non diventa uno scarico",
+           ("url_media" in episodi[1], "url_trascrizione" in episodi[1]),
+           (False, False))
 
     # ------------------------------------------------------- classifica_voce
     classificata = classifica_voce(voci_da(motori, _FEED_RSS2)[0])

@@ -11,6 +11,7 @@ I `tema_slug` sono gli stessi di `assets/contenuti/biblioteca.json`: le nuove
 uscite entrano nella stessa libreria dei 52 testi già catalogati, non in uno
 schema parallelo. `verifica_rassegna.py` fallisce se i due insiemi divergono.
 """
+import functools
 import re
 import unicodedata
 
@@ -231,6 +232,279 @@ SPECIALIZZAZIONI = {
     ),
 }
 
+# ----------------------------------------------- le altre tre lingue del lessico
+# Fino a ieri questo vocabolario era tutto in inglese, e la conseguenza non era
+# teorica: un testo italiano, spagnolo o francese senza gergo inglese prendeva
+# ZERO temi, quindi una fonte che pubblica in quelle lingue veniva scartata dal
+# verificatore e non entrava mai. Misurato prima della modifica: quindici testi
+# veri nelle tre lingue, quattro classificati.
+#
+# Stanno QUI e non dentro `SPECIALIZZAZIONI` per tre ragioni:
+#
+#  1. si fondono in CODA alle liste inglesi, e l'ordine conta.
+#     `consegna_code/scopri_fonti.py` e `consegna_code/test_fonti.py` prendono
+#     `FUERTES[slug][:2]` e `[:4]` come parole con cui interrogare iTunes,
+#     Hacker News e gli archivi aperti — e quelle si interrogano in inglese.
+#     In testa, lo scouting cercherebbe «integrità referenziale» su Hacker News;
+#  2. restano leggibili e revocabili in un blocco solo. Un lessico che decide
+#     la classificazione di tutto l'archivio non si mescola alla sorgente che
+#     era già stata verificata;
+#  3. l'inglese resta la lingua di riferimento del vocabolario, che è ciò che
+#     tiene allineati il verificatore delle fonti e la rassegna quotidiana.
+#
+# Due regole hanno governato la scelta dei termini, e si vedono nel risultato:
+# LOCUZIONI, non parole singole — 274 su 321 hanno due o più parole — e nessuna
+# stringa che, tolti gli accenti, sia anche una parola comune di un'altra
+# lingua. Lo spagnolo «red» è l'esempio che è stato scartato apposta: diventa la
+# stringa «red», che in inglese è un colore e comparirebbe ovunque.
+#
+# Gli accenti si possono scrivere: `normalizza()` li toglie al confronto. I
+# plurali sono voci separate perché `occorre()` confronta a confine di parola, e
+# «base de datos» non trova «bases de datos» — la stessa ragione per cui
+# l'inglese elenca «index» e «indexes».
+ALTRE_LINGUE = {
+    "sql_base": (
+        [
+            "basi di dati relazionali", "integrità referenziale", "chiave primaria",
+            "base di dati relazionale",
+            "bases de datos relacionales", "base de datos relacional",
+            "integridad referencial", "clave primaria", "claves foráneas",
+            "bases de données relationnelles", "base de données relationnelle",
+            "intégrité référentielle", "clé primaire", "clés étrangères"
+        ],
+        [
+            "bases de datos", "algebra relazionale", "álgebra relacional",
+            "algèbre relationnelle", "procedimientos almacenados", "procédures stockées"
+        ],
+    ),
+    "ottimizzazione": (
+        [
+            "piano di esecuzione", "piani di esecuzione", "prestazioni delle query",
+            "ottimizzazione delle query", "stima della cardinalità",
+            "optimización de consultas", "estimación de cardinalidad", "consultas lentas",
+            "optimisation des requêtes", "performance des requêtes", "requêtes lentes",
+            "exécution vectorisée"
+        ],
+        [
+            "profilazione del codice", "elaborazione parallela", "plan de ejecución",
+            "planes de ejecución", "almacenamiento columnar", "traitement parallèle"
+        ],
+    ),
+    "lettura_codice": (
+        [
+            "codice sorgente", "controllo di versione", "test unitari", "código fuente",
+            "control de versiones", "pruebas unitarias", "refactorización", "code source",
+            "revue de code", "tests unitaires", "débogage"
+        ],
+        [
+            "debito tecnico", "leggibilità del codice", "righe di codice", "deuda técnica",
+            "legibilidad del código", "líneas de código", "dette technique",
+            "base de code"
+        ],
+    ),
+    "modellazione": (
+        [
+            "modellazione dei dati", "ingegneria dei dati", "entità-relazione",
+            "ingeniería de datos", "entidad-relación", "ingénierie des données",
+            "entité-association", "entrepôt de données", "entrepôts de données"
+        ],
+        [
+            "esquema en estrella", "architettura dei dati", "arquitectura de datos",
+            "architecture des données", "tabla de hechos", "tablas de hechos",
+            "table de faits"
+        ],
+    ),
+    "statistica": (
+        [
+            "inferenza causale", "inferenza bayesiana", "intervallo di confidenza",
+            "regressione logistica", "inferencia causal", "inferencia bayesiana",
+            "intervalo de confianza", "regresión logística", "inférence causale",
+            "inférence bayésienne", "intervalle de confiance"
+        ],
+        [
+            "significatività statistica", "deviazione standard", "numerosità campionaria",
+            "desviación estándar", "muestreo aleatorio", "distribución de probabilidad",
+            "écart-type", "plan de sondage", "loi de probabilité"
+        ],
+    ),
+    "epidemiologia": (
+        [
+            "epidemiologia", "épidémiologie", "sorveglianza epidemiologica",
+            "vigilancia epidemiológica", "surveillance épidémiologique",
+            "veille sanitaire", "malattie infettive", "enfermedades infecciosas",
+            "maladies infectieuses", "copertura vaccinale", "cobertura vacunal",
+            "couverture vaccinale"
+        ],
+        [
+            "tasso di mortalità", "tasa de mortalidad", "taux de mortalité",
+            "surmortalité", "paludisme", "tubercolosi"
+        ],
+    ),
+    "kpi": (
+        [
+            "visualizzazione dati", "indicatori chiave di prestazione",
+            "cruscotto direzionale", "grafico a barre", "visualización de datos",
+            "cuadro de mando", "cuadros de mando", "indicadores clave de desempeño",
+            "gráfico de barras", "indicateurs clés de performance"
+        ],
+        [
+            "infografica", "infografiche", "scala di colori", "infografía", "infografías",
+            "escala de color", "mapa de calor", "infographie", "échelle de couleurs",
+            "indicateurs de performance"
+        ],
+    ),
+    "qualita_dati": (
+        [
+            "qualità dei dati", "riproducibilità", "scienza aperta",
+            "calidad de los datos", "reproducibilidad", "ciencia abierta",
+            "datos abiertos", "qualité des données", "reproductibilité", "science ouverte",
+            "données ouvertes"
+        ],
+        [
+            "metadati", "pulizia dei dati", "dati mancanti", "metadatos",
+            "limpieza de datos", "datos faltantes", "métadonnées", "nettoyage des données",
+            "données manquantes"
+        ],
+    ),
+    "gdpr": (
+        [
+            "protezione dei dati", "dati sensibili", "diritti degli interessati",
+            "minimizzazione dei dati", "violazione dei dati", "protección de datos",
+            "datos sensibles", "derecho al olvido",
+            "transferencias internacionales de datos", "protection des données",
+            "données à caractère personnel", "minimisation des données",
+            "protection de la vie privée"
+        ],
+        [
+            "titolare del trattamento", "responsabile del trattamento", "anonimizzazione",
+            "pseudonimizzazione", "profilazione", "responsable del tratamiento",
+            "encargado del tratamiento", "anonimización", "responsable du traitement",
+            "cnil"
+        ],
+    ),
+    "ai_act": (
+        [
+            "regolamento IA", "IA ad alto rischio", "IA per finalita generali",
+            "reglamento de IA", "ley de IA", "IA de alto riesgo", "IA de uso general",
+            "reglement IA", "IA a haut risque", "IA a usage general"
+        ],
+        ["responsabilita algoritmica", "gobernanza algoritmica"],
+    ),
+    "ia": (
+        [
+            "intelligenza artificiale", "apprendimento automatico", "modelli linguistici",
+            "modello linguistico", "ia generativa", "inteligencia artificial",
+            "aprendizaje automático", "modelos de lenguaje", "modelo de lenguaje",
+            "intelligence artificielle", "apprentissage automatique", "modèles de langage",
+            "modèle de langage", "ia générative"
+        ],
+        [
+            "apprendimento profondo", "aprendizaje profundo", "apprentissage profond",
+            "agente conversazionale", "agente conversacional", "agent conversationnel"
+        ],
+    ),
+    "sicurezza": (
+        [
+            "sicurezza informatica", "cybersicurezza", "attacco informatico",
+            "attacchi informatici", "ciberseguridad", "seguridad informática",
+            "ciberataque", "ciberataques", "cybersécurité", "sécurité informatique",
+            "cyberattaque", "cyberattaques", "rançongiciel", "hameçonnage"
+        ],
+        [
+            "aggiornamenti di sicurezza", "autenticazione a due fattori", "crittografia",
+            "brecha de seguridad", "autenticación de dos factores",
+            "cifrado de extremo a extremo", "correctifs de sécurité",
+            "chiffrement des données", "authentification à deux facteurs"
+        ],
+    ),
+    "hardware": (
+        [
+            "connettività intermittente", "connettività satellitare", "cavi sottomarini",
+            "gruppo di continuità", "conectividad satelital", "conectividad rural",
+            "cables submarinos", "reprise après sinistre", "connectivité satellitaire",
+            "câbles sous-marins"
+        ],
+        [
+            "interruzione di corrente", "gruppo elettrogeno", "banda larga",
+            "cortes de energía", "grupo electrógeno", "banda ancha", "coupures de courant",
+            "délestage", "onduleur", "groupe électrogène"
+        ],
+    ),
+    "governance": (
+        [
+            "governo dei dati", "affidabilita operativa", "gobernanza de datos",
+            "gobierno del dato", "fiabilidad operativa", "gouvernance des donnees",
+            "fiabilite operationnelle", "conduite du changement"
+        ],
+        [
+            "livelli di servizio", "osservabilita", "turni di reperibilita",
+            "acuerdo de nivel de servicio", "observabilidad", "niveaux de service",
+            "observabilite"
+        ],
+    ),
+    "business_analysis": (
+        [
+            "mappatura dei processi", "analisi dei requisiti", "raccolta dei requisiti",
+            "levantamiento de requisitos", "ingeniería de requisitos",
+            "minería de procesos", "cartographie des processus",
+            "ingénierie des exigences"
+        ],
+        [
+            "analisi costi-benefici", "criteri di accettazione", "requisiti funzionali",
+            "mejora de procesos", "criterios de aceptación", "requisitos funcionales",
+            "historias de usuario", "exigences fonctionnelles", "expression des besoins"
+        ],
+    ),
+    "meal": (
+        [
+            "monitoraggio e valutazione", "quadro logico", "aiuti umanitari",
+            "aiuto umanitario", "cooperazione allo sviluppo", "monitoreo y evaluación",
+            "marco lógico", "ayuda humanitaria", "suivi-évaluation", "cadre logique",
+            "aide humanitaire"
+        ],
+        [
+            "sfollati", "rifugiati", "operatori umanitari", "desplazados internos",
+            "refugiados", "ayuda alimentaria", "personnes déplacées", "réfugiés",
+            "aide alimentaire"
+        ],
+    ),
+    "salute_digitale": (
+        [
+            "sistema informativo sanitario", "sistemi informativi sanitari",
+            "fascicolo sanitario elettronico", "cartella clinica elettronica",
+            "sanità digitale", "telemedicina", "historia clínica electrónica",
+            "sistema de información en salud", "sistemas de información en salud",
+            "salud digital", "dossier médical partagé", "santé numérique", "e-santé",
+            "télémédecine"
+        ],
+        [
+            "dati clinici", "terminologia clinica", "teleconsulto", "datos clínicos",
+            "teleconsulta", "données cliniques", "téléconsultation"
+        ],
+    ),
+}
+
+# La fusione: in coda, senza duplicati, e senza toccare i concetti OpenAlex, che
+# sono identificatori di un servizio esterno e non termini da tradurre.
+def _fondi_le_lingue():
+    """Dentro una funzione, e non a modulo: con `ALTRE_LINGUE` vuoto il `del`
+    delle variabili di ciclo sollevava NameError e il modulo non si importava
+    più. Un classificatore che non si importa ferma la rassegna di quella
+    mattina, e il difetto sarebbe apparso solo il giorno in cui qualcuno svuota
+    il blocco per provare una cosa."""
+    for slug, (altri_forti, altri_deboli) in ALTRE_LINGUE.items():
+        nome, trim, forti, deboli, concetti = SPECIALIZZAZIONI[slug]
+        SPECIALIZZAZIONI[slug] = (
+            nome, trim,
+            forti + [t for t in altri_forti if t not in forti],
+            deboli + [t for t in altri_deboli if t not in deboli],
+            concetti,
+        )
+
+
+_fondi_le_lingue()
+
+
 # Un solo punto in cui si dichiara che cosa NON è una pubblicazione: preprint
 # ritirati, errata, atti di conferenza senza testo. Separato dalle esclusioni
 # redazionali di esclusioni_rassegna.json, che riguardano il rumore giornalistico.
@@ -257,6 +531,19 @@ def normalizza(testo):
     return re.sub(r"\s+", " ", testo).strip()
 
 
+@functools.lru_cache(maxsize=4096)
+def _modello(termine):
+    """L'espressione compilata di un termine, una volta sola.
+
+    La cache interna di `re` tiene 512 espressioni: con 793 termini nel
+    vocabolario ogni chiamata ne buttava fuori una e ricompilava, e il costo si
+    pagava per OGNI documento. Misurato sulle 2637 voci del catalogo vero:
+    116 secondi senza questa cache, 7 con. Il vocabolario è fisso, le voci no —
+    è il verso giusto in cui mettere il lavoro.
+    """
+    return re.compile(r"(?<!\w)" + re.escape(termine) + r"(?!\w)")
+
+
 def occorre(termine, testo):
     """Confronto a confine di parola: 'ia' non deve trovarsi dentro 'social'.
 
@@ -264,7 +551,27 @@ def occorre(termine, testo):
     rumore e per il verificatore delle fonti: due regole diverse sono due idee
     diverse di che cosa significhi «il testo contiene questo termine».
     """
-    return re.search(r"(?<!\w)" + re.escape(termine) + r"(?!\w)", testo) is not None
+    return _modello(termine).search(testo) is not None
+
+
+# Il vocabolario normalizzato UNA VOLTA, all'importazione.
+#
+# Prima stava dentro `_valuta`, che chiamava `normalizza()` su ogni termine per
+# ogni voce: con 312 termini si pagava e non si vedeva, con 793 si vede. Misurato
+# sulle stesse 2637 voci del catalogo vero: 13,9 secondi prima delle tre lingue
+# nuove, 128 dopo — nove volte, non due e mezzo, perché `unicodedata.normalize`
+# costa e veniva rifatto identico per ogni documento. Precalcolando: 7,9.
+#
+# Sta QUI, sotto `normalizza()` e sotto la fusione di ALTRE_LINGUE, perché ha
+# bisogno di tutt'e due. Da questo punto in poi `SPECIALIZZAZIONI` non si tocca
+# più: chi la modificasse a caldo troverebbe una cache ferma alla versione di
+# prima, e il difetto sarebbe silenzioso.
+_NORMALIZZATI = {
+    tema: ([normalizza(x) for x in forti],
+           [normalizza(x) for x in deboli],
+           {normalizza(x) for x in concetti_tema})
+    for tema, (_, _, forti, deboli, concetti_tema) in SPECIALIZZAZIONI.items()
+}
 
 
 def _valuta(titolo, abstract="", concetti=()):
@@ -281,20 +588,16 @@ def _valuta(titolo, abstract="", concetti=()):
     c = {normalizza(x) for x in concetti or ()}
 
     esiti = {}
-    for tema, (_, _, forti, deboli, concetti_tema) in SPECIALIZZAZIONI.items():
+    for tema, (forti, deboli, concetti_tema) in _NORMALIZZATI.items():
         p = f = 0.0
-        for termine in forti:
-            n = normalizza(termine)
+        for n in forti:
             if occorre(n, t):
                 f += PESO_FORTE * PESO_TITOLO
             elif occorre(n, a):
                 f += PESO_FORTE
-        for concetto in concetti_tema:
-            if normalizza(concetto) in c:
-                f += PESO_CONCETTO
+        f += PESO_CONCETTO * len(concetti_tema & c)
         p = f
-        for termine in deboli:
-            n = normalizza(termine)
+        for n in deboli:
             if occorre(n, t):
                 p += PESO_DEBOLE * PESO_TITOLO
             elif occorre(n, a):

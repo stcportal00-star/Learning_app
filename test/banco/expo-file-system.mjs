@@ -136,6 +136,29 @@ const TIPI = new Map([
   [".db", "application/vnd.sqlite3"],
 ]);
 
+// --------------------------------------------------------------- RETE
+// Vuote per difetto: finché un test non dichiara una risposta, lo scarico
+// fallisce esattamente come prima. Dichiararla è un atto esplicito del test,
+// non un comportamento che si eredita.
+const RISPOSTE_RETE = new Map();
+const GUASTI_RETE = new Map();
+
+/** Il contenuto che `File.downloadFileAsync` deve consegnare per questo indirizzo. */
+export function rispondi(url, byte) {
+  RISPOSTE_RETE.set(url, byte);
+}
+
+/** Questo indirizzo deve fallire, con questo motivo. */
+export function guastaRete(url, motivo = "rete non raggiungibile") {
+  GUASTI_RETE.set(url, motivo);
+}
+
+/** Rimette la rete come la trova un test che non ha dichiarato niente. */
+export function azzeraRete() {
+  RISPOSTE_RETE.clear();
+  GUASTI_RETE.clear();
+}
+
 // ------------------------------------------------------------- PERMESSI
 function dentroLaRadice(percorso) {
   const r = radiceCorrente();
@@ -370,11 +393,29 @@ export class File extends PercorsoDoppio {
     return esito;
   }
 
-  /** La scrittura in rete non esiste offline: il doppio lo dice invece di fingere. */
-  static async downloadFileAsync() {
-    throw new Error(
-      "expo-file-system (doppio): il banco è offline, File.downloadFileAsync non è disponibile"
-    );
+  /**
+   * Lo scarico resta offline PER DIFETTO: un indirizzo non registrato solleva,
+   * come sollevava prima, e nessun test esistente cambia comportamento.
+   *
+   * Un test che deve esercitare il percorso buono registra la risposta con
+   * `rispondi(url, byte)`. È l'unico modo di provare `lib/nuvola/media.ts` sul
+   * codice vero senza toccare la rete, e la differenza fra i due casi resta
+   * esplicita: ciò che non è stato dichiarato fallisce, sempre.
+   */
+  static async downloadFileAsync(url, destinazione) {
+    if (GUASTI_RETE.has(url)) throw new Error(GUASTI_RETE.get(url));
+    if (!RISPOSTE_RETE.has(url)) {
+      throw new Error(
+        "expo-file-system (doppio): il banco è offline, File.downloadFileAsync non è " +
+          `disponibile per ${url}. Registra la risposta con rispondi(url, byte).`
+      );
+    }
+    const destinazioneFile =
+      destinazione instanceof File
+        ? destinazione
+        : new File(destinazione, basename(new URL(url).pathname) || "scaricato");
+    destinazioneFile.write(RISPOSTE_RETE.get(url));
+    return destinazioneFile;
   }
 
   static async pickFileAsync() {
@@ -536,7 +577,9 @@ export default { File, Directory, Paths, EncodingType };
  * - Nessun flusso (`readableStream`, `writableStream`, `open()`/FileHandle):
  *   il codice dell'app non li usa. Se un giorno li usasse, il doppio deve
  *   crescere — meglio un errore chiaro che un finto successo.
- * - `File.downloadFileAsync` solleva sempre: l'app è offline per progetto.
+ * - `File.downloadFileAsync` solleva per difetto: l'app è offline per progetto.
+ *   Un test che deve provare il percorso buono dichiara la risposta con
+ *   `rispondi(url, byte)`; ciò che non è dichiarato continua a fallire.
  * - `size` di un File inesistente è 0 (come in expo), quindi `size ?? null`
  *   nel codice dell'app non diventa mai null: è il comportamento vero.
  */

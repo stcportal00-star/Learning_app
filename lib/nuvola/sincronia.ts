@@ -28,6 +28,7 @@ import type { EventoSerializzato } from "../sync/pacchetto";
 import { Nuvola, ErroreNuvola } from "./cliente";
 import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
+import { liberaVisti } from "./media";
 
 /** Quanti eventi per viaggio. Oltre, il corpo della risposta diventa scomodo. */
 const PAGINA = 500;
@@ -236,6 +237,23 @@ export async function sincronizzaNuvola(
         : `Scambio con Supabase interrotto: ${String(e)}`;
     await scriviMeta([["nuvola_motivo", esito.motivo]]);
     return esito;
+  }
+
+  // Gli allegati di ciò che risulta già visto se ne vanno qui, e questo è il
+  // solo momento in cui ha senso: `visto_a` può essere arrivato ADESSO
+  // dall'altro dispositivo, dove il file non c'era. Senza questa passata la
+  // copia rimasta qui non la cancellerebbe nessuno, e la cache dei media
+  // smetterebbe di svuotarsi da sola proprio nel viaggio per cui esiste.
+  //
+  // Fuori da ogni transazione e senza rete: cancellare file non è uno scambio.
+  try {
+    const liberati = await liberaVisti();
+    if (liberati.liberati) {
+      esito.motivo += ` ${liberati.liberati} allegati già visti tolti dal telefono.`;
+    }
+  } catch {
+    // Un file che non si lascia cancellare non deve far fallire una
+    // sincronizzazione riuscita: si riprova alla prossima.
   }
 
   // I file vengono DOPO, e fuori da ogni transazione: un PDF da venti mega

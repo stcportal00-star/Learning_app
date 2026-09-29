@@ -105,6 +105,33 @@ altre, stessa deduplica per titolo, stessa estrazione del testo, stesso evento.
 Non esiste una seconda strada, e non deve esistere: sarebbe una seconda
 deduplica da tenere allineata alla prima.
 
+**Il lessico parla quattro lingue, e l'inglese resta il riferimento.** I termini
+italiani, spagnoli e francesi stanno nel blocco `ALTRE_LINGUE` di
+`specializzazioni.py` e si fondono in **coda** alle liste inglesi: `scopri_fonti.py`
+e `test_fonti.py` leggono `FUERTES[slug][:2]` e `[:4]` come parole con cui
+interrogare iTunes e Hacker News, e quelle si interrogano in inglese. Chi
+aggiunge termini li mette in quel blocco, non dentro `SPECIALIZZAZIONI`, e mai
+in testa. Due regole: locuzioni e non parole singole, e nessuna stringa che
+tolti gli accenti sia anche una parola comune di un'altra lingua — lo spagnolo
+«red» diventa «red», che in inglese è un colore. Le prove che contano sono in
+`verifica_rassegna.py`, in fondo: quindici testi veri che devono prendere un
+tema e otto che non devono prenderne nessuno. La seconda metà non è decorativa —
+un lessico che assegna un tema a tutto supererebbe la prima.
+
+**`percorso.fonti.lingua` non dice in che lingua è una fonte.** È `NOT NULL`
+con default `'en'`, e lo scouting ripete quel default su ogni candidata: contare
+le fonti per lingua dà sempre «tutte inglesi», anche quando ne ha trovate in
+italiano e in spagnolo. Per sapere se una fonte non inglese è entrata si guarda
+`candidatas.csv` nel tarball di stato, non quella colonna. Ci sono cascato: ho
+usato quel conteggio come prova che lo scouting non trovava fonti non inglesi,
+e non era vero — le trovava, e cadevano su p3 e p7.
+
+Prima di cambiare il lessico, misura lo scarto sulle voci vere invece di
+fidarti: `stato.tar` sulla release `rassegna` porta `catalogo.json` con qualche
+migliaio di voci già classificate. Si confrontano le assegnazioni prima e dopo,
+e ogni cambio di tema si guarda a mano. L'ultima volta furono nove su 2637, e
+otto erano correzioni.
+
 Due filtri, che non vanno confusi. Il tema lo assegna `classifica()`: senza
 tema la voce cade. Il rumore redazionale lo toglie `pubblica.py` con
 `assets/contenuti/esclusioni_rassegna.json`, e serve proprio qui, perché un
@@ -118,6 +145,18 @@ degli ottanta articoli e perché i minuti tolti al feed sono minuti tolti
 all'estrazione del testo — e un catalogo di titoli senza testo, in aereo, non
 si legge. Una fonte che non risponde non ferma le altre: finisce fra i «non
 riusciti» del rapporto.
+
+**La trascrizione che l'autore pubblica viene prima della pagina.** Un
+`<podcast:transcript>` nel feed è un file che l'editore ha messo online
+apposta, con la sua licenza, e `testo_della_voce()` lo prova per primo: per un
+podcast la pagina dell'episodio porta le note di trasmissione, mentre la
+trascrizione è l'unica cosa che rende quell'ora *studiabile* senza rete — si
+cerca dentro, si annota una frase, si rilegge un passaggio. L'audio da solo non
+fa nessuna delle tre. Trascrizioni non se ne generano: costerebbero una chiave,
+una quota e un servizio che un giorno risponde 429, e quel giorno si è in volo.
+`estrattore.testo_da_trascrizione()` riconosce il formato dal CONTENUTO — VTT,
+SRT, il JSON del Podcast Namespace, HTML, testo — perché un feed che dichiara
+`text/html` e serve VTT esiste.
 
 C'è una terza strada, stretta di proposito: **l'esplorazione**. Al massimo
 cinque voci al giorno (`temi_config.ESPLORAZIONE_MAX_DIA`) che nessun tema ha
@@ -184,6 +223,14 @@ Il primo del mese lo scouting propone fonti nuove, e le **inserisce spente**
 con `percorso.proponi_fonti(jsonb)`. Accenderle non è cosa sua: lo decide la
 verifica del lunedì dopo. È la gamba per cui la lista migliora da sola invece
 di invecchiare.
+
+Lo stesso passo si lancia a mano, con `scouting: tutti` sull'avvio manuale, e
+allora guarda **tutti** i temi invece dei soli rimasti orfani — è il modo di
+trovare i divulgatori di ogni argomento, su YouTube, nei podcast, su Mastodon.
+Serve perché il cron mensile cade il primo del mese, cioè il giorno della
+scadenza: le fonti trovate lì si accenderebbero il lunedì dopo, a viaggio
+iniziato e senza rete per accorgersene. Ogni mese su tutti i temi sarebbe
+invece un'ora di rete per ritrovare le stesse, e il cron resta stretto apposta.
 
 **Non c'è nessun interruttore da girare a mano, ed è voluto.** Un permesso da
 concedere è proprio la cosa che dal 2 ottobre lascerebbe il sistema fermo senza

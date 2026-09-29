@@ -24,6 +24,16 @@ export type Articolo = {
   letto: number;
   salvato: number;
   hlc: string | null;
+  /** L'allegato riproducibile dichiarato dal feed: un podcast, una conferenza. */
+  url_media: string | null;
+  tipo_media: string | null;
+  /** Quanto pesa, secondo il feed. Serve a decidere PRIMA di scaricare. */
+  byte_media: number | null;
+  /** La trascrizione che l'AUTORE pubblica. Non se ne generano. */
+  url_trascrizione: string | null;
+  visto_a: string | null;
+  /** Percorso su QUESTO telefono. Non viaggia mai: vedi lib/nuvola/media.ts. */
+  file_media: string | null;
 };
 
 export async function elencaArticoli(opzioni: {

@@ -22,6 +22,9 @@ on:
       applica:
         description: "no = marcia a secco, non scrive niente. Di norma si lascia si."
         default: "si"
+      scouting:
+        description: "no | scoperti | tutti — cercare fonti nuove adesso invece di aspettare il primo del mese."
+        default: "no"
 
 # `verifica_fonti.py` non scrive in `percorso.articoli` né tocca `stato.tar`, ma
 # `applica_fonti` cambia proprio la tabella che `nuvola.yml` sta leggendo: due
@@ -36,7 +39,7 @@ permissions:
 jobs:
   fonti:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v7
 
@@ -104,27 +107,74 @@ jobs:
       # serve al caso opposto, quello in cui nessun tema è scoperto ma la lista
       # invecchia lo stesso. `proponer.sql` esce con attiva=false e peso 0.3:
       # nessuna fonte si accende senza passare da `verifica_fonti.py`.
-      - name: Scouting mensile
-        if: github.event.schedule == '0 3 1 * *'
+      # Si lancia anche a mano, e non è una comodità: il cron mensile cade il
+      # primo del mese, cioè il giorno della scadenza. Le fonti nuove di una
+      # corsa del primo ottobre si accenderebbero il lunedì dopo, a viaggio
+      # iniziato e senza rete per accorgersene. Con `scouting: tutti` si cerca
+      # adesso e la verifica del lunedì le accende in tempo.
+      #
+      # Quello che NON cambia: le candidate entrano comunque spente, con peso
+      # 0.3, e nessuna si accende senza passare da `verifica_fonti.py`. Questo
+      # passo propone, non decide.
+      - name: Scouting
+        if: github.event.schedule == '0 3 1 * *' || (github.event.inputs.scouting || 'no') != 'no'
         continue-on-error: true
-        timeout-minutes: 30
+        # Medido, no estimado. Primera pasada ancha: 59,4 minutos con tope de
+        # 60 — pasó por treinta y seis segundos. Segunda, con los términos en
+        # cuatro lenguas: agotó los 90. Me equivoqué al decir que solo crecían
+        # las preguntas al catálogo: 340 en vez de 136 devuelven muchos más
+        # programas NUEVOS, y cada uno se evalúa de verdad.
+        #
+        # La verificación de 160 fuentes son 12,3 minutos (medidos), así que en
+        # los 150 del trabajo caben 130 aquí. Y si aun así no llega, el paso
+        # siguiente propone lo encontrado: `scopri_fonti.py` guarda tras cada
+        # tema, y proponer vive en un paso aparte con `if: always()`.
+        timeout-minutes: 130
+        env:
+          AMPIEZZA: ${{ github.event.inputs.scouting || 'scoperti' }}
         run: |
           set -euo pipefail
-          temi=$(python3 consegna_code/programma_fonti.py \
-                   --temi-scoperti lavoro-fonti/salud.md)
-          if [ -z "$temi" ]; then
-            echo "Nessun tema scoperto: niente da cercare questo mese."
+          # `scopri_fonti.py` senza `--temi` guarda TUTTI i temi: è il modo di
+          # trovare i divulgatori di ogni argomento, non solo di quelli rimasti
+          # orfani. Il cron mensile resta stretto apposta — ogni mese su tutto
+          # sarebbe un'ora di rete per ritrovare le stesse.
+          argomenti=(--da-nuvola)
+          if [ "$AMPIEZZA" != "tutti" ]; then
+            temi=$(python3 consegna_code/programma_fonti.py \
+                     --temi-scoperti lavoro-fonti/salud.md)
+            if [ -z "$temi" ]; then
+              echo "Nessun tema scoperto: niente da cercare."
+              exit 0
+            fi
+            echo "Temi senza fonti: $temi"
+            argomenti+=(--temi "$temi")
+          else
+            echo "Scouting su tutti i temi, chiesto a mano."
+          fi
+          cd lavoro-fonti
+          python3 ../consegna_code/scopri_fonti.py "${argomenti[@]}"
+
+      # Passo a parte, e `if: always()` non è pigrizia. Lo scouting può finire
+      # per tetto di tempo: allora il processo muore, e se la proposta stesse
+      # nello stesso passo non girerebbe mai — un'ora e mezza di rete buttata,
+      # con `proponer.json` scritto e nessuno che lo legge. `scopri_fonti.py`
+      # salva dopo OGNI tema apposta, quindi quel file porta sempre ciò che si
+      # è trovato fin lì.
+      #
+      # Le candidate entrano nella tabella SPENTE. Accenderle non è cosa di
+      # questo passo: lo decide la verifica, che è l'unica che le guarda
+      # davvero. Senza questa riga `proponer.json` resterebbe un file, e la
+      # lista delle fonti smetterebbe di migliorare il giorno in cui nessuno
+      # apre più il repository.
+      - name: Proposta delle candidate
+        if: always() && (github.event.schedule == '0 3 1 * *' || (github.event.inputs.scouting || 'no') != 'no')
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ ! -s lavoro-fonti/proponer.json ]; then
+            echo "Nessun proponer.json: lo scouting non ha prodotto niente da proporre."
             exit 0
           fi
-          echo "Temi senza fonti: $temi"
-          cd lavoro-fonti
-          python3 ../consegna_code/scopri_fonti.py --da-nuvola --temi "$temi"
-          cd ..
-          # Le candidate entrano nella tabella SPENTE. Accenderle non è cosa di
-          # questo passo: lo decide la verifica del lunedì dopo, che è l'unica
-          # che le guarda davvero. Senza questa riga `proponer.json` resterebbe
-          # un file, e la lista delle fonti smetterebbe di migliorare il giorno
-          # in cui nessuno apre più il repository.
           python3 consegna_code/programma_fonti.py --proponi lavoro-fonti
 
       - name: Stato aggiornato nella release

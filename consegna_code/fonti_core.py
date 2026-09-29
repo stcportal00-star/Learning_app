@@ -171,6 +171,70 @@ def descubrir(url_sito, r=None):
     NO_FEED = re.compile(r'(?i)/comments/feed|/comments/?$|wp-json|oembed|[?&]replytocom=')
     return [u for u in dict.fromkeys(out) if not NO_FEED.search(u)], r      # feeds de comentarios no son la fuente
 
+# ---------------------------------------------------------------- perfiles
+# El mismo divulgador publica en su blog Y en YouTube Y en un podcast, y son
+# tres fuentes distintas con tres ritmos distintos. Aquí no se INVENTA ninguna
+# dirección: se leen las que el propio sitio declara suyas.
+_MASTODON = re.compile(r'(?i)^(https?://[^/\s]+/@[A-Za-z0-9_]+)/?$')
+_YT_CANAL = re.compile(r'(?i)^https?://(?:www\.)?youtube\.com/channel/(UC[A-Za-z0-9_-]{22})')
+_YT_PERSONA = re.compile(r'(?i)^https?://(?:www\.)?youtube\.com/((?:@|c/|user/)[A-Za-z0-9_.\-]+)/?$')
+_YT_ID = re.compile(r'(?:"channelId"\s*:\s*"|/channel/)(UC[A-Za-z0-9_-]{22})')
+
+
+def perfiles(html, url, maximo=6):
+    """Los perfiles que el sitio declara SUYOS. -> [url]
+
+    `rel="me"` es el modo canónico y no es una convención nuestra: Mastodon lo
+    usa para verificar que la cuenta y el sitio son la misma persona, así que un
+    rel=me es una declaración, no una mención. Se aceptan además los enlaces a
+    youtube.com, porque casi nadie les pone rel=me y son justo los que interesan.
+    """
+    h = html if isinstance(html, str) else html.decode('utf-8', 'ignore')
+    fuera = []
+    for tag in re.findall(r'(?i)<(?:a|link)\b[^>]*>', h[:400000]):
+        a = _attrs(tag)
+        destino = (a.get('href') or '').strip()
+        if not destino:
+            continue
+        u = urllib.parse.urljoin(url, H.unescape(destino))
+        rel = (a.get('rel') or '').lower().split()
+        if 'me' in rel or _YT_CANAL.match(u) or _YT_PERSONA.match(u):
+            if u not in fuera:
+                fuera.append(u)
+    return fuera[:maximo]
+
+
+def feed_de_perfil(url_perfil):
+    """De un perfil a su RSS, por regla documentada. -> (url_feed, url_sitio) o (None, None).
+
+    - Mastodon: https://instancia/@usuario  ->  .../@usuario.rss
+    - YouTube:  /channel/UC…  ->  feeds/videos.xml?channel_id=UC…
+                /@handle, /c/x, /user/x  ->  se LEE la página y se toma el
+                channelId que ella declara.
+
+    El handle NO se convierte a mano en un channel_id: no hay regla que lo
+    permita, y un channel_id inventado es una fuente que responde 404 cada
+    mañana durante meses sin que nadie lo mire. Si la página no lo declara, no
+    hay feed y punto.
+    """
+    u = (url_perfil or '').strip()
+    m = _YT_CANAL.match(u)
+    if m:
+        return ('https://www.youtube.com/feeds/videos.xml?channel_id=' + m.group(1),
+                'https://www.youtube.com/channel/' + m.group(1))
+    if _YT_PERSONA.match(u):
+        cuerpo = (fetch(u).body or b'').decode('utf-8', 'ignore')
+        m = _YT_ID.search(cuerpo)
+        if m:
+            return ('https://www.youtube.com/feeds/videos.xml?channel_id=' + m.group(1),
+                    'https://www.youtube.com/channel/' + m.group(1))
+        return None, None
+    m = _MASTODON.match(u)
+    if m:
+        return m.group(1) + '.rss', m.group(1)
+    return None, None
+
+
 def canonico(html, url):
     """URL canónica declarada por la propia página (dominio propio de un Substack, migraciones)."""
     h = html if isinstance(html, str) else html.decode('utf-8', 'ignore')

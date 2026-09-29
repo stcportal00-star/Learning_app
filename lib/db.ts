@@ -15,8 +15,6 @@ import { Orologio, serializza, deserializza, HLC } from "./hlc";
 let db: SQLite.SQLiteDatabase | null = null;
 let orologio: Orologio | null = null;
 
-export const SCHEMA_VERSIONE = 2;
-
 const MIGRAZIONI: string[][] = [
   // v1
   [
@@ -140,7 +138,41 @@ const MIGRAZIONI: string[][] = [
     // eventi e una rassegna che ne porta cento al giorno diventa quadratica.
     `CREATE INDEX IF NOT EXISTS eventi_entita_idx ON eventi (entita, entita_id, hlc);`,
   ],
+
+  [
+    // L'allegato riproducibile di una voce: un podcast, una conferenza, un
+    // video. Il feed dichiara già dove sta il file e quanto pesa, e fino a ieri
+    // buttavamo via tutte e tre le cose.
+    //
+    // `url_media` è l'indirizzo DIRETTO: il telefono lo scarica da solo quando
+    // è in wifi. Non passa dal deposito remoto, perché duecento megabyte per
+    // voce non stanno né nel piano gratuito né nei tredici minuti della corsa.
+    // `byte_media` è quel che il feed dichiara, ed è ciò che permette di
+    // decidere PRIMA di scaricare invece di scoprirlo a metà.
+    `ALTER TABLE articoli ADD COLUMN url_media TEXT;`,
+    `ALTER TABLE articoli ADD COLUMN tipo_media TEXT;`,
+    `ALTER TABLE articoli ADD COLUMN byte_media INTEGER;`,
+    // La trascrizione che l'AUTORE pubblica. Non se ne generano: una
+    // trascrizione automatica costa una chiave, una quota e un servizio che un
+    // giorno risponde 429 — e quel giorno si è in aereo.
+    `ALTER TABLE articoli ADD COLUMN url_trascrizione TEXT;`,
+    // `visto_a` viaggia: è stato dell'utente, come `letto`, e il tablet deve
+    // saperlo. `file_media` NON viaggia, esattamente come `file_locale` di
+    // `biblioteca`: è un percorso di QUESTO telefono, e sincronizzarlo
+    // vorrebbe dire dire all'altro dispositivo che ha un file che non ha.
+    `ALTER TABLE articoli ADD COLUMN visto_a TEXT;`,
+    `ALTER TABLE articoli ADD COLUMN file_media TEXT;`,
+    `CREATE INDEX IF NOT EXISTS articoli_media_idx ON articoli (url_media, visto_a);`,
+  ],
 ];
+
+// Si CALCOLA, non si scrive. Era un numero a mano accanto all'elenco, e a
+// questa migrazione è rimasto indietro: `PRAGMA user_version` sarebbe finito a
+// 3 mentre la costante diceva 2, e la migrazione successiva sarebbe stata
+// riapplicata su un database che l'aveva già. Il banco di prova l'ha visto, ma
+// un numero che qualcuno deve ricordarsi di incrementare è un numero che prima
+// o poi resta indietro senza che nessuno guardi.
+export const SCHEMA_VERSIONE = MIGRAZIONI.length;
 
 export async function apri(dispositivoId: string): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;

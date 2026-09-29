@@ -41,6 +41,7 @@ from estrattore import (  # noqa: E402
     e_pdf,
     impronta,
     testo_da_html,
+    testo_da_trascrizione,
     riassunto,
     ErroreEstrazione,
 )
@@ -282,6 +283,14 @@ def riga_articolo(v, testo, rapporto):
         # arrivi dagli archivi: 1 → 17, 2,5 → 33, 5 → 50, 11,2 → 69.
         "punteggio": punteggio_da(v.get("rilevanza")),
         "rilevanza": float(v.get("rilevanza") or 0),
+        # L'allegato che il feed dichiara, così com'è dichiarato. Non si
+        # scarica qui: duecento megabyte per voce non stanno né nel deposito né
+        # nei tredici minuti della corsa. Il telefono decide da sé, in wifi, e
+        # `byte_media` è ciò che gli permette di decidere PRIMA.
+        "url_media": v.get("url_media"),
+        "tipo_media": v.get("tipo_media") or None,
+        "byte_media": int(v.get("byte_media") or 0) or None,
+        "url_trascrizione": v.get("url_trascrizione"),
         "raccolto_a": rapporto["adesso"],
     }
 
@@ -310,6 +319,13 @@ def payload_articolo(riga):
         "raccolto_a": riga["raccolto_a"],
         "letto": 0,
         "salvato": 0,
+        "url_media": riga["url_media"],
+        "tipo_media": riga["tipo_media"],
+        "byte_media": riga["byte_media"],
+        "url_trascrizione": riga["url_trascrizione"],
+        # `file_media` MAI, per lo stesso motivo di `file_locale` in
+        # `payload_volume`: è un percorso di un telefono, e sull'altro
+        # dispositivo significherebbe promettere un file che non c'è.
     }
 
 
@@ -355,24 +371,35 @@ def evento(orologio, entita, entita_id, tipo, payload):
 
 def testo_della_voce(v, vie, rapporto, scadenza):
     """
-    Prova a portare a casa il testo. In ordine: la via d'accesso trovata dal
-    ricercatore, poi l'url_pdf, poi la pagina della voce.
+    Prova a portare a casa il testo. In ordine: la trascrizione che l'autore
+    pubblica, poi la via d'accesso trovata dal ricercatore, poi l'url_pdf, poi
+    la pagina della voce.
+
+    La trascrizione viene per prima, e non per comodità. Per un podcast o una
+    conferenza la pagina dell'episodio porta le note di trasmissione — tre
+    righe e una lista di link — mentre la trascrizione è l'unica cosa che
+    rende quell'ora *studiabile* senza rete: si cerca dentro, si annota una
+    frase, si rilegge un passaggio. L'audio da solo non fa nessuna delle tre.
+    È il file che l'editore ha messo online apposta, con la sua licenza:
+    trascrizioni non se ne generano, qui.
 
     Restituisce (testo, pdf) dove `pdf` è (dati, url) se ciò che è arrivato è
     davvero un PDF. Il Content-Type non decide niente: diversi archivi
     rispondono application/pdf con dentro una pagina di login.
     """
     candidati = []
+    if v.get("url_trascrizione"):
+        candidati.append((v["url_trascrizione"], True))
     via = vie.get(v["chiave"])
     if via and via.get("url"):
-        candidati.append(via["url"])
+        candidati.append((via["url"], False))
     if v.get("url_pdf"):
-        candidati.append(v["url_pdf"])
+        candidati.append((v["url_pdf"], False))
     if v.get("url"):
-        candidati.append(v["url"])
+        candidati.append((v["url"], False))
 
     visti = set()
-    for url in candidati:
+    for url, e_trascrizione in candidati:
         if not url or url in visti:
             continue
         visti.add(url)
@@ -387,7 +414,10 @@ def testo_della_voce(v, vie, rapporto, scadenza):
         if e_pdf(dati):
             return None, (dati, url)
         try:
-            testo = testo_da_html(dati)
+            # Il formato si riconosce dal contenuto: VTT, SRT, JSON, HTML o
+            # testo. Passarla da `testo_da_html` e basta lascerebbe i tempi
+            # dentro, e un'ora di «00:04:12.500 -->» non si legge.
+            testo = testo_da_trascrizione(dati) if e_trascrizione else testo_da_html(dati)
         except Exception as e:  # noqa: BLE001 — un parser che esplode su una
             # pagina malformata non deve poter fermare l'intera rassegna.
             rapporto["falliti"].append("%s: estrazione fallita (%s)" % (url[:90], str(e)[:80]))
@@ -482,7 +512,14 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
             break
 
         testo, pdf = (None, None)
-        if pdf_presi < tetti["pdf"] or not v.get("url_pdf"):
+        # Le fonti che dichiarano «solo metadati» non si scaricano, mai. È la
+        # licenza con cui sono entrate in tabella — su YouTube e su Mastodon la
+        # licenza è di chi pubblica, voce per voce — e dichiararla per poi
+        # estrarre il testo lo stesso sarebbe dire una cosa e farne un'altra.
+        # Di quelle voci restano titolo, descrizione, data e collegamento.
+        if v.get("solo_metadati"):
+            rapporto["solo_metadati"] = rapporto.get("solo_metadati", 0) + 1
+        elif pdf_presi < tetti["pdf"] or not v.get("url_pdf"):
             testo, pdf = testo_della_voce(v, vie, rapporto, scadenza)
 
         if pdf and pdf_presi < tetti["pdf"]:
@@ -613,6 +650,7 @@ def scrivi_rapporto(cartella, rapporto):
         "Voci dai feed    : %d" % rapporto.get("voci_da_feed", 0),
         "  rumore tolto   : %d" % rapporto.get("rumore_feed", 0),
         "  fuori tema     : %d" % rapporto.get("esplorazione", 0),
+        "  solo metadati  : %d" % rapporto.get("solo_metadati", 0),
         "Candidate        : %d" % rapporto["candidate"],
         "Doppioni tolti   : %d" % rapporto.get("doppioni", 0),
         "Url ripetuti     : %d" % rapporto.get("url_ripetuti", 0),
@@ -658,6 +696,7 @@ def principale(argv=None):
         "voci_da_feed": 0,
         "rumore_feed": 0,
         "esplorazione": 0,
+        "solo_metadati": 0,
         "articoli": 0,
         "con_testo": 0,
         "pdf": 0,

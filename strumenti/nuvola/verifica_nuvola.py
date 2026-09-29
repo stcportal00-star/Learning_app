@@ -82,13 +82,8 @@ prova("il payload resta un oggetto", isinstance(e["payload"], dict), True)
 # ------------------------------- 3. il payload copre le colonne obbligatorie
 
 
-def colonne_obbligatorie(tabella):
-    """
-    Legge lo schema vero dell'app da lib/db.ts. Cerca il CREATE TABLE della
-    tabella e tiene le colonne NOT NULL senza DEFAULT che non sono la chiave
-    primaria: sono esattamente quelle che la proiezione non può inventare.
-    """
-    sorgente = open(os.path.join(RADICE, "lib", "db.ts"), encoding="utf-8").read()
+def _pezzi_del_create(tabella, sorgente):
+    """Le definizioni di colonna del CREATE TABLE, una per elemento. None se manca."""
     m = re.search(
         r"CREATE TABLE IF NOT EXISTS %s\s*\((.*?)\);" % re.escape(tabella),
         sorgente,
@@ -111,17 +106,47 @@ def colonne_obbligatorie(tabella):
         else:
             corrente.append(c)
     pezzi.append("".join(corrente))
+    return [p.strip() for p in pezzi
+            if p.strip() and not p.strip().upper().startswith(
+                ("PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY"))]
 
+
+def colonne_obbligatorie(tabella):
+    """
+    Legge lo schema vero dell'app da lib/db.ts. Cerca il CREATE TABLE della
+    tabella e tiene le colonne NOT NULL senza DEFAULT che non sono la chiave
+    primaria: sono esattamente quelle che la proiezione non può inventare.
+    """
+    sorgente = open(os.path.join(RADICE, "lib", "db.ts"), encoding="utf-8").read()
+    pezzi = _pezzi_del_create(tabella, sorgente)
+    if pezzi is None:
+        return None
     obbligatorie = []
-    for pezzo in pezzi:
-        p = pezzo.strip()
-        if not p or p.upper().startswith(("PRIMARY KEY", "UNIQUE", "CHECK", "FOREIGN KEY")):
-            continue
-        nome = p.split()[0]
+    for p in pezzi:
         alto = p.upper()
         if "NOT NULL" in alto and "DEFAULT" not in alto and "PRIMARY KEY" not in alto:
-            obbligatorie.append(nome)
+            obbligatorie.append(p.split()[0])
     return obbligatorie
+
+
+def colonne_di(tabella):
+    """TUTTE le colonne della tabella locale: quelle del CREATE e quelle aggiunte dopo.
+
+    `colonne_obbligatorie` guarda solo il CREATE TABLE, e va bene per ciò che
+    chiede. Qui serve l'elenco completo, perché una colonna nata da un
+    `ALTER TABLE ... ADD COLUMN` in una migrazione successiva è una colonna
+    come le altre — e sono proprio quelle le più recenti, cioè quelle che un
+    payload rischia di nominare sbagliate.
+    """
+    sorgente = open(os.path.join(RADICE, "lib", "db.ts"), encoding="utf-8").read()
+    pezzi = _pezzi_del_create(tabella, sorgente)
+    if pezzi is None:
+        return None
+    fuori = {p.split()[0] for p in pezzi}
+    for nome in re.findall(
+            r"ALTER TABLE %s ADD COLUMN\s+(\w+)" % re.escape(tabella), sorgente):
+        fuori.add(nome)
+    return fuori
 
 
 for tabella, costruisci in (
@@ -148,6 +173,22 @@ for tabella, costruisci in (
         not mancanti,
         "mancano %r; senza, la proiezione sul telefono salta la riga in silenzio "
         "e la rassegna non compare" % (mancanti,),
+    )
+
+    # L'altra direzione, che mancava e che è quella che fa più male. La
+    # proiezione filtra i campi contro lo schema vero della tabella — è la
+    # regola 3 di `lib/nuvola/proiezione.ts`, e serve perché una versione
+    # vecchia dell'app non si rompa. Ma vale anche al contrario: una chiave
+    # scritta male nel payload viene scartata in silenzio, la colonna resta
+    # vuota per sempre e NIENTE diventa rosso. Provato: una chiave inventata
+    # passava indisturbata.
+    conosciute = colonne_di(tabella)
+    ignote = sorted(k for k in payload if k not in (conosciute or ()))
+    prova_vero(
+        "e non nomina colonne che in `%s` non esistono" % tabella,
+        not ignote,
+        "la proiezione scarterebbe %r senza dire niente: il campo non "
+        "arriverebbe mai sul telefono" % (ignote,),
     )
 
 prova_vero(
