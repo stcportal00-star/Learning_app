@@ -512,12 +512,15 @@ ok(r['motivo'] == 'ACEPTADA' and 'solo metadati' in r['p7_licencia'],
 # licencia pasaría; si se aplicara antes de la detección, el podcast con CC
 # perdería el texto de su transcripción; si contara cualquier adjunto, una
 # revista con un PDF por artículo entraría «solo metadatos».
-def pod(n, tipo='audio/mpeg', sitio='https://pod.ejemplo.fm/'):
+def pod(n, tipo='audio/mpeg', sitio='https://pod.ejemplo.fm/', total=10, con=None):
+    # `con(i)` decide qué voces llevan el adjunto; por omisión, las n primeras.
+    con = con or (lambda i: i < n)
     it = ''.join(
-        f'<item><title>{t}</title><link>{sitio}ep{i}</link><pubDate>{d(i * 86400)}</pubDate>'
-        f'<description>{s}</description>'
-        + (f'<enclosure url="{sitio}ep{i}.bin" type="{tipo}" length="1000"/>' if i < n else '')
-        + '</item>' for i, (t, _, s) in enumerate(BUENOS))
+        f'<item><title>Model evaluation note {i}: red teaming frontier models</title>'
+        f'<link>{sitio}ep{i}</link><pubDate>{d(i * 86400)}</pubDate>'
+        f'<description>llm evals</description>'
+        + (f'<enclosure url="{sitio}ep{i}.bin" type="{tipo}" length="1000"/>' if con(i) else '')
+        + '</item>' for i in range(total))
     return (f'<?xml version="1.0"?><rss version="2.0"><channel><title>Pod</title>'
             f'<link>{sitio}</link>{it}</channel></rss>').encode()
 
@@ -525,7 +528,7 @@ def verifica_pod(feed, portada=b'<html><title>Pod</title>nessuna licenza qui</ht
     reset()
     WEB['https://pod.ejemplo.fm/'] = portada
     WEB['https://pod.ejemplo.fm/feed.xml'] = feed
-    for i in range(10):
+    for i in range(30):
         WEB[f'https://pod.ejemplo.fm/ep{i}'] = ART
     return V.verifica('Pod', 'https://pod.ejemplo.fm/feed.xml', 'https://pod.ejemplo.fm/', 'ia', **kw)
 
@@ -607,6 +610,7 @@ def _en_json(f):
 _par = [(f['nome'], _en_json(f), _en_sql(f)) for f in _filas]
 ok(all(j == q for _, j, q in _par)
    and {type(x.stmt).__name__ for x in pglast.parse_sql(_sql)} == {'UpdateStmt'}
+   and _sql.index("set url_feed = 'https://f/nuevo.xml'") < _sql.index("set licenza = 'Copyright")
    and [j for _, j, _ in _par] == ["rel=license | https://a/l'avviso", C.LICENCIA_PODCAST + ' | https://b/f', None,
                                    NO_SE_TOCA, NO_SE_TOCA,
                                    "Copyright (todos los derechos reservados) | https://f/"],
@@ -627,6 +631,29 @@ _previo = V.aceptadas_de_sitio(_normal)
 ok(_previo == 20 and V.disyuntor(_portadas_403, _previo) and not V.disyuntor(_normal, _previo),
    f"S37 i podcast «solo metadati» non annacquano il disgiuntore di crollo: "
    f"previo={_previo} · {V.disyuntor(_portadas_403, _previo)!r}")
+# La ventana son las diez voces MÁS RECIENTES, no el feed entero, y la mitad
+# es de las que hay. Un feed real de podcast trae cientos de episodios: un
+# blog que acaba de empezar un podcast es un podcast hoy, y un podcast que
+# volvió a ser blog ya no lo es. Y un podcast nuevo, de cuatro episodios, es
+# un podcast: la mitad de diez sería una vara que no puede pasar.
+r = verifica_pod(pod(0, total=30, con=lambda i: i < 10))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S39 dieci episodi recenti su trenta voci: è un podcast oggi: {r['motivo']}")
+r = verifica_pod(pod(0, total=30, con=lambda i: i >= 10))
+ok('p7 sin licencia' in r['motivo'],
+   f"S40 venti episodi vecchi sotto dieci post recenti: è tornato blog: {r['motivo']}")
+r = verifica_pod(pod(4, total=4))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S41 un podcast nuovo di quattro episodi è un podcast: {r['motivo']} · {r.get('p7_licencia', '')[:20]}")
+
+# La portada no se deja leer (403 anti-bot, 404, sitio sin http): la regla de
+# los podcasts no la lee, así que no depende de ella. Si un día se moviera
+# dentro del bloque que analiza la portada, estos podcasts caerían en p7.
+for _cod in (403, 404):
+    r = verifica_pod(pod(10), portada=K.Resp(_cod, 'https://pod.ejemplo.fm/', error=f'HTTP {_cod}'))
+    ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+       f"S42 un podcast con la home in {_cod} entra «solo metadati»: {r['motivo']}")
+
 # Una fila que se paró antes de p7 no sabe nada de la licencia: no debe
 # borrar la que había. TRANSITORIO no toca nada más que la reparación.
 _filas = [{'nome': 'x', 'url_feed': 'https://x/f', 'motivo': 'p1 roto (HTTP 404)'},
