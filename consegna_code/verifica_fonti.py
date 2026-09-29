@@ -282,7 +282,7 @@ def estado(rows):
 
 RED = re.compile(r'HTTP 403|HTTP 5\d\d|status=None|anti-bot|URLError|timeout|NO_DESCARGADA|sin texto accesible|TRANSITORIO')
 def aceptadas_de_sitio(rows):
-    """Las aceptadas cuya licencia depende de poder leer el sitio: la base del disyuntor de caída.
+    """Las aceptadas cuya licencia depende de poder leer el sitio: la segunda base del disyuntor de caída.
 
     Una fuente «solo metadatos» -canal, perfil, podcast sin licencia- se
     acepta sin leer la portada, así que no cae cuando las portadas dejan de
@@ -294,13 +294,27 @@ def aceptadas_de_sitio(rows):
     return sum(r['motivo'] == 'ACEPTADA'
                and not (r.get('p7_licencia') or '').startswith('solo metadati') for r in rows)
 
-def disyuntor(rows, previo):
-    """Protege la producción de un entorno roto (proxy corporativo, caída de red, bloqueo de IP)."""
+def disyuntor(rows, previo, previo_sitio=None):
+    """Protege la producción de un entorno roto (proxy corporativo, caída de red, bloqueo de IP).
+
+    La caída se mide dos veces, y salta con cualquiera de las dos. Sobre TODAS
+    las aceptadas ve lo que veía siempre: los feeds de treinta podcasts que
+    responden 404 a la IP del runner, que RED no reconoce. Sobre las de SITIO
+    ve lo que la primera diluye: las portadas en 403 que tumban los blogs
+    mientras los «solo metadatos» siguen en pie. Una sola de las dos bases deja
+    ciega a la otra mitad, y las dos mitades apagan fuentes sanas en viaje.
+
+    `previo_sitio` falta en la primera corrida con este código: ese control se
+    salta y el disyuntor es exactamente el de antes.
+    """
     n = len(rows) or 1
     red = sum(bool(RED.search(r['motivo'])) for r in rows)
-    ok = aceptadas_de_sitio(rows)
+    ok = sum(r['motivo'] == 'ACEPTADA' for r in rows)
+    ok_sitio = aceptadas_de_sitio(rows)
     if red / n >= C.DISYUNTOR_RED: return f'{red}/{n} fuentes fallan por red o bloqueo (umbral {C.DISYUNTOR_RED:.0%})'
     if previo and previo >= 5 and ok < previo * (1 - C.DISYUNTOR_CAIDA): return f'aceptadas caen de {previo} a {ok}'
+    if previo_sitio and previo_sitio >= 5 and ok_sitio < previo_sitio * (1 - C.DISYUNTOR_CAIDA):
+        return f'aceptadas con licencia del sitio caen de {previo_sitio} a {ok_sitio}'
     return ''
 
 def salud(rows, motivo_disyuntor, path='salud.md'):
@@ -352,13 +366,8 @@ if __name__ == '__main__':
         if len(fs) != esperadas:
             sys.exit(f'ERROR: leídas {len(fs)} filas de {esperadas} con metodo rss; formato no reconocido. No se genera activar.sql.')
     rows = [verifica_segura(n, u, s, c, amplia, '--sin-muro' not in sys.argv) for n, u, s, c in fs]
-    # `__aceptadas__` es la base de antes, que contaba también las «solo
-    # metadatos»: vale como base una sola vez, en la primera corrida con este
-    # código. Da un previo un poco más alto, es decir, un disyuntor un poco
-    # más sensible esa semana, que es el lado seguro.
     _est = json.load(open(ESTADO)) if os.path.exists(ESTADO) else {}
-    previo = _est.get('__aceptadas_sitio__', _est.get('__aceptadas__'))
-    corte = disyuntor(rows, previo)
+    corte = disyuntor(rows, _est.get('__aceptadas__'), _est.get('__aceptadas_sitio__'))
     avisos = salud(rows, corte)
     if corte:
         with open('informe.csv', 'w', newline='') as fh:

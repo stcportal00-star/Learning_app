@@ -616,21 +616,39 @@ ok(all(j == q for _, j, q in _par)
                                    "Copyright (todos los derechos reservados) | https://f/"],
    f"S36 activar.json y activar.sql dicen la misma licencia de cada fuente: {_par}")
 
-# El disyuntor de caída cuenta solo las aceptadas cuya licencia sale del sitio.
-# Escena: 20 blogs con CC y 20 podcasts «solo metadati»; una semana las
-# portadas responden 403 y feeds y artículos no. Los blogs caen en «p7 sin
-# licencia», que RED no reconoce; los podcasts siguen aceptados porque su
-# licencia no lee la portada. Contándolos, 40 -> 20 no llega al 50% y los 20
-# blogs sanos se apagarían. La semana normal, en cambio, no debe saltar.
+# El disyuntor de caída mide dos bases y salta con cualquiera. Cada escena
+# rompe una sola: la que ve cada base es la que la otra no ve.
 _blog = lambda i, m, l: {'url_feed': f'https://b{i}/f', 'motivo': m, 'p7_licencia': l}
-_pods = [{'url_feed': f'https://p{i}/f', 'motivo': 'ACEPTADA',
-          'p7_licencia': C.LICENCIA_PODCAST + f' | https://p{i}/f'} for i in range(20)]
-_normal = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + _pods
-_portadas_403 = [_blog(i, 'p7 sin licencia', '') for i in range(20)] + _pods
-_previo = V.aceptadas_de_sitio(_normal)
-ok(_previo == 20 and V.disyuntor(_portadas_403, _previo) and not V.disyuntor(_normal, _previo),
-   f"S37 i podcast «solo metadati» non annacquano il disgiuntore di crollo: "
-   f"previo={_previo} · {V.disyuntor(_portadas_403, _previo)!r}")
+_pod = lambda i, m='ACEPTADA': {'url_feed': f'https://p{i}/f', 'motivo': m,
+                                'p7_licencia': C.LICENCIA_PODCAST + f' | https://p{i}/f' if m == 'ACEPTADA' else ''}
+_bases = lambda rows: (sum(r['motivo'] == 'ACEPTADA' for r in rows), V.aceptadas_de_sitio(rows))
+# Portadas en 403, feeds sanos: los blogs caen en «p7 sin licencia», que RED no
+# reconoce, y los podcasts siguen. Sobre el total, 40 -> 20 no llega al 50%.
+_normal = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + [_pod(i) for i in range(20)]
+_portadas_403 = [_blog(i, 'p7 sin licencia', '') for i in range(20)] + [_pod(i) for i in range(20)]
+ok(_bases(_normal) == (40, 20) and V.disyuntor(_portadas_403, *_bases(_normal))
+   and not V.disyuntor(_normal, *_bases(_normal)),
+   f"S37 portadas en 403: salta la base de sitio: {V.disyuntor(_portadas_403, *_bases(_normal))!r}")
+# Feeds de los podcasts en 404 a la IP del runner, portadas sanas: caen los
+# «solo metadati», que la base de sitio no cuenta. Sin la base total se
+# apagarían treinta podcasts, y la curación los reescribiría en `sitemap:`
+# perdiendo el feed de audio para siempre.
+_normal = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(10)] + [_pod(i) for i in range(30)]
+_feeds_404 = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(10)] + \
+             [_pod(i, 'p1 roto (HTTP 404); curación agotada') for i in range(30)]
+ok(_bases(_normal) == (40, 10) and V.disyuntor(_feeds_404, *_bases(_normal))
+   and not V.disyuntor(_normal, *_bases(_normal)),
+   f"S38 feed dei podcast in 404: scatta la base totale: {V.disyuntor(_feeds_404, *_bases(_normal))!r}")
+# Primera corrida con este código: estado_verifica.json aún no tiene la base
+# de sitio. El disyuntor debe ser el de antes, no uno que compare las de sitio
+# de hoy con el total de ayer: con 20 blogs y 25 canales eso daría 45 -> 20, y
+# como la base solo se escribe cuando no salta, saltaría todas las semanas.
+_hoy = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + \
+       [{'url_feed': f'https://yt{i}/f', 'motivo': 'ACEPTADA', 'p7_licencia': C.PIATTAFORME_METADATI[0][1] + ' | x'}
+        for i in range(25)]
+ok(V.disyuntor(_hoy, 45, None) == '',
+   f"S43 sin base de sitio el disyuntor es el de antes: {V.disyuntor(_hoy, 45, None)!r}")
+
 # La ventana son las diez voces MÁS RECIENTES, no el feed entero, y la mitad
 # es de las que hay. Un feed real de podcast trae cientos de episodios: un
 # blog que acaba de empezar un podcast es un podcast hoy, y un podcast que
