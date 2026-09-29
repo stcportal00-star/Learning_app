@@ -43,10 +43,16 @@ def licencia_podcast(d, url_feed):
     """Un podcast sin licencia de sitio entra como un canal: solo metadatos. -> (texto, url) o None.
 
     Se reconoce por el contenido y no por la dirección: al menos
-    `PODCAST_ADJUNTOS` de las diez primeras voces traen un adjunto `audio/` o
-    `video/`. Es la misma regla con la que `feed.py` decide qué es un adjunto,
-    y no por elegancia: si aquí contara un PDF o un player de Flash, una revista
-    con un PDF por artículo entraría «solo metadatos» y perdería su texto.
+    `PODCAST_ADJUNTOS` de las diez primeras voces traen un `<enclosure>` de RSS
+    o un `<link rel="enclosure">` de Atom -lo que feedparser llama
+    `enclosures`- con tipo `audio/` o `video/`. El tipo cuenta: si aquí contara
+    un PDF, una revista con un PDF por artículo entraría «solo metadatos» y
+    perdería su texto.
+
+    NO es exactamente la regla de `feed.py`, que cuenta también
+    `<media:content>` (feedparser lo pone en `media_content`). Un feed que
+    declara el audio solo así cae en p7 como antes: la dirección segura, la de
+    no aceptar, no la de extraer lo que no está licenciado.
 
     Se consulta DESPUÉS de la detección automática. Un podcast que declara una
     Creative Commons tiene que seguir dando el texto de su transcripción, y
