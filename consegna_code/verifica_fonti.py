@@ -39,6 +39,34 @@ def licencia_plataforma(url_feed):
             return texto, url_feed
     return None
 
+def licencia_podcast(d, url_feed):
+    """Un podcast sin licencia de sitio entra como un canal: solo metadatos. -> (texto, url) o None.
+
+    Se reconoce por el contenido y no por la dirección: al menos
+    `PODCAST_ADJUNTOS` de las diez primeras voces traen un `<enclosure>` de RSS
+    o un `<link rel="enclosure">` de Atom -lo que feedparser llama
+    `enclosures`- con tipo `audio/` o `video/`. El tipo cuenta: si aquí contara
+    un PDF, una revista con un PDF por artículo entraría «solo metadatos» y
+    perdería su texto.
+
+    NO es exactamente la regla de `feed.py`, que cuenta también
+    `<media:content>` (feedparser lo pone en `media_content`). Un feed que
+    declara el audio solo así cae en p7 como antes: la dirección segura, la de
+    no aceptar, no la de extraer lo que no está licenciado.
+
+    Se consulta DESPUÉS de la detección automática. Un podcast que declara una
+    Creative Commons tiene que seguir dando el texto de su transcripción, y
+    dándole esta licencia antes se la quitaría.
+    """
+    es = d.entries[:10]
+    if not es:
+        return None
+    con = sum(any((x.get('type') or '').strip().lower().startswith(('audio/', 'video/'))
+                  for x in (e.get('enclosures') or ())) for e in es)
+    if con < len(es) * C.PODCAST_ADJUNTOS:
+        return None
+    return C.LICENCIA_PODCAST, url_feed
+
 def filas_de_nuvola(massimo=500):
     """Las fuentes tal como están HOY en percorso.fonti, activas y apagadas.
 
@@ -125,6 +153,7 @@ def verifica(nome, url, url_sito, cat, amplia=False, con_muro=True):
             lic = K.licencia(pag.body, pag.url, modo) or next(
                 (x for x in (K.licencia_pagina(p2.body, p2.url, modo) for p2 in terminos() if p2.body) if x), None)
             if lic: break
+    lic = lic or licencia_podcast(d, ef)
     r['p7_licencia'] = f'{lic[0]} | {lic[1]}' if lic else ''
     if con_muro:
         n, tot, det, trans = K.muro(links); r['p9_muro'] = f'{n}/{tot}'; r['p9_detalle'] = det
@@ -201,6 +230,9 @@ def sql_salida(rows):
         u = esc(r.get('url_nuevo') or r['url_feed'])
         if r['motivo'] == 'ACEPTADA': out.append(f"update percorso.fonti set attiva = true where url_feed = '{u}';")
         elif not r['motivo'].startswith('TRANSITORIO'): out.append(f"update percorso.fonti set attiva = false where url_feed = '{u}';  -- {com(r['motivo'][:80])}")
+        if 'p7_licencia' in r and not r['motivo'].startswith('TRANSITORIO'):
+            lic = f"'{esc(r['p7_licencia'])}'" if r['p7_licencia'] else 'null'
+            out.append(f"update percorso.fonti set licenza = {lic} where url_feed = '{u}';")
     return '\n'.join(out) + '\n'
 
 def cambios(rows):
@@ -227,6 +259,14 @@ def cambios(rows):
             # del estado de la red de esta corrida.
             c['attiva'] = r['motivo'] == 'ACEPTADA'
             c['motivo'] = com(r['motivo'])[:200]
+            # La licencia con la que se decidió, para que el pipeline diario
+            # sepa si puede extraer el texto sin volver a abrir el feed. Solo
+            # si p7 se midió de verdad: una fila que se paró antes (p1 roto,
+            # REVISAR) no sabe nada de la licencia y no debe borrar la que
+            # había. Vacía sí se escribe: una fuente que PIERDE la licencia
+            # pierde también el trato que esa licencia le daba.
+            if 'p7_licencia' in r:
+                c['licenza'] = r['p7_licencia']
         if len(c) > 1:
             out.append(c)
     return out
@@ -241,13 +281,40 @@ def estado(rows):
     json.dump(est, open(ESTADO, 'w'), indent=1)
 
 RED = re.compile(r'HTTP 403|HTTP 5\d\d|status=None|anti-bot|URLError|timeout|NO_DESCARGADA|sin texto accesible|TRANSITORIO')
-def disyuntor(rows, previo):
-    """Protege la producción de un entorno roto (proxy corporativo, caída de red, bloqueo de IP)."""
+def aceptadas_de_sitio(rows):
+    """Las aceptadas cuya licencia depende de poder leer el sitio: la segunda base del disyuntor de caída.
+
+    Una fuente «solo metadatos» -canal, perfil, podcast sin licencia- se
+    acepta sin leer la portada, así que no cae cuando las portadas dejan de
+    responder. Contarla diluiría justo la caída que el disyuntor existe para
+    ver: con 20 blogs y 20 podcasts, una semana de portadas en 403 lleva las
+    aceptadas de 40 a 20, que no llega al 50%, y los 20 blogs sanos se
+    apagarían por «p7 sin licencia», un motivo que RED no reconoce como red.
+    """
+    return sum(r['motivo'] == 'ACEPTADA'
+               and not (r.get('p7_licencia') or '').startswith('solo metadati') for r in rows)
+
+def disyuntor(rows, previo, previo_sitio=None):
+    """Protege la producción de un entorno roto (proxy corporativo, caída de red, bloqueo de IP).
+
+    La caída se mide dos veces, y salta con cualquiera de las dos. Sobre TODAS
+    las aceptadas ve lo que veía siempre: los feeds de treinta podcasts que
+    responden 404 a la IP del runner, que RED no reconoce. Sobre las de SITIO
+    ve lo que la primera diluye: las portadas en 403 que tumban los blogs
+    mientras los «solo metadatos» siguen en pie. Una sola de las dos bases deja
+    ciega a la otra mitad, y las dos mitades apagan fuentes sanas en viaje.
+
+    `previo_sitio` falta en la primera corrida con este código: ese control se
+    salta y el disyuntor es exactamente el de antes.
+    """
     n = len(rows) or 1
     red = sum(bool(RED.search(r['motivo'])) for r in rows)
     ok = sum(r['motivo'] == 'ACEPTADA' for r in rows)
+    ok_sitio = aceptadas_de_sitio(rows)
     if red / n >= C.DISYUNTOR_RED: return f'{red}/{n} fuentes fallan por red o bloqueo (umbral {C.DISYUNTOR_RED:.0%})'
     if previo and previo >= 5 and ok < previo * (1 - C.DISYUNTOR_CAIDA): return f'aceptadas caen de {previo} a {ok}'
+    if previo_sitio and previo_sitio >= 5 and ok_sitio < previo_sitio * (1 - C.DISYUNTOR_CAIDA):
+        return f'aceptadas con licencia del sitio caen de {previo_sitio} a {ok_sitio}'
     return ''
 
 def salud(rows, motivo_disyuntor, path='salud.md'):
@@ -299,8 +366,8 @@ if __name__ == '__main__':
         if len(fs) != esperadas:
             sys.exit(f'ERROR: leídas {len(fs)} filas de {esperadas} con metodo rss; formato no reconocido. No se genera activar.sql.')
     rows = [verifica_segura(n, u, s, c, amplia, '--sin-muro' not in sys.argv) for n, u, s, c in fs]
-    previo = (json.load(open(ESTADO)).get('__aceptadas__') if os.path.exists(ESTADO) else None)
-    corte = disyuntor(rows, previo)
+    _est = json.load(open(ESTADO)) if os.path.exists(ESTADO) else {}
+    corte = disyuntor(rows, _est.get('__aceptadas__'), _est.get('__aceptadas_sitio__'))
     avisos = salud(rows, corte)
     if corte:
         with open('informe.csv', 'w', newline='') as fh:
@@ -311,7 +378,8 @@ if __name__ == '__main__':
         open('activar.json', 'w').write('[]\n')
         print(f'DISYUNTOR: {corte} -> activar.sql vacío, ver salud.md'); sys.exit(3)
     estado(rows); escribir(rows)
-    est = json.load(open(ESTADO)); est['__aceptadas__'] = sum(r['motivo'] == 'ACEPTADA' for r in rows); json.dump(est, open(ESTADO, 'w'), indent=1)
+    est = json.load(open(ESTADO)); est['__aceptadas__'] = sum(r['motivo'] == 'ACEPTADA' for r in rows)
+    est['__aceptadas_sitio__'] = aceptadas_de_sitio(rows); json.dump(est, open(ESTADO, 'w'), indent=1)
     for r in rows:
         rep = f"  [reparado: {r['reparacion']}]" if r.get('url_nuevo') else ''
         print(f"{r['nome'][:22]:22} {str(r.get('p3_utiles', '-')):>2}/10  {r['motivo']}{rep}")

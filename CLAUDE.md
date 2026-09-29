@@ -219,6 +219,17 @@ Due cose senza le quali non funziona:
   PostgREST sono venti transazioni: se la decima fallisce, la tabella resta
   come nessuno ha deciso. La funzione riceve dati, mai SQL.
 
+**La licenza con cui una fonte è entrata si salva in `percorso.fonti.licenza`**
+(migrazione 007), e non si ricalcola. YouTube e Mastodon si riconoscono
+dall'indirizzo; un podcast no — lo riconosce la verifica dagli allegati `audio/`
+o `video/` di almeno metà delle voci — e fra i podcast c'è chi dichiara una
+licenza e chi no. `verifica_fonti.py` decide e scrive, `feed.solo_metadati()`
+legge il prefisso «solo metadati», `pubblica.py` non estrae. Da un podcast
+senza licenza restano titolo, descrizione, allegato e collegamento alla
+trascrizione, ma non il testo della trascrizione. La regola dei podcast si
+prova DOPO il rilevamento automatico, apposta: un podcast con Creative Commons
+deve continuare a dare la sua trascrizione come testo.
+
 Il primo del mese lo scouting propone fonti nuove, e le **inserisce spente**
 con `percorso.proponi_fonti(jsonb)`. Accenderle non è cosa sua: lo decide la
 verifica del lunedì dopo. È la gamba per cui la lista migliora da sola invece

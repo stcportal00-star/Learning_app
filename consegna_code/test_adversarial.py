@@ -1,5 +1,5 @@
 """Pruebas ADVERSARIALES: cada una intenta romper una garantía. python3 test_adversarial.py"""
-import time, email.utils, json, importlib, os, shutil, tempfile, pglast, feedparser
+import time, email.utils, json, importlib, os, re, shutil, tempfile, pglast, feedparser
 import fonti_core as K, verifica_fonti as V, scopri_fonti as S, temi_config as C
 K.configurar(parche=True)
 def d(sec): return email.utils.formatdate(time.time() - sec)
@@ -505,5 +505,227 @@ r = V.verifica('Chi parla',
                'https://www.youtube.com/channel/UCabcdefghijklmnopqrstuv', 'ia')
 ok(r['motivo'] == 'ACEPTADA' and 'solo metadati' in r['p7_licencia'],
    f"S24 un canale senza licenza sul sito passa p7 come «solo metadati»: {r['motivo']} · {r['p7_licencia'][:44]}")
+
+# ------------------------------------------------- podcasts sin licencia
+# Un podcast no se reconoce por la dirección sino por sus adjuntos. Cada prueba
+# rompe una mitad distinta: si la regla se aplicara a todo, el blog sin
+# licencia pasaría; si se aplicara antes de la detección, el podcast con CC
+# perdería el texto de su transcripción; si contara cualquier adjunto, una
+# revista con un PDF por artículo entraría «solo metadatos».
+def pod(n, tipo='audio/mpeg', sitio='https://pod.ejemplo.fm/', total=10, con=None):
+    # `con(i)` decide qué voces llevan el adjunto; por omisión, las n primeras.
+    con = con or (lambda i: i < n)
+    it = ''.join(
+        f'<item><title>Model evaluation note {i}: red teaming frontier models</title>'
+        f'<link>{sitio}ep{i}</link><pubDate>{d(i * 86400)}</pubDate>'
+        f'<description>llm evals</description>'
+        + (f'<enclosure url="{sitio}ep{i}.bin" type="{tipo}" length="1000"/>' if con(i) else '')
+        + '</item>' for i in range(total))
+    return (f'<?xml version="1.0"?><rss version="2.0"><channel><title>Pod</title>'
+            f'<link>{sitio}</link>{it}</channel></rss>').encode()
+
+def verifica_pod(feed, portada=b'<html><title>Pod</title>nessuna licenza qui</html>', **kw):
+    reset()
+    WEB['https://pod.ejemplo.fm/'] = portada
+    WEB['https://pod.ejemplo.fm/feed.xml'] = feed
+    for i in range(30):
+        WEB[f'https://pod.ejemplo.fm/ep{i}'] = ART
+    return V.verifica('Pod', 'https://pod.ejemplo.fm/feed.xml', 'https://pod.ejemplo.fm/', 'ia', **kw)
+
+r = verifica_pod(pod(10))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati')
+   and 'podcast' in r['p7_licencia'],
+   f"S25 un podcast senza licenza passa p7 come «solo metadati»: {r['motivo']} · {r['p7_licencia'][:50]}")
+_c = V.cambios([r])
+ok(len(_c) == 1 and _c[0].get('licenza', '').startswith('solo metadati')
+   and "licenza = 'solo metadati" in V.sql_salida([r]),
+   f"S26 e la decisione arriva a percorso.fonti.licenza, in tutte e due le uscite: {_c}")
+
+r = verifica_pod(pod(10, tipo='video/mp4'))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S27 un video-podcast è un podcast: {r['motivo']}")
+
+r = verifica_pod(pod(5))
+ok(r['motivo'] == 'ACEPTADA', f"S28 metà degli episodi con l'audio basta: {r['motivo']}")
+r = verifica_pod(pod(4))
+ok('p7 sin licencia' in r['motivo'] and r['p7_licencia'] == '',
+   f"S29 ma quattro su dieci no, è un blog con qualche episodio: {r['motivo']}")
+
+r = verifica_pod(pod(10, tipo='application/pdf'))
+ok('p7 sin licencia' in r['motivo'],
+   f"S30 una rivista con un PDF per articolo non è un podcast: {r['motivo']}")
+
+r = verifica_pod(pod(0))
+ok('p7 sin licencia' in r['motivo'] and 'licenza = null' in V.sql_salida([r])
+   and V.cambios([r])[0].get('licenza') == '',
+   f"S31 un blog senza licenza continua a cadere, e la licenza vecchia si toglie: {r['motivo']}")
+
+r = verifica_pod(pod(10), portada=b'<html><title>Pod</title><footer>'
+                 b'<a rel="license" href="https://creativecommons.org/licenses/by/4.0/">CC BY</a>'
+                 b'</footer></html>')
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('CC BY')
+   and V.cambios([r])[0].get('licenza', '').startswith('CC BY'),
+   f"S32 un podcast con CC tiene la sua CC, e la trascrizione resta testo: {r['p7_licencia'][:60]}")
+
+# En producción LICENCIA_AMPLIA es True, y ahí un «©» en el pie del sitio ya es
+# una licencia declarada (decisión A): el podcast la conserva y sigue dando el
+# texto de su transcripción. La regla de los podcasts solo llega a los que no
+# tienen ni eso. Sin esta prueba, las de arriba corren todas con amplia=False
+# y nadie comprobaría el modo que de verdad gira los lunes.
+r = verifica_pod(pod(10), portada=b'<html><title>Pod</title><footer>&copy; 2026 Pod Media</footer></html>',
+                 amplia=True)
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('Copyright'),
+   f"S34 con amplia=True un podcast con © resta Copyright, non «solo metadati»: {r['p7_licencia'][:44]}")
+r = verifica_pod(pod(10), amplia=True)
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S35 e senza nemmeno il © entra «solo metadati» anche con amplia=True: {r['p7_licencia'][:44]}")
+
+# S8 compara las dos salidas con filas SIN `p7_licencia`. Aquí la paridad de
+# `licenza`: para cada fuente, activar.json y activar.sql dicen lo mismo -la
+# misma licencia, «null» por la vacía, nada por la que no se midió o es
+# TRANSITORIO-. Si un día divergen, lo que lee una persona deja de ser lo que
+# aplica la máquina.
+_filas = [
+    {'nome': 'a', 'url_feed': 'https://a/f', 'motivo': 'ACEPTADA', 'p7_licencia': "rel=license | https://a/l'avviso"},
+    {'nome': 'b', 'url_feed': 'https://b/f', 'motivo': 'ACEPTADA', 'p7_licencia': C.LICENCIA_PODCAST + ' | https://b/f'},
+    {'nome': 'c', 'url_feed': 'https://c/f', 'motivo': 'p7 sin licencia', 'p7_licencia': ''},
+    {'nome': 'd', 'url_feed': 'https://d/f', 'motivo': 'TRANSITORIO p9 (x)', 'p7_licencia': 'CC BY | https://d/'},
+    {'nome': 'e', 'url_feed': 'https://e/f', 'motivo': 'p1 roto (HTTP 404)'},
+    {'nome': 'f', 'url_feed': 'https://f/f', 'url_nuevo': 'https://f/nuevo.xml', 'reparacion': 'x',
+     'motivo': 'ACEPTADA', 'p7_licencia': "Copyright (todos los derechos reservados) | https://f/"},
+]
+_js = {c['url_feed']: c for c in V.cambios(_filas)}
+_sql = V.sql_salida(_filas)
+# Tres valores y no dos: «no se toca» (sin clave, sin línea) no es «se quita»
+# (vacía, null). Confundirlos dejaría verde un SQL que borra la licencia de una
+# fuente TRANSITORIA y respeta la de una que la perdió.
+NO_SE_TOCA = 'no se toca'
+def _en_sql(f):
+    u = f.get('url_nuevo') or f['url_feed']
+    m = re.search(r"set licenza = ('(?:[^']|'')*'|null) where url_feed = '" + re.escape(u) + "';", _sql)
+    return NO_SE_TOCA if not m else (None if m.group(1) == 'null' else m.group(1)[1:-1].replace("''", "'"))
+def _en_json(f):
+    c = _js.get(f['url_feed']) or {}
+    return NO_SE_TOCA if 'licenza' not in c else (c['licenza'] or None)
+_par = [(f['nome'], _en_json(f), _en_sql(f)) for f in _filas]
+ok(all(j == q for _, j, q in _par)
+   and {type(x.stmt).__name__ for x in pglast.parse_sql(_sql)} == {'UpdateStmt'}
+   and _sql.index("set url_feed = 'https://f/nuevo.xml'") < _sql.index("set licenza = 'Copyright")
+   and [j for _, j, _ in _par] == ["rel=license | https://a/l'avviso", C.LICENCIA_PODCAST + ' | https://b/f', None,
+                                   NO_SE_TOCA, NO_SE_TOCA,
+                                   "Copyright (todos los derechos reservados) | https://f/"],
+   f"S36 activar.json y activar.sql dicen la misma licencia de cada fuente: {_par}")
+
+# El disyuntor de caída mide dos bases y salta con cualquiera. Cada escena
+# rompe una sola: la que ve cada base es la que la otra no ve.
+_blog = lambda i, m, l: {'url_feed': f'https://b{i}/f', 'motivo': m, 'p7_licencia': l}
+_pod = lambda i, m='ACEPTADA': {'url_feed': f'https://p{i}/f', 'motivo': m,
+                                'p7_licencia': C.LICENCIA_PODCAST + f' | https://p{i}/f' if m == 'ACEPTADA' else ''}
+_bases = lambda rows: (sum(r['motivo'] == 'ACEPTADA' for r in rows), V.aceptadas_de_sitio(rows))
+# Portadas en 403, feeds sanos: los blogs caen en «p7 sin licencia», que RED no
+# reconoce, y los podcasts siguen. Sobre el total, 40 -> 20 no llega al 50%.
+_normal = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + [_pod(i) for i in range(20)]
+_portadas_403 = [_blog(i, 'p7 sin licencia', '') for i in range(20)] + [_pod(i) for i in range(20)]
+ok(_bases(_normal) == (40, 20) and V.disyuntor(_portadas_403, *_bases(_normal))
+   and not V.disyuntor(_normal, *_bases(_normal)),
+   f"S37 portadas en 403: salta la base de sitio: {V.disyuntor(_portadas_403, *_bases(_normal))!r}")
+# Feeds de los podcasts en 404 a la IP del runner, portadas sanas: caen los
+# «solo metadati», que la base de sitio no cuenta. Sin la base total se
+# apagarían treinta podcasts, y la curación los reescribiría en `sitemap:`
+# perdiendo el feed de audio para siempre.
+_normal = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(10)] + [_pod(i) for i in range(30)]
+_feeds_404 = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(10)] + \
+             [_pod(i, 'p1 roto (HTTP 404); curación agotada') for i in range(30)]
+ok(_bases(_normal) == (40, 10) and V.disyuntor(_feeds_404, *_bases(_normal))
+   and not V.disyuntor(_normal, *_bases(_normal)),
+   f"S38 feed dei podcast in 404: scatta la base totale: {V.disyuntor(_feeds_404, *_bases(_normal))!r}")
+# Primera corrida con este código: estado_verifica.json aún no tiene la base
+# de sitio. El disyuntor debe ser el de antes, no uno que compare las de sitio
+# de hoy con el total de ayer: con 20 blogs y 25 canales eso daría 45 -> 20, y
+# como la base solo se escribe cuando no salta, saltaría todas las semanas.
+_hoy = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + \
+       [{'url_feed': f'https://yt{i}/f', 'motivo': 'ACEPTADA', 'p7_licencia': C.PIATTAFORME_METADATI[0][1] + ' | x'}
+        for i in range(25)]
+ok(V.disyuntor(_hoy, 45, None) == '',
+   f"S43 sin base de sitio el disyuntor es el de antes: {V.disyuntor(_hoy, 45, None)!r}")
+
+# S43 prueba la FUNCIÓN. El cableado de la CLI -qué base se lee de
+# estado_verifica.json, qué se le pasa al disyuntor, qué se escribe después-
+# no lo probaba nada: volver a poner el repliegue en la CLI, quitar el tercer
+# argumento o dejar de escribir `__aceptadas_sitio__` pasaban todas las
+# pruebas. Aquí corre el `__main__` de verdad, dos semanas seguidas, con la red
+# falsa de estas pruebas: 5 blogs con CC y 6 podcasts «solo metadati», y un
+# estado de producción que aún no tiene la base de sitio.
+import runpy, sys as _sys
+def _semana(carpeta, portadas_blog):
+    reset()
+    for i in range(5):
+        sitio = f'https://blog{i}.ejemplo.org/'
+        WEB[sitio + 'feed.xml'] = rss([(t, f'{sitio}p{j}', x) for j, (t, _, x) in enumerate(BUENOS)], link=sitio)
+        WEB[sitio] = portadas_blog(sitio)
+    for i in range(6):
+        sitio = f'https://pod{i}.ejemplo.fm/'
+        WEB[sitio + 'feed.xml'] = pod(10, sitio=sitio)
+        WEB[sitio] = b'<html><title>Pod</title>nessuna licenza qui</html>'
+    antes, argv = os.getcwd(), _sys.argv
+    try:
+        os.chdir(carpeta)
+        _sys.argv = ['verifica_fonti.py', 'f.sql', '--sin-muro']
+        try:
+            runpy.run_path(os.path.abspath(os.path.join(antes, 'verifica_fonti.py')), run_name='__main__')
+            rc = 0
+        except SystemExit as e:
+            rc = e.code
+        return rc, json.load(open(V.ESTADO)), json.load(open('activar.json'))
+    finally:
+        os.chdir(antes); _sys.argv = argv
+_d = tempfile.mkdtemp()
+try:
+    open(os.path.join(_d, 'f.sql'), 'w').write(',\n'.join(
+        [f"  ('b{i}', 'https://blog{i}.ejemplo.org/feed.xml', 'https://blog{i}.ejemplo.org/', 'rss', 'ia', 'en', 0.5, false)" for i in range(5)]
+        + [f"  ('p{i}', 'https://pod{i}.ejemplo.fm/feed.xml', 'https://pod{i}.ejemplo.fm/', 'rss', 'ia', 'en', 0.5, false)" for i in range(6)]))
+    json.dump({'__aceptadas__': 11}, open(os.path.join(_d, V.ESTADO), 'w'))
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc1, est1, act1 = _semana(_d, lambda u: b'<footer>creativecommons.org/licenses/by/4.0/</footer>')
+        rc2, est2, act2 = _semana(_d, lambda u: K.Resp(403, u, error='HTTP 403'))
+    ok(rc1 in (0, 2) and est1.get('__aceptadas__') == 11 and est1.get('__aceptadas_sitio__') == 5,
+       f"S44 prima corsa senza base di sito: niente scatto, e la base si scrive: rc={rc1} "
+       f"{ {k: v for k, v in est1.items() if k.startswith('__')} }")
+    ok(rc2 == 3 and act2 == [] and est2.get('__aceptadas_sitio__') == 5,
+       f"S45 settimana dopo, home dei blog in 403: la CLI passa la base di sito e scatta: rc={rc2} "
+       f"{len(act2)} cambi")
+finally:
+    shutil.rmtree(_d, ignore_errors=True)
+
+# La ventana son las diez voces MÁS RECIENTES, no el feed entero, y la mitad
+# es de las que hay. Un feed real de podcast trae cientos de episodios: un
+# blog que acaba de empezar un podcast es un podcast hoy, y un podcast que
+# volvió a ser blog ya no lo es. Y un podcast nuevo, de cuatro episodios, es
+# un podcast: la mitad de diez sería una vara que no puede pasar.
+r = verifica_pod(pod(0, total=30, con=lambda i: i < 10))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S39 dieci episodi recenti su trenta voci: è un podcast oggi: {r['motivo']}")
+r = verifica_pod(pod(0, total=30, con=lambda i: i >= 10))
+ok('p7 sin licencia' in r['motivo'],
+   f"S40 venti episodi vecchi sotto dieci post recenti: è tornato blog: {r['motivo']}")
+r = verifica_pod(pod(4, total=4))
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S41 un podcast nuovo di quattro episodi è un podcast: {r['motivo']} · {r.get('p7_licencia', '')[:20]}")
+
+# La portada no se deja leer (403 anti-bot, 404, sitio sin http): la regla de
+# los podcasts no la lee, así que no depende de ella. Si un día se moviera
+# dentro del bloque que analiza la portada, estos podcasts caerían en p7.
+for _cod in (403, 404):
+    r = verifica_pod(pod(10), portada=K.Resp(_cod, 'https://pod.ejemplo.fm/', error=f'HTTP {_cod}'))
+    ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+       f"S42 un podcast con la home in {_cod} entra «solo metadati»: {r['motivo']}")
+
+# Una fila que se paró antes de p7 no sabe nada de la licencia: no debe
+# borrar la que había. TRANSITORIO no toca nada más que la reparación.
+_filas = [{'nome': 'x', 'url_feed': 'https://x/f', 'motivo': 'p1 roto (HTTP 404)'},
+          {'nome': 'y', 'url_feed': 'https://y/f', 'motivo': 'TRANSITORIO p9 (x)',
+           'p7_licencia': 'CC BY | https://y/'}]
+ok(all('licenza' not in c for c in V.cambios(_filas)) and 'licenza' not in V.sql_salida(_filas),
+   f"S33 senza misura di p7 la licenza non si tocca: {V.cambios(_filas)}")
 
 print(f'\n{sum(R)}/{len(R)} adversariales OK')

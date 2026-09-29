@@ -137,6 +137,13 @@ _CAMPI_DATA = ("pubdate", "published", "date", "issued", "created",
 # che vale la pena leggere.
 _CAMPI_TESTO = ("description", "summary", "content", "encoded", "abstract")
 
+# Gli stessi, meno i due che portano il CORPO: `<content>` di Atom e
+# `<content:encoded>` di RSS. Una fonte accettata «solo metadati» dichiara di
+# dare titolo, descrizione, data e collegamento; il più lungo dei cinque è
+# spesso il post intero o la trascrizione dell'episodio, e tenerlo come
+# `abstract` sarebbe estrarre il testo per un'altra porta.
+_CAMPI_SOMMARIO = ("description", "summary", "abstract")
+
 # `</?[a-zA-Z]` e non `<[^>]+>`: un titolo come "l'analisi in < 5 minuti" ha un
 # minore che non apre nessun tag, e la versione ingenua se lo mangia insieme a
 # ciò che segue fino al primo maggiore.
@@ -453,7 +460,7 @@ def _trascrizione_da(nodo, url_base):
     return None
 
 
-def _elemento_da(nodo, url_base):
+def _elemento_da(nodo, url_base, solo_sommario=False):
     """Un `<item>` o un `<entry>` -> il dizionario documentato in `analizza`."""
     titoli = _figli(nodo, ("title",))
     titolo = _pulisci(_testo_di(titoli[0])) if titoli else ""
@@ -471,10 +478,11 @@ def _elemento_da(nodo, url_base):
         if data:
             break
 
-    fonti_testo = list(_figli(nodo, _CAMPI_TESTO))
+    campi = _CAMPI_SOMMARIO if solo_sommario else _CAMPI_TESTO
+    fonti_testo = list(_figli(nodo, campi))
     gruppo = _gruppo_media(nodo)
     if gruppo is not None:
-        fonti_testo += _figli(gruppo, _CAMPI_TESTO)
+        fonti_testo += _figli(gruppo, campi)
     testi = [_pulisci(_testo_di(f)) for f in fonti_testo]
     abstract = max(testi, key=len) if testi else ""
 
@@ -492,7 +500,7 @@ def _elemento_da(nodo, url_base):
     }
 
 
-def analizza(dati, url_base=""):
+def analizza(dati, url_base="", solo_sommario=False):
     """Da XML grezzo (byte o testo) alla lista degli elementi del feed.
 
     Ogni elemento è
@@ -507,13 +515,17 @@ def analizza(dati, url_base=""):
     namespace. Un elemento senza titolo si salta; uno senza data si tiene con
     `data` a None, perché una informazione mancante non è un motivo per
     buttare via le altre quattro.
+
+    Con `solo_sommario` l'`abstract` si sceglie solo fra i campi di sommario
+    (`_CAMPI_SOMMARIO`): è il modo in cui una fonte «solo metadati» resta tale
+    anche nel campo che viaggia fino al telefono.
     """
     radice = _radice(dati)
 
     elementi = []
     for nodo in radice.iter():
         if _locale(nodo.tag) in ("item", "entry"):
-            elemento = _elemento_da(nodo, url_base)
+            elemento = _elemento_da(nodo, url_base, solo_sommario)
             if elemento is not None:
                 elementi.append(elemento)
 
@@ -616,9 +628,10 @@ def voci_da(fonte, dati):
     # "../articolo" risolverebbe altrimenti una cartella più in là.
     url_base = (fonte.get("url_sito") or fonte.get("url_feed") or "").strip()
 
-    metadati = solo_metadati((fonte.get("url_feed") or "").strip())
+    metadati = solo_metadati((fonte.get("url_feed") or "").strip(),
+                             fonte.get("licenza"))
     uscite = []
-    for elemento in analizza(dati, url_base):
+    for elemento in analizza(dati, url_base, solo_sommario=metadati):
         v = fonti.voce(
             elemento["titolo"],
             fonte="rss[%s]" % nome,
@@ -704,7 +717,7 @@ def classifica_voce(v):
     return v
 
 
-def solo_metadati(url_feed):
+def solo_metadati(url_feed, licenza=None):
     """Questa fonte è una piattaforma dove la licenza è di chi pubblica?
 
     Da un canale YouTube o da un profilo Mastodon si tiene il titolo, la
@@ -713,10 +726,20 @@ def solo_metadati(url_feed):
     passare p7. Dichiararla e poi estrarre il testo lo stesso sarebbe dire una
     cosa e farne un'altra.
 
-    L'elenco vive in `consegna_code/temi_config.py`. Se quella cartella non c'è,
-    nessuna fonte è di questo tipo: nessuna di esse sarebbe potuta entrare in
-    tabella senza passare da lì.
+    Due strade, perché le fonti di questo tipo sono di due tipi. YouTube e
+    Mastodon si riconoscono dall'indirizzo, e l'elenco vive in
+    `consegna_code/temi_config.py`. Un podcast no: si riconosce dal contenuto
+    del feed, e fra i podcast c'è chi dichiara una licenza e chi no — dal solo
+    URL non si distinguono. Per quelli decide la verifica, una volta, e scrive
+    la sua decisione in `percorso.fonti.licenza`; qui la si legge e basta.
+    Ricalcolarla sarebbe una seconda definizione da tenere allineata alla prima.
+
+    Se `consegna_code/` non c'è, nessuna fonte è di questo tipo per indirizzo:
+    nessuna sarebbe potuta entrare in tabella senza passare da lì. La colonna
+    invece vale sempre, perché è la tabella a portarla.
     """
+    if (licenza or "").strip().lower().startswith("solo metadati"):
+        return True
     for patron, _ in getattr(_CONF, "PIATTAFORME_METADATI", ()) or ():
         if re.match(patron, url_feed or ""):
             return True
@@ -844,6 +867,20 @@ def raccogli(nuvola, rapporto, massimo_per_fonte=25, minuti=6, esplorazione=None
                 "%s: metodo '%s' senza url_feed. Aggiungilo nella tabella "
                 "fonti, oppure metti attiva=false."
                 % (nome, fonte.get("metodo") or "rss"))
+            continue
+
+        # Un sitemap si legge scaricando le pagine e mettendone il CORPO nella
+        # descrizione: per una fonte «solo metadati» sarebbe estrarre il testo.
+        # Non nasce così — un feed sintetizzato non ha allegati, e YouTube e
+        # Mastodon non hanno sitemap — ma ci arriva: se il feed di un podcast
+        # muore e la verifica lo ripara in `sitemap:` in una corsa TRANSITORIA,
+        # la riga resta accesa con la licenza di prima fino al lunedì dopo. Si
+        # salta PRIMA di scaricare, e il rapporto dice perché.
+        if url.startswith("sitemap:") and solo_metadati(url, fonte.get("licenza")):
+            rapporto["falliti"].append(
+                "%s: dichiarata «solo metadati» ma letta da un sitemap, che è "
+                "fatto del corpo delle pagine. Saltata finché la verifica non "
+                "decide di nuovo la licenza." % nome)
             continue
 
         try:
@@ -1092,6 +1129,45 @@ _FEED_PODCAST = """<?xml version="1.0" encoding="utf-8"?>
 </rss>
 """
 
+# Il sommario corto e il corpo lungo nella stessa voce, nelle due grammatiche:
+# `<content:encoded>` di RSS e `<content>` di Atom. Il corpo qui è una
+# trascrizione incollata, che è esattamente ciò che certi podcast fanno. Nella
+# versione RSS i sommari sono due, `<description>` di una parola e
+# `<itunes:summary>` più lungo: fra i sommari vale ancora il più lungo.
+_FEED_CORPO = """<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"
+     xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Un podcast</title>
+    <link>https://pod.example/</link>
+    <item>
+      <title>Why the planner misjudges joins</title>
+      <link>https://pod.example/ep/14</link>
+      <pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>
+      <description>Joins.</description>
+      <itunes:summary>Two hosts on cardinality estimation.</itunes:summary>
+      <content:encoded><![CDATA[<p>HOST ONE: Welcome back. Today we read an execution plan line by line, and the cardinality estimation is wrong on every join we look at.</p>]]></content:encoded>
+      <enclosure url="https://pod.example/ep/14.mp3" type="audio/mpeg" length="1000"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+_FEED_CORPO_ATOM = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Un podcast</title>
+  <link href="https://pod.example/"/>
+  <entry>
+    <title>Why the planner misjudges joins</title>
+    <link href="https://pod.example/ep/14"/>
+    <updated>2026-09-21T10:00:00Z</updated>
+    <summary>Two hosts on cardinality estimation.</summary>
+    <content type="html">&lt;p&gt;HOST ONE: Welcome back. Today we read an execution plan line by line, and the cardinality estimation is wrong on every join we look at.&lt;/p&gt;</content>
+    <link rel="enclosure" href="https://pod.example/ep/14.mp3" type="audio/mpeg" length="1000"/>
+  </entry>
+</feed>
+"""
+
 _FEED_VUOTO = """<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
@@ -1167,7 +1243,7 @@ class _FintaNuvola:
 
 
 def _autoverifica():
-    global _passate
+    global _passate, _CONF
 
     # I quattro campi dell'allegato si confrontano per intero anche qui, dove
     # non c'è nessun allegato: è il modo di accorgersi il giorno in cui un feed
@@ -1310,6 +1386,29 @@ def _autoverifica():
            voci_da(canale, _FEED_YOUTUBE)[0].get("solo_metadati"), True)
     _prova("mentre una voce di un blog normale non lo porta",
            "solo_metadati" in voci_da(motori, _FEED_RSS2)[0], False)
+    # Un podcast non si riconosce dall'indirizzo: la decisione la prende la
+    # verifica e la lascia in `licenza`. Le due metà contano allo stesso modo —
+    # un podcast che dichiara una Creative Commons deve continuare a dare il
+    # testo della sua trascrizione, e se questa funzione guardasse solo la
+    # parola «podcast» o solo l'host lo spegnerebbe insieme agli altri.
+    _prova("un podcast accettato «solo metadati» non si estrae",
+           (solo_metadati("https://feeds.ejemplo.fm/show.xml",
+                          "solo metadati e collegamento; nei podcast la licenza "
+                          "è di chi pubblica | https://feeds.ejemplo.fm/show.xml"),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml",
+                          "  Solo metadati e collegamento"),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml",
+                          "CC BY 4.0 | https://creativecommons.org/licenses/by/4.0/"),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml", None),
+            solo_metadati("https://feeds.ejemplo.fm/show.xml", "")),
+           (True, True, False, False, False))
+    podcast = dict(motori, url_feed="https://feeds.ejemplo.fm/show.xml",
+                   licenza="solo metadati e collegamento; prova")
+    _prova("e la licenza salvata arriva fino alla voce",
+           (voci_da(podcast, _FEED_RSS2)[0].get("solo_metadati"),
+            "solo_metadati" in voci_da(dict(podcast, licenza="CC BY 4.0 | x"),
+                                       _FEED_RSS2)[0]),
+           (True, False))
 
     video = classifica_voce(voci_da(canale, _FEED_YOUTUBE)[0])
     _prova("la descrizione di un video YouTube non si perde",
@@ -1331,6 +1430,46 @@ def _autoverifica():
     _prova("un allegato che non è audio né video non diventa uno scarico",
            ("url_media" in episodi[1], "url_trascrizione" in episodi[1]),
            (False, False))
+
+    # Il più lungo dei campi di testo è spesso il CORPO: il post intero, o la
+    # trascrizione incollata in `<content:encoded>`. Per una fonte «solo
+    # metadati» il corpo non deve arrivare in `abstract`, che viaggia fino al
+    # telefono: sarebbe estrarre il testo per un'altra porta, con la licenza
+    # dichiarata che dice il contrario. Tutte e due le grammatiche, perché
+    # togliere solo `encoded` lascerebbe passare l'Atom.
+    solo_meta_prova = "solo metadati e collegamento; prova"
+    senza_licenza = dict(podcast, licenza=solo_meta_prova)
+    _prova("una fonte «solo metadati» tiene il sommario e non il corpo",
+           (voci_da(senza_licenza, _FEED_CORPO)[0]["abstract"],
+            voci_da(senza_licenza, _FEED_CORPO_ATOM)[0]["abstract"]),
+           ("Two hosts on cardinality estimation.",
+            "Two hosts on cardinality estimation."))
+    # Con una licenza VERA, non con la colonna vuota: dopo la verifica del
+    # lunedì ogni fonte accesa ne ha una, e una regola che guardasse «c'è una
+    # licenza» invece di «la licenza è solo metadati» toglierebbe il corpo a
+    # tutte le fonti licenziate senza che la colonna vuota se ne accorga.
+    _prova("mentre una fonte con licenza continua a tenere il più lungo",
+           [(voci_da(dict(podcast, licenza=lic), f)[0]["abstract"][:26])
+            for lic in ("CC BY 4.0 | https://creativecommons.org/licenses/by/4.0/",
+                        "Copyright (todos los derechos reservados) | https://pod.example/",
+                        None)
+            for f in (_FEED_CORPO, _FEED_CORPO_ATOM)],
+           ["HOST ONE: Welcome back. To"] * 6)
+
+    # Senza `consegna_code/` nessuna fonte è «solo metadati» per indirizzo, ma
+    # la colonna vale lo stesso: è la tabella a portarla. Una guardia come
+    # quella di `segna_esplorazione` (`if not _CONF: return False`) spegnerebbe
+    # anche lei, e riaccenderebbe il testo dei podcast.
+    conf = _CONF
+    _CONF = None
+    try:
+        _prova("senza consegna_code la licenza salvata vale ancora",
+               (solo_metadati("https://feeds.ejemplo.fm/show.xml", solo_meta_prova),
+                solo_metadati("https://www.youtube.com/feeds/videos.xml?channel_id=UCx"),
+                voci_da(senza_licenza, _FEED_CORPO)[0]["abstract"]),
+               (True, False, "Two hosts on cardinality estimation."))
+    finally:
+        _CONF = conf
 
     # ------------------------------------------------------- classifica_voce
     classificata = classifica_voce(voci_da(motori, _FEED_RSS2)[0])
@@ -1451,6 +1590,33 @@ def _autoverifica():
                raccogli(muta_nuvola, rapporto4), [])
         _prova_inizio("e il motivo resta scritto",
                       rapporto4["falliti"][0], "lettura di percorso.fonti: ")
+
+        # Un podcast «solo metadati» il cui feed è morto e che la verifica ha
+        # riparato in `sitemap:` durante una corsa TRANSITORIA: la riga resta
+        # accesa con la licenza vecchia. Il sitemap è fatto del corpo delle
+        # pagine, quindi non si legge — e non si prova nemmeno a scaricarlo:
+        # `finto_scarica` non conosce quell'indirizzo, e se la guardia sparisse
+        # il motivo nel rapporto sarebbe un altro. Lo stesso podcast dal suo
+        # feed si legge come sempre, solo metadati.
+        solo_meta = "solo metadati e collegamento; nei podcast la licenza è di chi pubblica | x"
+        pod_rss = {"id": "f-10", "nome": "Podcast", "url_feed": "https://pod.example/rss",
+                   "url_sito": "https://pod.example/", "categoria": "ottimizzazione",
+                   "lingua": "en", "peso": 0.4, "metodo": "rss", "attiva": True,
+                   "licenza": solo_meta}
+        pod_sitemap = dict(pod_rss, id="f-11", nome="Podcast riparato",
+                           url_feed="sitemap:https://pod.example/", metodo="sitemap")
+        risposte["https://pod.example/rss"] = _FEED_CORPO
+        rapporto8 = {"falliti": [], "tempo_scaduto": False}
+        raccolte8 = raccogli(_FintaNuvola([pod_rss, pod_sitemap]), rapporto8)
+        _prova("un sitemap «solo metadati» non si legge, e il rapporto dice perché",
+               (rapporto8["feed_letti"], len(rapporto8["falliti"]),
+                bool(rapporto8["falliti"]) and rapporto8["falliti"][0].startswith(
+                    "Podcast riparato: dichiarata «solo metadati» ma letta da un sitemap")),
+               (1, 1, True))
+        _prova("mentre lo stesso podcast dal suo feed resta solo metadati",
+               {(v["fonte"], v.get("solo_metadati"), v["abstract"]) for v in raccolte8},
+               {("rss[Podcast]", True, "Two hosts on cardinality estimation.")})
+        del risposte["https://pod.example/rss"]
 
         # ------------------------------------------------- esplorazione
         #
