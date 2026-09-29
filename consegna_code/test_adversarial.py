@@ -649,6 +649,54 @@ _hoy = [_blog(i, 'ACEPTADA', 'CC BY 4.0 | x') for i in range(20)] + \
 ok(V.disyuntor(_hoy, 45, None) == '',
    f"S43 sin base de sitio el disyuntor es el de antes: {V.disyuntor(_hoy, 45, None)!r}")
 
+# S43 prueba la FUNCIÓN. El cableado de la CLI -qué base se lee de
+# estado_verifica.json, qué se le pasa al disyuntor, qué se escribe después-
+# no lo probaba nada: volver a poner el repliegue en la CLI, quitar el tercer
+# argumento o dejar de escribir `__aceptadas_sitio__` pasaban todas las
+# pruebas. Aquí corre el `__main__` de verdad, dos semanas seguidas, con la red
+# falsa de estas pruebas: 5 blogs con CC y 6 podcasts «solo metadati», y un
+# estado de producción que aún no tiene la base de sitio.
+import runpy, sys as _sys
+def _semana(carpeta, portadas_blog):
+    reset()
+    for i in range(5):
+        sitio = f'https://blog{i}.ejemplo.org/'
+        WEB[sitio + 'feed.xml'] = rss([(t, f'{sitio}p{j}', x) for j, (t, _, x) in enumerate(BUENOS)], link=sitio)
+        WEB[sitio] = portadas_blog(sitio)
+    for i in range(6):
+        sitio = f'https://pod{i}.ejemplo.fm/'
+        WEB[sitio + 'feed.xml'] = pod(10, sitio=sitio)
+        WEB[sitio] = b'<html><title>Pod</title>nessuna licenza qui</html>'
+    antes, argv = os.getcwd(), _sys.argv
+    try:
+        os.chdir(carpeta)
+        _sys.argv = ['verifica_fonti.py', 'f.sql', '--sin-muro']
+        try:
+            runpy.run_path(os.path.abspath(os.path.join(antes, 'verifica_fonti.py')), run_name='__main__')
+            rc = 0
+        except SystemExit as e:
+            rc = e.code
+        return rc, json.load(open(V.ESTADO)), json.load(open('activar.json'))
+    finally:
+        os.chdir(antes); _sys.argv = argv
+_d = tempfile.mkdtemp()
+try:
+    open(os.path.join(_d, 'f.sql'), 'w').write(',\n'.join(
+        [f"  ('b{i}', 'https://blog{i}.ejemplo.org/feed.xml', 'https://blog{i}.ejemplo.org/', 'rss', 'ia', 'en', 0.5, false)" for i in range(5)]
+        + [f"  ('p{i}', 'https://pod{i}.ejemplo.fm/feed.xml', 'https://pod{i}.ejemplo.fm/', 'rss', 'ia', 'en', 0.5, false)" for i in range(6)]))
+    json.dump({'__aceptadas__': 11}, open(os.path.join(_d, V.ESTADO), 'w'))
+    with contextlib.redirect_stdout(io.StringIO()):
+        rc1, est1, act1 = _semana(_d, lambda u: b'<footer>creativecommons.org/licenses/by/4.0/</footer>')
+        rc2, est2, act2 = _semana(_d, lambda u: K.Resp(403, u, error='HTTP 403'))
+    ok(rc1 in (0, 2) and est1.get('__aceptadas__') == 11 and est1.get('__aceptadas_sitio__') == 5,
+       f"S44 prima corsa senza base di sito: niente scatto, e la base si scrive: rc={rc1} "
+       f"{ {k: v for k, v in est1.items() if k.startswith('__')} }")
+    ok(rc2 == 3 and act2 == [] and est2.get('__aceptadas_sitio__') == 5,
+       f"S45 settimana dopo, home dei blog in 403: la CLI passa la base di sito e scatta: rc={rc2} "
+       f"{len(act2)} cambi")
+finally:
+    shutil.rmtree(_d, ignore_errors=True)
+
 # La ventana son las diez voces MÁS RECIENTES, no el feed entero, y la mitad
 # es de las que hay. Un feed real de podcast trae cientos de episodios: un
 # blog que acaba de empezar un podcast es un podcast hoy, y un podcast que
