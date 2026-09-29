@@ -1,5 +1,5 @@
 """Pruebas ADVERSARIALES: cada una intenta romper una garantía. python3 test_adversarial.py"""
-import time, email.utils, json, importlib, os, shutil, tempfile, pglast, feedparser
+import time, email.utils, json, importlib, os, re, shutil, tempfile, pglast, feedparser
 import fonti_core as K, verifica_fonti as V, scopri_fonti as S, temi_config as C
 K.configurar(parche=True)
 def d(sec): return email.utils.formatdate(time.time() - sec)
@@ -521,13 +521,13 @@ def pod(n, tipo='audio/mpeg', sitio='https://pod.ejemplo.fm/'):
     return (f'<?xml version="1.0"?><rss version="2.0"><channel><title>Pod</title>'
             f'<link>{sitio}</link>{it}</channel></rss>').encode()
 
-def verifica_pod(feed, portada=b'<html><title>Pod</title>nessuna licenza qui</html>'):
+def verifica_pod(feed, portada=b'<html><title>Pod</title>nessuna licenza qui</html>', **kw):
     reset()
     WEB['https://pod.ejemplo.fm/'] = portada
     WEB['https://pod.ejemplo.fm/feed.xml'] = feed
     for i in range(10):
         WEB[f'https://pod.ejemplo.fm/ep{i}'] = ART
-    return V.verifica('Pod', 'https://pod.ejemplo.fm/feed.xml', 'https://pod.ejemplo.fm/', 'ia')
+    return V.verifica('Pod', 'https://pod.ejemplo.fm/feed.xml', 'https://pod.ejemplo.fm/', 'ia', **kw)
 
 r = verifica_pod(pod(10))
 ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati')
@@ -563,6 +563,54 @@ r = verifica_pod(pod(10), portada=b'<html><title>Pod</title><footer>'
 ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('CC BY')
    and V.cambios([r])[0].get('licenza', '').startswith('CC BY'),
    f"S32 un podcast con CC tiene la sua CC, e la trascrizione resta testo: {r['p7_licencia'][:60]}")
+
+# En producción LICENCIA_AMPLIA es True, y ahí un «©» en el pie del sitio ya es
+# una licencia declarada (decisión A): el podcast la conserva y sigue dando el
+# texto de su transcripción. La regla de los podcasts solo llega a los que no
+# tienen ni eso. Sin esta prueba, las de arriba corren todas con amplia=False
+# y nadie comprobaría el modo que de verdad gira los lunes.
+r = verifica_pod(pod(10), portada=b'<html><title>Pod</title><footer>&copy; 2026 Pod Media</footer></html>',
+                 amplia=True)
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('Copyright'),
+   f"S34 con amplia=True un podcast con © resta Copyright, non «solo metadati»: {r['p7_licencia'][:44]}")
+r = verifica_pod(pod(10), amplia=True)
+ok(r['motivo'] == 'ACEPTADA' and r['p7_licencia'].startswith('solo metadati'),
+   f"S35 e senza nemmeno il © entra «solo metadati» anche con amplia=True: {r['p7_licencia'][:44]}")
+
+# S8 compara las dos salidas con filas SIN `p7_licencia`. Aquí la paridad de
+# `licenza`: para cada fuente, activar.json y activar.sql dicen lo mismo -la
+# misma licencia, «null» por la vacía, nada por la que no se midió o es
+# TRANSITORIO-. Si un día divergen, lo que lee una persona deja de ser lo que
+# aplica la máquina.
+_filas = [
+    {'nome': 'a', 'url_feed': 'https://a/f', 'motivo': 'ACEPTADA', 'p7_licencia': "rel=license | https://a/l'avviso"},
+    {'nome': 'b', 'url_feed': 'https://b/f', 'motivo': 'ACEPTADA', 'p7_licencia': C.LICENCIA_PODCAST + ' | https://b/f'},
+    {'nome': 'c', 'url_feed': 'https://c/f', 'motivo': 'p7 sin licencia', 'p7_licencia': ''},
+    {'nome': 'd', 'url_feed': 'https://d/f', 'motivo': 'TRANSITORIO p9 (x)', 'p7_licencia': 'CC BY | https://d/'},
+    {'nome': 'e', 'url_feed': 'https://e/f', 'motivo': 'p1 roto (HTTP 404)'},
+    {'nome': 'f', 'url_feed': 'https://f/f', 'url_nuevo': 'https://f/nuevo.xml', 'reparacion': 'x',
+     'motivo': 'ACEPTADA', 'p7_licencia': "Copyright (todos los derechos reservados) | https://f/"},
+]
+_js = {c['url_feed']: c for c in V.cambios(_filas)}
+_sql = V.sql_salida(_filas)
+# Tres valores y no dos: «no se toca» (sin clave, sin línea) no es «se quita»
+# (vacía, null). Confundirlos dejaría verde un SQL que borra la licencia de una
+# fuente TRANSITORIA y respeta la de una que la perdió.
+NO_SE_TOCA = 'no se toca'
+def _en_sql(f):
+    u = f.get('url_nuevo') or f['url_feed']
+    m = re.search(r"set licenza = ('(?:[^']|'')*'|null) where url_feed = '" + re.escape(u) + "';", _sql)
+    return NO_SE_TOCA if not m else (None if m.group(1) == 'null' else m.group(1)[1:-1].replace("''", "'"))
+def _en_json(f):
+    c = _js.get(f['url_feed']) or {}
+    return NO_SE_TOCA if 'licenza' not in c else (c['licenza'] or None)
+_par = [(f['nome'], _en_json(f), _en_sql(f)) for f in _filas]
+ok(all(j == q for _, j, q in _par)
+   and {type(x.stmt).__name__ for x in pglast.parse_sql(_sql)} == {'UpdateStmt'}
+   and [j for _, j, _ in _par] == ["rel=license | https://a/l'avviso", C.LICENCIA_PODCAST + ' | https://b/f', None,
+                                   NO_SE_TOCA, NO_SE_TOCA,
+                                   "Copyright (todos los derechos reservados) | https://f/"],
+   f"S36 activar.json y activar.sql dicen la misma licencia de cada fuente: {_par}")
 
 # Una fila que se paró antes de p7 no sabe nada de la licencia: no debe
 # borrar la que había. TRANSITORIO no toca nada más que la reparación.
