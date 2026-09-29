@@ -137,6 +137,13 @@ _CAMPI_DATA = ("pubdate", "published", "date", "issued", "created",
 # che vale la pena leggere.
 _CAMPI_TESTO = ("description", "summary", "content", "encoded", "abstract")
 
+# Gli stessi, meno i due che portano il CORPO: `<content>` di Atom e
+# `<content:encoded>` di RSS. Una fonte accettata «solo metadati» dichiara di
+# dare titolo, descrizione, data e collegamento; il più lungo dei cinque è
+# spesso il post intero o la trascrizione dell'episodio, e tenerlo come
+# `abstract` sarebbe estrarre il testo per un'altra porta.
+_CAMPI_SOMMARIO = ("description", "summary", "abstract")
+
 # `</?[a-zA-Z]` e non `<[^>]+>`: un titolo come "l'analisi in < 5 minuti" ha un
 # minore che non apre nessun tag, e la versione ingenua se lo mangia insieme a
 # ciò che segue fino al primo maggiore.
@@ -453,7 +460,7 @@ def _trascrizione_da(nodo, url_base):
     return None
 
 
-def _elemento_da(nodo, url_base):
+def _elemento_da(nodo, url_base, solo_sommario=False):
     """Un `<item>` o un `<entry>` -> il dizionario documentato in `analizza`."""
     titoli = _figli(nodo, ("title",))
     titolo = _pulisci(_testo_di(titoli[0])) if titoli else ""
@@ -471,10 +478,11 @@ def _elemento_da(nodo, url_base):
         if data:
             break
 
-    fonti_testo = list(_figli(nodo, _CAMPI_TESTO))
+    campi = _CAMPI_SOMMARIO if solo_sommario else _CAMPI_TESTO
+    fonti_testo = list(_figli(nodo, campi))
     gruppo = _gruppo_media(nodo)
     if gruppo is not None:
-        fonti_testo += _figli(gruppo, _CAMPI_TESTO)
+        fonti_testo += _figli(gruppo, campi)
     testi = [_pulisci(_testo_di(f)) for f in fonti_testo]
     abstract = max(testi, key=len) if testi else ""
 
@@ -492,7 +500,7 @@ def _elemento_da(nodo, url_base):
     }
 
 
-def analizza(dati, url_base=""):
+def analizza(dati, url_base="", solo_sommario=False):
     """Da XML grezzo (byte o testo) alla lista degli elementi del feed.
 
     Ogni elemento è
@@ -507,13 +515,17 @@ def analizza(dati, url_base=""):
     namespace. Un elemento senza titolo si salta; uno senza data si tiene con
     `data` a None, perché una informazione mancante non è un motivo per
     buttare via le altre quattro.
+
+    Con `solo_sommario` l'`abstract` si sceglie solo fra i campi di sommario
+    (`_CAMPI_SOMMARIO`): è il modo in cui una fonte «solo metadati» resta tale
+    anche nel campo che viaggia fino al telefono.
     """
     radice = _radice(dati)
 
     elementi = []
     for nodo in radice.iter():
         if _locale(nodo.tag) in ("item", "entry"):
-            elemento = _elemento_da(nodo, url_base)
+            elemento = _elemento_da(nodo, url_base, solo_sommario)
             if elemento is not None:
                 elementi.append(elemento)
 
@@ -619,7 +631,7 @@ def voci_da(fonte, dati):
     metadati = solo_metadati((fonte.get("url_feed") or "").strip(),
                              fonte.get("licenza"))
     uscite = []
-    for elemento in analizza(dati, url_base):
+    for elemento in analizza(dati, url_base, solo_sommario=metadati):
         v = fonti.voce(
             elemento["titolo"],
             fonte="rss[%s]" % nome,
@@ -1103,6 +1115,41 @@ _FEED_PODCAST = """<?xml version="1.0" encoding="utf-8"?>
 </rss>
 """
 
+# Il sommario corto e il corpo lungo nella stessa voce, nelle due grammatiche:
+# `<content:encoded>` di RSS e `<content>` di Atom. Il corpo qui è una
+# trascrizione incollata, che è esattamente ciò che certi podcast fanno.
+_FEED_CORPO = """<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Un podcast</title>
+    <link>https://pod.example/</link>
+    <item>
+      <title>Why the planner misjudges joins</title>
+      <link>https://pod.example/ep/14</link>
+      <pubDate>Mon, 21 Sep 2026 10:00:00 GMT</pubDate>
+      <description>Two hosts on cardinality estimation.</description>
+      <content:encoded><![CDATA[<p>HOST ONE: Welcome back. Today we read an execution plan line by line, and the cardinality estimation is wrong on every join we look at.</p>]]></content:encoded>
+      <enclosure url="https://pod.example/ep/14.mp3" type="audio/mpeg" length="1000"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+_FEED_CORPO_ATOM = """<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Un podcast</title>
+  <link href="https://pod.example/"/>
+  <entry>
+    <title>Why the planner misjudges joins</title>
+    <link href="https://pod.example/ep/14"/>
+    <updated>2026-09-21T10:00:00Z</updated>
+    <summary>Two hosts on cardinality estimation.</summary>
+    <content type="html">&lt;p&gt;HOST ONE: Welcome back. Today we read an execution plan line by line, and the cardinality estimation is wrong on every join we look at.&lt;/p&gt;</content>
+    <link rel="enclosure" href="https://pod.example/ep/14.mp3" type="audio/mpeg" length="1000"/>
+  </entry>
+</feed>
+"""
+
 _FEED_VUOTO = """<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
@@ -1365,6 +1412,23 @@ def _autoverifica():
     _prova("un allegato che non è audio né video non diventa uno scarico",
            ("url_media" in episodi[1], "url_trascrizione" in episodi[1]),
            (False, False))
+
+    # Il più lungo dei campi di testo è spesso il CORPO: il post intero, o la
+    # trascrizione incollata in `<content:encoded>`. Per una fonte «solo
+    # metadati» il corpo non deve arrivare in `abstract`, che viaggia fino al
+    # telefono: sarebbe estrarre il testo per un'altra porta, con la licenza
+    # dichiarata che dice il contrario. Tutte e due le grammatiche, perché
+    # togliere solo `encoded` lascerebbe passare l'Atom.
+    senza_licenza = dict(podcast, licenza="solo metadati e collegamento; prova")
+    _prova("una fonte «solo metadati» tiene il sommario e non il corpo",
+           (voci_da(senza_licenza, _FEED_CORPO)[0]["abstract"],
+            voci_da(senza_licenza, _FEED_CORPO_ATOM)[0]["abstract"]),
+           ("Two hosts on cardinality estimation.",
+            "Two hosts on cardinality estimation."))
+    _prova("mentre una fonte con licenza continua a tenere il più lungo",
+           (voci_da(podcast, _FEED_CORPO)[0]["abstract"][:26],
+            voci_da(podcast, _FEED_CORPO_ATOM)[0]["abstract"][:26]),
+           ("HOST ONE: Welcome back. To", "HOST ONE: Welcome back. To"))
 
     # ------------------------------------------------------- classifica_voce
     classificata = classifica_voce(voci_da(motori, _FEED_RSS2)[0])
