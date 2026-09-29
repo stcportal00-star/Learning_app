@@ -8,6 +8,7 @@ import { divergenzaCorrente } from "../../lib/sync/stato";
 import { Divergenza } from "../../lib/sync/auto";
 import { leggiPromemoria } from "../../lib/notifiche";
 import { Promemoria, PREDEFINITO, comeTesto } from "../../lib/promemoria";
+import Aggiornamento from "../../components/Aggiornamento";
 
 /**
  * Quale build sta girando, in una riga. Si calcola una volta sola al caricamento
@@ -58,6 +59,8 @@ export default function Profilo() {
           in modo diverso — serve subito, e finisce nello screenshot che il test
           di fumo allega alla release senza che nessuno debba scorrere. */}
       <Text style={{ fontSize: 12, opacity: 0.55, marginTop: -10 }}>{QUESTA_BUILD}</Text>
+
+      <Aggiornamento />
 
       <Link href="/sync" asChild>
         <Pressable style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14 }}>

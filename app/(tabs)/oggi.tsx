@@ -6,6 +6,7 @@ import { versioneMotore, supportaWindowFunctions } from "../../lib/palestra";
 import { divergenzaCorrente } from "../../lib/sync/stato";
 import { Divergenza } from "../../lib/sync/auto";
 import Cronometro from "../../components/Cronometro";
+import Aggiornamento from "../../components/Aggiornamento";
 import { riepilogoSettimana, Sessione } from "../../lib/sessioni";
 import { contaNovita } from "../../lib/nuvola/articoli";
 import { statoNuvola, sincronizzaNuvola, StatoNuvola } from "../../lib/nuvola/sincronia";
@@ -65,6 +66,9 @@ export default function Oggi() {
           </Text>
         </View>
       ) : null}
+
+      {/* Compare solo quando c'è una build nuova da installare. */}
+      <Aggiornamento compatto />
 
       {/*
         Il riquadro della rassegna. Sta sopra al cronometro di proposito: è la
