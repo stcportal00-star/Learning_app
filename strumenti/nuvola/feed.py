@@ -869,6 +869,20 @@ def raccogli(nuvola, rapporto, massimo_per_fonte=25, minuti=6, esplorazione=None
                 % (nome, fonte.get("metodo") or "rss"))
             continue
 
+        # Un sitemap si legge scaricando le pagine e mettendone il CORPO nella
+        # descrizione: per una fonte «solo metadati» sarebbe estrarre il testo.
+        # Non nasce così — un feed sintetizzato non ha allegati, e YouTube e
+        # Mastodon non hanno sitemap — ma ci arriva: se il feed di un podcast
+        # muore e la verifica lo ripara in `sitemap:` in una corsa TRANSITORIA,
+        # la riga resta accesa con la licenza di prima fino al lunedì dopo. Si
+        # salta PRIMA di scaricare, e il rapporto dice perché.
+        if url.startswith("sitemap:") and solo_metadati(url, fonte.get("licenza")):
+            rapporto["falliti"].append(
+                "%s: dichiarata «solo metadati» ma letta da un sitemap, che è "
+                "fatto del corpo delle pagine. Saltata finché la verifica non "
+                "decide di nuovo la licenza." % nome)
+            continue
+
         try:
             dati = scarica_fonte(url, scadenza)
         except (ErroreEstrazione, ErroreFeed) as e:
@@ -1549,6 +1563,33 @@ def _autoverifica():
                raccogli(muta_nuvola, rapporto4), [])
         _prova_inizio("e il motivo resta scritto",
                       rapporto4["falliti"][0], "lettura di percorso.fonti: ")
+
+        # Un podcast «solo metadati» il cui feed è morto e che la verifica ha
+        # riparato in `sitemap:` durante una corsa TRANSITORIA: la riga resta
+        # accesa con la licenza vecchia. Il sitemap è fatto del corpo delle
+        # pagine, quindi non si legge — e non si prova nemmeno a scaricarlo:
+        # `finto_scarica` non conosce quell'indirizzo, e se la guardia sparisse
+        # il motivo nel rapporto sarebbe un altro. Lo stesso podcast dal suo
+        # feed si legge come sempre, solo metadati.
+        solo_meta = "solo metadati e collegamento; nei podcast la licenza è di chi pubblica | x"
+        pod_rss = {"id": "f-10", "nome": "Podcast", "url_feed": "https://pod.example/rss",
+                   "url_sito": "https://pod.example/", "categoria": "ottimizzazione",
+                   "lingua": "en", "peso": 0.4, "metodo": "rss", "attiva": True,
+                   "licenza": solo_meta}
+        pod_sitemap = dict(pod_rss, id="f-11", nome="Podcast riparato",
+                           url_feed="sitemap:https://pod.example/", metodo="sitemap")
+        risposte["https://pod.example/rss"] = _FEED_CORPO
+        rapporto8 = {"falliti": [], "tempo_scaduto": False}
+        raccolte8 = raccogli(_FintaNuvola([pod_rss, pod_sitemap]), rapporto8)
+        _prova("un sitemap «solo metadati» non si legge, e il rapporto dice perché",
+               (rapporto8["feed_letti"], len(rapporto8["falliti"]),
+                bool(rapporto8["falliti"]) and rapporto8["falliti"][0].startswith(
+                    "Podcast riparato: dichiarata «solo metadati» ma letta da un sitemap")),
+               (1, 1, True))
+        _prova("mentre lo stesso podcast dal suo feed resta solo metadati",
+               {(v["fonte"], v.get("solo_metadati"), v["abstract"]) for v in raccolte8},
+               {("rss[Podcast]", True, "Two hosts on cardinality estimation.")})
+        del risposte["https://pod.example/rss"]
 
         # ------------------------------------------------- esplorazione
         #
