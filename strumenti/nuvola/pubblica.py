@@ -182,13 +182,20 @@ def pregio(v):
     decide la lunghezza intera, come prima: fuori dal caso da correggere, la
     scelta resta quella di sempre.
 
+    Il tetto nel confronto vale solo per le copie «solo metadati» SENZA
+    allegato. Di un episodio con l'audio ciò che conta non è il sommario ma
+    l'audio: misurarlo a 500 farebbe vincere un post con 800 caratteri, e
+    l'mp3 da ascoltare in aereo si perderebbe.
+
     Nessuna priorità di classe. «La copia "solo metadati" perde sempre» è stata
     provata e tolta: fa vincere un post di una riga contro l'episodio con
     l'audio e la trascrizione, e fa vincere nel passaggio sui titoli una copia
     che quello sugli url poi scarta, e l'episodio sparisce del tutto.
     """
     intero = len(v.get("abstract") or "")
-    conservato = min(intero, SOMMARIO_SOLO_METADATI) if v.get("solo_metadati") else intero
+    conservato = intero
+    if v.get("solo_metadati") and not v.get("url_media"):
+        conservato = min(intero, SOMMARIO_SOLO_METADATI)
     return (bool(v.get("url_pdf")), conservato, intero, float(v.get("rilevanza") or 0))
 
 
