@@ -54,7 +54,13 @@ export default function Rassegna() {
         <Pillola testo={soloDaLeggere ? "Da leggere" : "Tutti"} attiva={soloDaLeggere}
           premuto={() => setSoloDaLeggere((v) => !v)} />
         <Pillola testo="Ogni tema" attiva={tema === null} premuto={() => setTema(null)} />
-        {temi.slice(0, 8).map((t) => (
+        {/* Il tema attivo si vede sempre, anche fuori dai primi otto: arrivando
+            da un'unità il filtro è già acceso, e un filtro invisibile fa
+            sembrare vuota una rassegna che non lo è. */}
+        {[...temi.slice(0, 8),
+          ...(tema && !temi.slice(0, 8).some((t) => t.tema_slug === tema)
+            ? [{ tema_slug: tema, n: temi.find((t) => t.tema_slug === tema)?.n ?? 0 }] : []),
+        ].map((t) => (
           <Pillola key={t.tema_slug} testo={`${t.tema_slug} ${t.n}`} attiva={tema === t.tema_slug}
             premuto={() => setTema((v) => (v === t.tema_slug ? null : t.tema_slug))} />
         ))}
