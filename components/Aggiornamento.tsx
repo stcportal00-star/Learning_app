@@ -22,7 +22,7 @@ const CORSA = ((Constants.expoConfig?.extra ?? {}) as { corsa?: string | null })
  */
 export default function Aggiornamento({ compatto = false }: { compatto?: boolean }) {
   const [stato, setStato] = useState<Stato | null>(null);
-  const [lavoro, setLavoro] = useState<"" | "controllo" | "scarico">("");
+  const [lavoro, setLavoro] = useState<"" | "controllo" | "scarico" | "installa">("");
   const [avviso, setAvviso] = useState("");
 
   useEffect(() => {
@@ -58,10 +58,18 @@ export default function Aggiornamento({ compatto = false }: { compatto?: boolean
         setAvviso(esito.errore ?? "scaricamento non riuscito");
         return;
       }
-      const aperto = await installa(esito.uri);
-      setAvviso(aperto === "aperto"
-        ? "Android chiede di confermare. La prima volta chiede anche di consentire le installazioni da Percorso: consentile e torna indietro. I dati restano."
-        : "Android non ha aperto l'installatore. Il file è scaricato: riprova fra un momento.");
+      // Le istruzioni PRIMA di aprire l'installatore: la promessa si risolve
+      // solo quando l'installatore si chiude, e se l'installazione riesce
+      // Android chiude anche l'app, quindi dopo non c'è nessuno a leggerle.
+      setLavoro("installa");
+      setAvviso("Conferma nell'installatore di Android. La prima volta chiede di consentire le installazioni da Percorso: consentile e torna qui. I dati restano.");
+      const esito2 = await installa(esito.uri);
+      // Se siamo ancora qui, l'installazione non è avvenuta.
+      setAvviso(esito2 === "aperto"
+        ? "L'aggiornamento non è stato installato (annullato, o in attesa del consenso). Il file è già scaricato: tocca di nuovo per riprovare, senza riscaricarlo."
+        : esito2 === "mancante"
+          ? "Il file scaricato non c'è più: tocca di nuovo per riscaricarlo."
+          : "Android non ha aperto l'installatore. Il file è scaricato: riprova fra un momento.");
     } finally {
       setLavoro("");
     }
@@ -98,8 +106,11 @@ export default function Aggiornamento({ compatto = false }: { compatto?: boolean
           <>
             <ActivityIndicator />
             <Text style={{ fontSize: 12, opacity: 0.6 }}>
+              {/* Lo scarico occupa la coda dei moduli Expo, la stessa da cui passa
+                  l'apertura di un PDF: fino alla fine, un PDF può tardare. */}
               {lavoro === "scarico" && stato && stato.tipo !== "ignoto"
-                ? `Scarico ${megabyte(stato.ultima.byte)}…` : "Controllo…"}
+                ? `Scarico ${megabyte(stato.ultima.byte)}… fino alla fine, i PDF possono tardare ad aprirsi.`
+                : lavoro === "installa" ? "In attesa dell'installatore…" : "Controllo…"}
             </Text>
           </>
         ) : (
