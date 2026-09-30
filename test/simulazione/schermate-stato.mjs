@@ -1856,7 +1856,7 @@ difetto("PRF-01b", "G13 se la lettura solleva le sezioni restano al testo di rip
 ancora("ESE coda", "app/esercizi.tsx", "AND (t.esito IS NULL OR t.esito <> 'corretto') ORDER BY e.livello, e.id LIMIT 40");
 ancora("ESE indice bloccato", "app/esercizi.tsx", "setIndice((i) => Math.min(i + 1, coda.length - 1));");
 ancora("ESE pulsante disabilitato", "app/esercizi.tsx", "disabled={inCorso || !risposta.trim()}");
-ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? "#18181B" : "#D4D4D8"');
+ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? C.primario : C.disattivo');
 ancora("ESE stato vuoto", "app/esercizi.tsx", "Nessun esercizio in coda.");
 ancora("ESE nota sul confronto", "app/esercizi.tsx", '{!esito.corretto && esito.motivo !== "errore_sql" ? (');
 ancora("ESE durata", "app/esercizi.tsx", "const durata = Math.round((Date.now() - iniziato) / 1000);");

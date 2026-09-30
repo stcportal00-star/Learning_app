@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable, ScrollView, TextInput, Alert, Linking } from "react-native";
+import { View, Pressable, ScrollView, Alert, Linking } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { leggiArticolo, segnaLetto, segnaSalvato, Articolo } from "../lib/nuvola/articoli";
 import { annota, cancella, segniDi, Segno } from "../lib/nuvola/segni";
 import {
   statoMedia, scaricaMedia, apriMedia, segnaVisto, dimenticaMedia, descriviByte,
 } from "../lib/nuvola/media";
+import { Text, TextInput } from "../components/Base";
+import { C } from "../lib/tema";
 
 /**
  * La lettura di un articolo, con le note accanto.
@@ -23,10 +25,10 @@ function Bottone({ testo, onPress, pieno = false, spento = false }: {
       style={{
         paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9,
         opacity: spento ? 0.5 : 1,
-        backgroundColor: pieno ? "#18181B" : "#F4F4F5",
-        borderWidth: pieno ? 0 : 1, borderColor: "#E4E4E7",
+        backgroundColor: pieno ? C.primario : C.superficie,
+        borderWidth: pieno ? 0 : 1, borderColor: C.bordo,
       }}>
-      <Text style={{ fontSize: 13, fontWeight: "600", color: pieno ? "#fff" : "#3F3F46" }}>
+      <Text style={{ fontSize: 13, fontWeight: "600", color: pieno ? C.suPrimario : C.testoSecondario }}>
         {testo}
       </Text>
     </Pressable>
@@ -83,8 +85,8 @@ function Allegato({ a, aggiorna }: { a: Articolo; aggiorna: () => Promise<void> 
   });
 
   return (
-    <View style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11,
-                   padding: 12, gap: 9, backgroundColor: "#FAFAFA" }}>
+    <View style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 11,
+                   padding: 12, gap: 9, backgroundColor: C.superficie }}>
       <Text style={{ fontSize: 13, fontWeight: "600" }}>
         {video ? "Video" : "Audio"}
         <Text style={{ fontWeight: "400", opacity: 0.6 }}>{"  ·  " + peso}</Text>
@@ -147,7 +149,7 @@ function Allegato({ a, aggiorna }: { a: Articolo; aggiorna: () => Promise<void> 
         </Text>
       ) : null}
       {nota ? (
-        <Text style={{ fontSize: 12, color: "#B45309", lineHeight: 18 }}>{nota}</Text>
+        <Text style={{ fontSize: 12, color: C.ambra, lineHeight: 18 }}>{nota}</Text>
       ) : null}
     </View>
   );
@@ -220,15 +222,15 @@ export default function SchedaArticolo() {
         <Pressable
           onPress={async () => { await segnaSalvato(a.id, !a.salvato); setA({ ...a, salvato: a.salvato ? 0 : 1 }); }}
           style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9,
-                   backgroundColor: a.salvato ? "#18181B" : "#F4F4F5" }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: a.salvato ? "#fff" : "#3F3F46" }}>
+                   backgroundColor: a.salvato ? C.primario : C.superficie }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: a.salvato ? C.suPrimario : C.testoSecondario }}>
             {a.salvato ? "Salvato" : "Salva"}
           </Text>
         </Pressable>
         <Pressable
           onPress={async () => { await segnaLetto(a.id, !a.letto); setA({ ...a, letto: a.letto ? 0 : 1 }); }}
           style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9,
-                   borderWidth: 1, borderColor: "#E4E4E7" }}>
+                   borderWidth: 1, borderColor: C.bordo }}>
           <Text style={{ fontSize: 13, fontWeight: "600" }}>
             {a.letto ? "Segna da leggere" : "Segna letto"}
           </Text>
@@ -237,7 +239,7 @@ export default function SchedaArticolo() {
           <Pressable
             onPress={() => { void Linking.openURL(a.url!).catch(() => Alert.alert("Senza rete", "La pagina originale richiede internet. Il testo qui sopra no.")); }}
             style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9,
-                     borderWidth: 1, borderColor: "#E4E4E7" }}>
+                     borderWidth: 1, borderColor: C.bordo }}>
             <Text style={{ fontSize: 13, fontWeight: "600" }}>Originale</Text>
           </Pressable>
         ) : null}
@@ -257,7 +259,7 @@ export default function SchedaArticolo() {
         </Text>
       )}
 
-      <View style={{ marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderColor: "#E4E4E7", gap: 10 }}>
+      <View style={{ marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderColor: C.bordo, gap: 10 }}>
         <Text style={{ fontSize: 15, fontWeight: "600" }}>Note</Text>
         <Text style={{ fontSize: 11, opacity: 0.55, lineHeight: 17 }}>
           Le note stanno accanto al testo, non dentro: si sincronizzano da sole e
@@ -269,7 +271,7 @@ export default function SchedaArticolo() {
               { text: "Cancella", style: "destructive", onPress: async () => { await cancella(n.id); await ricarica(); } },
               { text: "Annulla", style: "cancel" },
             ])}
-            style={{ backgroundColor: "#F8F8F9", borderRadius: 9, padding: 11 }}>
+            style={{ backgroundColor: C.superficie, borderRadius: 9, padding: 11 }}>
             <Text style={{ fontSize: 13, lineHeight: 20 }}>{n.testo}</Text>
             <Text style={{ fontSize: 10, opacity: 0.45, marginTop: 4 }}>{n.creato_a.slice(0, 16).replace("T", " ")}</Text>
           </Pressable>
@@ -279,13 +281,13 @@ export default function SchedaArticolo() {
           onChangeText={setBozza}
           placeholder="Scrivi una nota su questo testo…"
           multiline
-          style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 9, padding: 11,
+          style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 9, padding: 11,
                    fontSize: 14, minHeight: 74, textAlignVertical: "top" }}
         />
         <Pressable onPress={aggiungiNota}
-          style={{ alignSelf: "flex-start", backgroundColor: "#18181B",
+          style={{ alignSelf: "flex-start", backgroundColor: C.primario,
                    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 9 }}>
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Aggiungi nota</Text>
+          <Text style={{ color: C.suPrimario, fontWeight: "600", fontSize: 13 }}>Aggiungi nota</Text>
         </Pressable>
       </View>
     </ScrollView>

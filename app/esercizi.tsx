@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import {
-  View, Text, TextInput, Pressable, ScrollView, useWindowDimensions, ActivityIndicator,
+  View, Pressable, ScrollView, useWindowDimensions,
 } from "react-native";
+import { Text, TextInput, ActivityIndicator } from "../components/Base";
+import { C } from "../lib/tema";
 import { database, registra } from "../lib/db";
 import { esegui, eseguiConPreparazione, supportaWindowFunctions } from "../lib/palestra";
 import { verifica, Esito } from "../lib/verifica";
@@ -98,7 +100,7 @@ export default function Esercizi() {
       </Text>
       <Text style={{ fontSize: 16, lineHeight: 23 }}>{corrente.consegna}</Text>
       {corrente.preparazione ? (
-        <View style={{ marginTop: 12, padding: 10, backgroundColor: "#F4F4F5", borderRadius: 8 }}>
+        <View style={{ marginTop: 12, padding: 10, backgroundColor: C.superficie, borderRadius: 8 }}>
           <Text style={{ fontSize: 11, opacity: 0.6, marginBottom: 4 }}>Preparazione già applicata</Text>
           <Text style={{ fontFamily: "monospace", fontSize: 12 }}>{corrente.preparazione}</Text>
         </View>
@@ -122,7 +124,7 @@ export default function Esercizi() {
         placeholder="SELECT …"
         style={{
           flex: 1, fontFamily: "monospace", fontSize: 14, textAlignVertical: "top",
-          borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 10, padding: 12, minHeight: 140,
+          borderWidth: 1, borderColor: C.bordo, borderRadius: 10, padding: 12, minHeight: 140,
         }}
       />
       <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
@@ -130,17 +132,17 @@ export default function Esercizi() {
           onPress={controlla}
           disabled={inCorso || !risposta.trim()}
           style={{
-            flex: 1, backgroundColor: risposta.trim() ? "#18181B" : "#D4D4D8",
+            flex: 1, backgroundColor: risposta.trim() ? C.primario : C.disattivo,
             padding: 14, borderRadius: 10, alignItems: "center",
           }}
         >
-          {inCorso ? <ActivityIndicator color="#fff" />
-                   : <Text style={{ color: "#fff", fontWeight: "600" }}>Esegui e verifica</Text>}
+          {inCorso ? <ActivityIndicator color={risposta.trim() ? C.suPrimario : C.suDisattivo} />
+                   : <Text style={{ color: risposta.trim() ? C.suPrimario : C.suDisattivo, fontWeight: "600" }}>Esegui e verifica</Text>}
         </Pressable>
         {esito ? (
           <Pressable onPress={avanti}
             style={{ paddingHorizontal: 20, justifyContent: "center", borderRadius: 10,
-                     borderWidth: 1, borderColor: "#E4E4E7" }}>
+                     borderWidth: 1, borderColor: C.bordo }}>
             <Text style={{ fontWeight: "600" }}>Avanti</Text>
           </Pressable>
         ) : null}
@@ -149,9 +151,9 @@ export default function Esercizi() {
       {esito ? (
         <View style={{
           marginTop: 14, padding: 12, borderRadius: 10,
-          backgroundColor: esito.corretto ? "#E8F5EE" : "#FDECEC",
+          backgroundColor: esito.corretto ? C.verdeFondo : C.rossoFondo,
         }}>
-          <Text style={{ fontWeight: "600", color: esito.corretto ? "#0F6E56" : "#A12B2B" }}>
+          <Text style={{ fontWeight: "600", color: esito.corretto ? C.verde : C.rosso }}>
             {esito.corretto ? "Corretto" : "Non ancora"}
           </Text>
           <Text style={{ marginTop: 4, fontSize: 13 }}>{esito.dettaglio}</Text>
@@ -173,7 +175,7 @@ export default function Esercizi() {
 
   return affiancato ? (
     <View style={{ flex: 1, flexDirection: "row" }}>
-      <View style={{ flex: 1, borderRightWidth: 1, borderColor: "#E4E4E7" }}>{Consegna}</View>
+      <View style={{ flex: 1, borderRightWidth: 1, borderColor: C.bordo }}>{Consegna}</View>
       <View style={{ flex: 1 }}>{Editor}</View>
     </View>
   ) : (

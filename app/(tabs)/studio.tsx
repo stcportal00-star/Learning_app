@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Pressable, ScrollView } from "react-native";
 import { Link } from "expo-router";
 import { database } from "../../lib/db";
 import { supportaWindowFunctions } from "../../lib/palestra";
+import { Text } from "../../components/Base";
+import { C } from "../../lib/tema";
 
 type Conteggio = { sql: number; codice: number; ripasso: number; scenari: number };
 
@@ -30,7 +32,7 @@ export default function Studio() {
 
   const Voce = ({ href, titolo, nota, n }: { href: string; titolo: string; nota: string; n: number }) => (
     <Link href={href as never} asChild>
-      <Pressable style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 12, padding: 15 }}>
+      <Pressable style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 12, padding: 15 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ fontSize: 17, fontWeight: "500" }}>{titolo}</Text>
           <Text style={{ fontSize: 20, fontWeight: "500", opacity: n ? 1 : 0.3 }}>{n}</Text>
@@ -49,7 +51,7 @@ export default function Studio() {
         nota="Un modulo, un difetto, un test che lo dimostra. Prima l'ipotesi, poi il resto." />
       <Voce href="/ripasso" titolo="Ripasso" n={c.ripasso}
         nota="Schede con citazione puntuale: ogni risposta è verificabile alla fonte." />
-      <View style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 12, padding: 15, opacity: 0.75 }}>
+      <View style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 12, padding: 15, opacity: 0.75 }}>
         <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
           <Text style={{ fontSize: 17, fontWeight: "500" }}>Scenari a rubrica</Text>
           <Text style={{ fontSize: 20, fontWeight: "500" }}>{c.scenari}</Text>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, ScrollView } from "react-native";
+import { Text } from "../../components/Base";
+import { C } from "../../lib/tema";
 import { Link } from "expo-router";
 import Constants from "expo-constants";
 import { Pressable } from "react-native";
@@ -63,7 +65,7 @@ export default function Profilo() {
       <Aggiornamento />
 
       <Link href="/sync" asChild>
-        <Pressable style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14 }}>
+        <Pressable style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 14 }}>
           <Text style={{ fontSize: 16, fontWeight: "500" }}>Sincronizzazione</Text>
           <Text style={{ fontSize: 13, opacity: 0.65, marginTop: 3, lineHeight: 18 }}>
             {div ? div.messaggio : "Accoppia i tuoi due dispositivi."}
@@ -72,7 +74,7 @@ export default function Profilo() {
       </Link>
 
       <Link href="/promemoria" asChild>
-        <Pressable style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14 }}>
+        <Pressable style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 14 }}>
           <Text style={{ fontSize: 16, fontWeight: "500" }}>Promemoria</Text>
           <Text style={{ fontSize: 13, opacity: 0.65, marginTop: 3, lineHeight: 18 }}>
             {prom.attivo

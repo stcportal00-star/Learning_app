@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable, FlatList, useWindowDimensions } from "react-native";
+import { View, Pressable, FlatList, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { elencaArticoli, temiConNovita, Articolo } from "../lib/nuvola/articoli";
 import { descriviByte } from "../lib/nuvola/media";
+import { Text } from "../components/Base";
+import { C } from "../lib/tema";
 
 /**
  * La rassegna: quello che la conduttura ha raccolto stanotte.
@@ -29,8 +31,8 @@ export default function Rassegna() {
   const Pillola = ({ testo, attiva, premuto }: { testo: string; attiva: boolean; premuto: () => void }) => (
     <Pressable onPress={premuto}
       style={{ paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
-               backgroundColor: attiva ? "#18181B" : "#F4F4F5" }}>
-      <Text style={{ fontSize: 12, color: attiva ? "#fff" : "#3F3F46" }}>{testo}</Text>
+               backgroundColor: attiva ? C.primario : C.superficie }}>
+      <Text style={{ fontSize: 12, color: attiva ? C.suPrimario : C.testoSecondario }}>{testo}</Text>
     </Pressable>
   );
 
@@ -72,28 +74,28 @@ export default function Rassegna() {
         renderItem={({ item }) => (
           <Pressable
             onPress={() => router.push({ pathname: "/articolo", params: { id: item.id } })}
-            style={{ flex: 1, borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 13,
+            style={{ flex: 1, borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 13,
                      opacity: item.letto ? 0.55 : 1 }}>
             <View style={{ flexDirection: "row", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
               {item.url_media ? (
                 // Un podcast o una conferenza non hanno testo, e senza questa
                 // etichetta sembrerebbero articoli mal riusciti: dice invece
                 // che cos'è la voce e quanto costa portarsela in aereo.
-                <Text style={{ fontSize: 10, fontWeight: "600", color: "#6B3FA0",
-                               backgroundColor: "#F1EAFA", paddingHorizontal: 7, paddingVertical: 2,
+                <Text style={{ fontSize: 10, fontWeight: "600", color: C.viola,
+                               backgroundColor: C.violaFondo, paddingHorizontal: 7, paddingVertical: 2,
                                borderRadius: 5 }}>
                   {((item.tipo_media || "").startsWith("video/") ? "video" : "audio")
                     + (item.file_media ? " · sul telefono" : " · " + descriviByte(item.byte_media))}
                 </Text>
               ) : item.testo ? (
-                <Text style={{ fontSize: 10, fontWeight: "600", color: "#0F6E56",
-                               backgroundColor: "#E8F5EE", paddingHorizontal: 7, paddingVertical: 2,
+                <Text style={{ fontSize: 10, fontWeight: "600", color: C.verde,
+                               backgroundColor: C.verdeFondo, paddingHorizontal: 7, paddingVertical: 2,
                                borderRadius: 5 }}>testo intero</Text>
               ) : (
                 <Text style={{ fontSize: 10, opacity: 0.45, paddingVertical: 2 }}>solo sommario</Text>
               )}
               {item.salvato ? (
-                <Text style={{ fontSize: 10, color: "#0C447C", backgroundColor: "#E6F0FA",
+                <Text style={{ fontSize: 10, color: C.blu, backgroundColor: C.bluFondo,
                                paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 }}>salvato</Text>
               ) : null}
               {item.trimestre ? (

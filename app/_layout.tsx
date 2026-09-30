@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
-import { View, Text, ActivityIndicator } from "react-native";
+import { View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import * as Crypto from "expo-crypto";
 import AsyncStorageLike from "expo-sqlite/kv-store";
 import { apri } from "../lib/db";
@@ -8,6 +9,8 @@ import { caricaContenuti } from "../lib/contenuti";
 import { apriPalestra, versioneMotore, supportaWindowFunctions } from "../lib/palestra";
 import { ripristina as ripristinaPromemoria } from "../lib/notifiche";
 import { useNuvola } from "../lib/nuvola/useNuvola";
+import { Text, ActivityIndicator } from "../components/Base";
+import { C } from "../lib/tema";
 
 export default function Radice() {
   const [pronto, setPronto] = useState(false);
@@ -52,7 +55,7 @@ export default function Radice() {
 
   if (errore) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
+      <View style={{ flex: 1, justifyContent: "center", padding: 24, backgroundColor: C.sfondo }}>
         <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>Avvio non riuscito</Text>
         <Text selectable style={{ fontSize: 13, opacity: 0.8 }}>{errore}</Text>
       </View>
@@ -60,20 +63,24 @@ export default function Radice() {
   }
   if (!pronto) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, backgroundColor: C.sfondo }}>
         <ActivityIndicator />
         <Text style={{ opacity: 0.7 }}>Preparazione dei contenuti…</Text>
       </View>
     );
   }
+  // `contentStyle` perché lo sfondo predefinito delle schermate impilate è il
+  // grigio chiaro di React Navigation: senza, ogni schermata aperta da Studio
+  // o da Profilo lampeggerebbe chiara sotto il contenuto.
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: C.sfondo }}>
+      <StatusBar style="light" />
       {avviso ? (
-        <View style={{ backgroundColor: "#FDF0D5", padding: 10 }}>
-          <Text style={{ fontSize: 12, color: "#854F0B" }}>{avviso}</Text>
+        <View style={{ backgroundColor: C.ambraFondo, padding: 10 }}>
+          <Text style={{ fontSize: 12, color: C.ambra }}>{avviso}</Text>
         </View>
       ) : null}
-      <Stack screenOptions={{ headerShown: false }} />
-    </>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.sfondo } }} />
+    </View>
   );
 }

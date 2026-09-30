@@ -287,6 +287,17 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
 - Layout adattivo con un solo punto di rottura: `useWindowDimensions()`, 600dp.
   Niente rami separati per telefono e tablet.
 - Massimo cinque schede. Il resto sono schermate impilate.
+- **Tema nero.** I colori stanno solo in `lib/tema.ts` (`C`): nessun esadecimale
+  nelle schermate. `Text`, `TextInput` e `ActivityIndicator` si importano da
+  `components/Base`, mai da `react-native`: il testo predefinito di React Native
+  è nero, su sfondo nero sparisce, e con React 19 `defaultProps` non lo corregge
+  più. Il pulsante principale è chiaro (`C.primario`) e il testo sopra va messo
+  a mano a `C.suPrimario`: è l'unico caso in cui il colore predefinito è
+  sbagliato. Lo sfondo delle schermate lo danno `contentStyle` (pila) e
+  `sceneStyle` (schede); quello della finestra, della barra di stato e dello
+  splash sta in `app.json`. `userInterfaceStyle: dark` resta inerte finché
+  `expo-system-ui` non è installato (prebuild lo dice): i dialoghi di sistema
+  seguono il tema del telefono.
 - I commenti spiegano **perché**, non cosa. Se un commento descrive ciò che il
   codice già dice, va tolto.
 

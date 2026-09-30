@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Pressable, ScrollView } from "react-native";
+import { Text } from "../components/Base";
+import { C } from "../lib/tema";
 import { database, registra } from "../lib/db";
 
 type Scheda = { id: string; consegna: string; soluzione_riferimento: string; fonte_citazione: string | null };
@@ -58,7 +60,7 @@ export default function Ripasso() {
       <ScrollView style={{ flex: 1, marginTop: 12 }}>
         <Text style={{ fontSize: 18, lineHeight: 26 }}>{s.consegna}</Text>
         {scoperta ? (
-          <View style={{ marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderColor: "#E4E4E7" }}>
+          <View style={{ marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderColor: C.bordo }}>
             <Text style={{ fontSize: 15, lineHeight: 23 }}>{s.soluzione_riferimento}</Text>
             {s.fonte_citazione ? (
               <Text style={{ fontSize: 12, opacity: 0.6, marginTop: 12 }}>{s.fonte_citazione}</Text>
@@ -71,15 +73,15 @@ export default function Ripasso() {
           {gradi.map((g, n) => (
             <Pressable key={g} onPress={() => valuta(n)}
               style={{ flex: 1, padding: 12, borderRadius: 9, alignItems: "center",
-                       backgroundColor: n === 0 ? "#FDECEC" : "#F4F4F5" }}>
+                       backgroundColor: n === 0 ? C.rossoFondo : C.superficie }}>
               <Text style={{ fontSize: 12, fontWeight: "600" }}>{g}</Text>
             </Pressable>
           ))}
         </View>
       ) : (
         <Pressable onPress={() => setScoperta(true)}
-          style={{ backgroundColor: "#18181B", padding: 15, borderRadius: 10, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Mostra la risposta</Text>
+          style={{ backgroundColor: C.primario, padding: 15, borderRadius: 10, alignItems: "center" }}>
+          <Text style={{ color: C.suPrimario, fontWeight: "600" }}>Mostra la risposta</Text>
         </Pressable>
       )}
     </View>

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, Pressable, FlatList, Alert, useWindowDimensions } from "react-native";
+import { View, Pressable, FlatList, Alert, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { elencaBiblioteca, importaPdf, importaBiblioteca, rimuoviVolume, apriVolume, Volume } from "../../lib/palestra";
 import { caricaVolumeInNuvola } from "../../lib/nuvola/manuale";
 import { scaricaVolume } from "../../lib/nuvola/sincronia";
+import { Text } from "../../components/Base";
+import { C } from "../../lib/tema";
 
 export default function Biblioteca() {
   const { width } = useWindowDimensions();
@@ -89,11 +91,11 @@ export default function Biblioteca() {
     <View style={{ flex: 1 }}>
       <View style={{ flexDirection: "row", gap: 8, padding: 12, flexWrap: "wrap" }}>
         <Pressable onPress={aggiungi}
-          style={{ backgroundColor: "#18181B", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9 }}>
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 13 }}>Aggiungi PDF</Text>
+          style={{ backgroundColor: C.primario, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9 }}>
+          <Text style={{ color: C.suPrimario, fontWeight: "600", fontSize: 13 }}>Aggiungi PDF</Text>
         </Pressable>
         <Pressable onPress={daRelease}
-          style={{ borderWidth: 1, borderColor: "#E4E4E7", paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9 }}>
+          style={{ borderWidth: 1, borderColor: C.bordo, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 9 }}>
           <Text style={{ fontWeight: "600", fontSize: 13 }}>Importa biblioteca</Text>
         </Pressable>
       </View>
@@ -101,14 +103,14 @@ export default function Biblioteca() {
       <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 12, paddingBottom: 10, flexWrap: "wrap" }}>
         <Pressable onPress={() => setFiltro(null)}
           style={{ paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
-                   backgroundColor: filtro === null ? "#18181B" : "#F4F4F5" }}>
-          <Text style={{ fontSize: 12, color: filtro === null ? "#fff" : "#3F3F46" }}>Tutti</Text>
+                   backgroundColor: filtro === null ? C.primario : C.superficie }}>
+          <Text style={{ fontSize: 12, color: filtro === null ? C.suPrimario : C.testoSecondario }}>Tutti</Text>
         </Pressable>
         {trimestri.map((t) => (
           <Pressable key={t} onPress={() => setFiltro(t)}
             style={{ paddingHorizontal: 11, paddingVertical: 6, borderRadius: 20,
-                     backgroundColor: filtro === t ? "#18181B" : "#F4F4F5" }}>
-            <Text style={{ fontSize: 12, color: filtro === t ? "#fff" : "#3F3F46" }}>{t}</Text>
+                     backgroundColor: filtro === t ? C.primario : C.superficie }}>
+            <Text style={{ fontSize: 12, color: filtro === t ? C.suPrimario : C.testoSecondario }}>{t}</Text>
           </Pressable>
         ))}
       </View>
@@ -156,11 +158,11 @@ export default function Biblioteca() {
                 { text: "Annulla", style: "cancel" as const },
               ]);
             }}
-            style={{ flex: 1, borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 13 }}>
+            style={{ flex: 1, borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 13 }}>
             <View style={{ flexDirection: "row", gap: 6, marginBottom: 5 }}>
               <Text style={{ fontSize: 10, fontWeight: "600",
-                             color: item.origine === "manuale" ? "#0C447C" : "#0F6E56",
-                             backgroundColor: item.origine === "manuale" ? "#E6F0FA" : "#E8F5EE",
+                             color: item.origine === "manuale" ? C.blu : C.verde,
+                             backgroundColor: item.origine === "manuale" ? C.bluFondo : C.verdeFondo,
                              paddingHorizontal: 7, paddingVertical: 2, borderRadius: 5 }}>
                 {item.origine === "manuale" ? "tuo file" : "aperta"}
               </Text>
@@ -168,11 +170,11 @@ export default function Biblioteca() {
                 <Text style={{ fontSize: 10, opacity: 0.55, paddingVertical: 2 }}>{item.trimestre}</Text>
               ) : null}
               {item.file_locale ? (
-                <Text style={{ fontSize: 10, color: "#0F6E56", paddingVertical: 2 }}>offline</Text>
+                <Text style={{ fontSize: 10, color: C.verde, paddingVertical: 2 }}>offline</Text>
               ) : scaricando === item.id ? (
-                <Text style={{ fontSize: 10, color: "#0C447C", paddingVertical: 2 }}>scarico…</Text>
+                <Text style={{ fontSize: 10, color: C.blu, paddingVertical: 2 }}>scarico…</Text>
               ) : item.pdf_path ? (
-                <Text style={{ fontSize: 10, color: "#0C447C", paddingVertical: 2 }}>tocca per scaricare</Text>
+                <Text style={{ fontSize: 10, color: C.blu, paddingVertical: 2 }}>tocca per scaricare</Text>
               ) : (
                 <Text style={{ fontSize: 10, opacity: 0.45, paddingVertical: 2 }}>non scaricato</Text>
               )}

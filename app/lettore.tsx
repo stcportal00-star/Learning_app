@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator, ScrollView, TextInput, Alert } from "react-native";
+import { View, Pressable, ScrollView, Alert } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import { database } from "../lib/db";
 import { preparaLettore, pdfDiProva, salvaPagina, apriVolume, Volume } from "../lib/palestra";
 import { annota, cancella, segniDi, Segno } from "../lib/nuvola/segni";
+import { Text, TextInput, ActivityIndicator } from "../components/Base";
+import { C } from "../lib/tema";
 
 type Messaggio =
   | { tipo: "pronto"; pagine: number }
@@ -85,9 +87,9 @@ export default function Lettore() {
 
   const Intestazione = (
     <View style={{ flexDirection: "row", alignItems: "center", padding: 11, gap: 10,
-                   borderBottomWidth: 1, borderColor: "#E4E4E7", backgroundColor: "#fff" }}>
+                   borderBottomWidth: 1, borderColor: C.bordo, backgroundColor: C.sfondo }}>
       <Pressable onPress={() => router.back()} hitSlop={12}>
-        <Text style={{ color: "#0C447C", fontSize: 16 }}>←</Text>
+        <Text style={{ color: C.blu, fontSize: 16 }}>←</Text>
       </Pressable>
       <Text numberOfLines={1} style={{ flex: 1, fontSize: 14, fontWeight: "500" }}>
         {id === "prova" ? "PDF di prova" : volume?.titolo ?? ""}
@@ -96,8 +98,8 @@ export default function Lettore() {
       {id !== "prova" ? (
         <Pressable onPress={() => setPannello((v) => !v)} hitSlop={10}
           style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 7,
-                   backgroundColor: pannello ? "#18181B" : "#F4F4F5" }}>
-          <Text style={{ fontSize: 12, fontWeight: "600", color: pannello ? "#fff" : "#3F3F46" }}>
+                   backgroundColor: pannello ? C.primario : C.superficie }}>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: pannello ? C.suPrimario : C.testoSecondario }}>
             ✎ {segni.length}
           </Text>
         </Pressable>
@@ -114,13 +116,13 @@ export default function Lettore() {
   }
 
   const Pannello = (
-    <View style={{ maxHeight: "55%", borderTopWidth: 1, borderColor: "#E4E4E7", backgroundColor: "#fff" }}>
+    <View style={{ maxHeight: "55%", borderTopWidth: 1, borderColor: C.bordo, backgroundColor: C.sfondo }}>
       <View style={{ flexDirection: "row", gap: 8, padding: 11, alignItems: "center" }}>
         <Text style={{ flex: 1, fontSize: 13, fontWeight: "600" }}>
           Segni su questo testo · pagina {pagina}
         </Text>
         <Pressable onPress={() => { void aggiungiSegno("segnalibro"); }}
-          style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, backgroundColor: "#F4F4F5" }}>
+          style={{ paddingHorizontal: 11, paddingVertical: 7, borderRadius: 8, backgroundColor: C.superficie }}>
           <Text style={{ fontSize: 12, fontWeight: "600" }}>Segnalibro</Text>
         </Pressable>
       </View>
@@ -139,7 +141,7 @@ export default function Lettore() {
                 onPress: async () => { await cancella(sg.id); await ricaricaSegni(); } },
               { text: "Annulla", style: "cancel" },
             ])}
-            style={{ backgroundColor: sg.genere === "segnalibro" ? "#F2FAF6" : "#F8F8F9",
+            style={{ backgroundColor: sg.genere === "segnalibro" ? C.verdeFondo : C.superficie,
                      borderRadius: 8, padding: 10 }}>
             <Text style={{ fontSize: 10, opacity: 0.5 }}>
               {sg.pagina ? `p. ${sg.pagina}` : "—"} · {sg.genere}
@@ -152,13 +154,13 @@ export default function Lettore() {
           onChangeText={setBozza}
           placeholder={`Nota su pagina ${pagina}…`}
           multiline
-          style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 8, padding: 10,
+          style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 8, padding: 10,
                    fontSize: 13, minHeight: 62, textAlignVertical: "top" }}
         />
         <Pressable onPress={() => { void aggiungiSegno("nota"); }}
-          style={{ alignSelf: "flex-start", backgroundColor: "#18181B",
+          style={{ alignSelf: "flex-start", backgroundColor: C.primario,
                    paddingHorizontal: 13, paddingVertical: 8, borderRadius: 8 }}>
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>Aggiungi nota</Text>
+          <Text style={{ color: C.suPrimario, fontWeight: "600", fontSize: 12 }}>Aggiungi nota</Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -172,8 +174,8 @@ export default function Lettore() {
           <Text style={{ fontSize: 14, lineHeight: 21 }}>{errore}</Text>
           {volume?.file_locale ? (
             <Pressable onPress={() => apriVolume(volume)}
-              style={{ backgroundColor: "#18181B", padding: 13, borderRadius: 10, alignItems: "center" }}>
-              <Text style={{ color: "#fff", fontWeight: "600" }}>Apri con il visore del sistema</Text>
+              style={{ backgroundColor: C.primario, padding: 13, borderRadius: 10, alignItems: "center" }}>
+              <Text style={{ color: C.suPrimario, fontWeight: "600" }}>Apri con il visore del sistema</Text>
             </Pressable>
           ) : null}
         </View>
@@ -191,7 +193,7 @@ export default function Lettore() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: C.sfondo }}>
       {Intestazione}
       <WebView
         source={{ uri: visore }}
@@ -207,7 +209,7 @@ export default function Lettore() {
         }
         onMessage={suMessaggio}
         onError={(e) => setErrore(e.nativeEvent.description)}
-        style={{ flex: 1, backgroundColor: "#F4F4F5" }}
+        style={{ flex: 1, backgroundColor: C.sfondo }}
       />
       {pannello ? Pannello : null}
     </View>

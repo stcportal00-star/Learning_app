@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Alert } from "react-native";
+import { View, Pressable, Alert } from "react-native";
 import * as Crypto from "expo-crypto";
 import AsyncStorageLike from "expo-sqlite/kv-store";
 import { registra } from "../lib/db";
 import { chiudiSessione, DURATA_PREVISTA, TipoBlocco } from "../lib/sessioni";
+import { Text } from "./Base";
+import { C } from "../lib/tema";
 
 const CHIAVE = "cronometro_attivo";
 const ETICHETTE: Record<TipoBlocco, string> = {
@@ -69,17 +71,17 @@ export default function Cronometro({ onRegistrata }: { onRegistrata?: () => void
     const ss = String(trascorsi % 60).padStart(2, "0");
     const oltre = trascorsi >= previsti;
     return (
-      <View style={{ padding: 14, borderRadius: 12, backgroundColor: oltre ? "#FDF0D5" : "#18181B" }}>
-        <Text style={{ fontSize: 12, color: oltre ? "#854F0B" : "#A1A1AA" }}>
+      <View style={{ padding: 14, borderRadius: 12, backgroundColor: oltre ? C.ambraFondo : C.superficie }}>
+        <Text style={{ fontSize: 12, color: oltre ? C.ambra : C.testoSecondario }}>
           {ETICHETTE[attivo.tipo]} · previsti {DURATA_PREVISTA[attivo.tipo]} min
         </Text>
-        <Text style={{ fontSize: 34, fontWeight: "500", color: oltre ? "#854F0B" : "#fff",
+        <Text style={{ fontSize: 34, fontWeight: "500", color: oltre ? C.ambra : C.testo,
                        fontVariant: ["tabular-nums"], marginVertical: 4 }}>
           {mm}:{ss}
         </Text>
         <Pressable onPress={ferma}
-          style={{ backgroundColor: oltre ? "#854F0B" : "#fff", padding: 12, borderRadius: 9, alignItems: "center" }}>
-          <Text style={{ fontWeight: "600", color: oltre ? "#fff" : "#18181B" }}>Chiudi il blocco</Text>
+          style={{ backgroundColor: oltre ? C.ambra : C.primario, padding: 12, borderRadius: 9, alignItems: "center" }}>
+          <Text style={{ fontWeight: "600", color: C.suPrimario }}>Chiudi il blocco</Text>
         </Pressable>
       </View>
     );
@@ -92,7 +94,7 @@ export default function Cronometro({ onRegistrata }: { onRegistrata?: () => void
         {(Object.keys(ETICHETTE) as TipoBlocco[]).map((t) => (
           <Pressable key={t} onPress={() => avvia(t)}
             style={{ paddingHorizontal: 13, paddingVertical: 10, borderRadius: 9,
-                     borderWidth: 1, borderColor: "#E4E4E7" }}>
+                     borderWidth: 1, borderColor: C.bordo }}>
             <Text style={{ fontSize: 13, fontWeight: "500" }}>{ETICHETTE[t]}</Text>
             <Text style={{ fontSize: 11, opacity: 0.55 }}>{DURATA_PREVISTA[t]} min</Text>
           </Pressable>
