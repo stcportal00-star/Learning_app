@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Stack } from "expo-router";
 import { View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
 import AsyncStorageLike from "expo-sqlite/kv-store";
 import { apri } from "../lib/db";
@@ -22,6 +23,12 @@ export default function Radice() {
   // l'unico posto montato per tutta la vita dell'app. Con la stringa vuota
   // l'effetto dentro il gancio gira a vuoto e non tocca la rete.
   useNuvola(pronto ? dispositivo : "");
+
+  // Con l'edge-to-edge di SDK 54 la barra di stato è trasparente e il
+  // contenuto ci passava sotto: titoli, frecce indietro e i pulsanti
+  // principali, ora chiari, sotto l'orologio bianco. Il margine si mette una
+  // volta qui, sopra tutte le schermate; la fascia della barra resta nera.
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     (async () => {
@@ -73,7 +80,7 @@ export default function Radice() {
   // grigio chiaro di React Navigation: senza, ogni schermata aperta da Studio
   // o da Profilo lampeggerebbe chiara sotto il contenuto.
   return (
-    <View style={{ flex: 1, backgroundColor: C.sfondo }}>
+    <View style={{ flex: 1, backgroundColor: C.sfondo, paddingTop: insets.top }}>
       <StatusBar style="light" />
       {avviso ? (
         <View style={{ backgroundColor: C.ambraFondo, padding: 10 }}>

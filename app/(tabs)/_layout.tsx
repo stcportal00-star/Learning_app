@@ -14,6 +14,9 @@ export default function Schede() {
   const tablet = width >= 600;
   return (
     <Tabs
+      // Il margine della barra di stato lo mette già app/_layout.tsx: la barra
+      // laterale del tablet lo aggiungerebbe una seconda volta.
+      safeAreaInsets={{ top: 0 }}
       screenOptions={{
         headerShown: false,
         tabBarPosition: tablet ? "left" : "bottom",
@@ -24,6 +27,9 @@ export default function Schede() {
         tabBarStyle: { backgroundColor: C.sfondo, borderColor: C.bordo },
         tabBarActiveTintColor: C.testo,
         tabBarInactiveTintColor: C.testoTenue,
+        // Sul tablet la scheda attiva ha uno sfondo, e il predefinito è il blu
+        // pieno di React Navigation.
+        tabBarActiveBackgroundColor: C.superficieAlta,
       }}
     >
       <Tabs.Screen name="oggi" options={{ title: "Oggi" }} />
