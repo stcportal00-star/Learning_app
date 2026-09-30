@@ -334,6 +334,12 @@ materiale non è un'unità.
   pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
   SECONDO gruppo di schede, con un secondo editor delle note che può
   sovrascrivere il primo. `dismissTo` torna alle schede che esistono già.
+- **Note tiene l'id della nota aperta in un ref** (`idAperto`), fissato prima
+  dell'await di `salva()` insieme alla copia salvata. Note salva uscendo in
+  tre modi — perdita del fuoco, background, smontaggio — oltre ai pulsanti,
+  e con lo stato `apertaId` due salvataggi sovrapposti della stessa nota
+  nuova leggevano entrambi "nuova" e creavano due note. Con il ref il secondo
+  è un «aggiorna» in fila dietro il primo.
 - **L'avanzamento è per dispositivo, per ora.** Gli eventi dei tentativi
   portano solo `{esercizio_id, esito}` e quelli del ripasso `{grado,
   stabilita}`: sull'altro dispositivo un tentativo ricevuto resta incompleto

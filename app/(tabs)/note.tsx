@@ -36,6 +36,17 @@ export default function Note() {
    */
   const salvato = useRef({ titolo: "", testo: "", pubblicabile: false });
 
+  /**
+   * L'id della nota aperta, subito: lo stato `apertaId` diventa l'id vero
+   * solo dopo che la scrittura è finita e React ha ridisegnato. Due
+   * salvataggi della stessa nota nuova che si sovrappongono — un tocco su
+   * Salva mentre è in coda quello partito uscendo dalla scheda, o due tocchi
+   * di fila — leggerebbero entrambi "nuova" e creerebbero due note con due
+   * id. Letto e fissato qui prima dell'await, il secondo diventa un
+   * «aggiorna» della stessa nota, in fila dietro il primo.
+   */
+  const idAperto = useRef<string | null>(null);
+
   const ricarica = useCallback(async () => {
     const d = database();
     setNote(await d.getAllAsync<Nota>(
@@ -53,24 +64,29 @@ export default function Note() {
   const { nota: daAprire } = useLocalSearchParams<{ nota?: string }>();
   useEffect(() => {
     if (!daAprire) return;
+    const id = String(daAprire);
+    router.setParams({ nota: undefined } as never);
     (async () => {
-      // Un salvataggio partito alla perdita del fuoco può essere ancora in
-      // corso: esci() lo rifarebbe, e per una nota nuova sarebbe un doppione.
-      if (salvataggioInCorso.current) await salvataggioInCorso.current;
       await ricarica();
-      const n = await database().getFirstAsync<Nota>("SELECT * FROM note WHERE id = ?", [String(daAprire)]);
-      router.setParams({ nota: undefined } as never);
-      if (n && apertaId !== n.id) await esci(() => apri(n));
+      const n = await database().getFirstAsync<Nota>("SELECT * FROM note WHERE id = ?", [id]);
+      if (!n || idAperto.current === n.id) return;
+      // salvaUscendo.current è la chiusura dell'ULTIMO disegno: salva anche
+      // ciò che si è scritto mentre la lettura qui sopra era in corso. Se
+      // il salvataggio non riesce si resta sulla nota com'è, invece di
+      // coprirne il testo con l'altra.
+      if (await salvaUscendo.current()) apri(n);
     })();
   }, [daAprire]);
 
   function apri(n: Nota) {
+    idAperto.current = n.id;
     setApertaId(n.id); setTitolo(n.titolo ?? ""); setTesto(n.testo);
     setPubblicabile(n.pubblicabile === 1);
     salvato.current = { titolo: n.titolo ?? "", testo: n.testo, pubblicabile: n.pubblicabile === 1 };
   }
 
   function nuova() {
+    idAperto.current = "nuova";
     setApertaId("nuova"); setTitolo(""); setTesto(""); setPubblicabile(false);
     salvato.current = { titolo: "", testo: "", pubblicabile: false };
   }
@@ -89,22 +105,34 @@ export default function Note() {
 
   async function salva() {
     if (!testo.trim() && !titolo.trim()) return;
-    const id = apertaId === "nuova" || !apertaId ? Crypto.randomUUID() : apertaId;
-    const nuovo = apertaId === "nuova" || !apertaId;
-    await registra("note", id, nuovo ? "crea" : "aggiorna",
-      { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
-      async (d, hlc) => {
-        if (nuovo) {
-          await d.runAsync(
-            `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
-            [id, titolo || null, testo, pubblicabile ? 1 : 0, new Date().toISOString(), hlc]);
-        } else {
-          await d.runAsync(
-            `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
-            [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]);
-        }
-      });
+    const corrente = idAperto.current;
+    const nuovo = corrente === "nuova" || !corrente;
+    const id = nuovo || !corrente ? Crypto.randomUUID() : corrente;
+    idAperto.current = id;
+    // Anche la copia salvata si aggiorna prima dell'await: un'uscita che
+    // arriva mentre questa scrittura è in coda non trova niente da salvare.
+    // Se la scrittura fallisce, si torna indietro e il testo resta da salvare.
+    const prima = salvato.current;
     salvato.current = { titolo, testo, pubblicabile };
+    try {
+      await registra("note", id, nuovo ? "crea" : "aggiorna",
+        { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
+        async (d, hlc) => {
+          if (nuovo) {
+            await d.runAsync(
+              `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
+              [id, titolo || null, testo, pubblicabile ? 1 : 0, new Date().toISOString(), hlc]);
+          } else {
+            await d.runAsync(
+              `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
+              [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]);
+          }
+        });
+    } catch (e) {
+      salvato.current = prima;
+      if (nuovo) idAperto.current = corrente;
+      throw e;
+    }
     setApertaId(id);
     await ricarica();
   }
@@ -117,18 +145,18 @@ export default function Note() {
   // preavviso — e un'ora di risposta a uno scenario non si riscrive.
   // Il salvataggio parte lo stesso anche se nessuno ne vedrà l'esito:
   // registra() vive nel livello dati e la sua transazione è già in coda.
-  //
-  // Perdita del fuoco e smontaggio arrivano nello stesso istante quando la
-  // scheda se ne va: senza la guardia, due salva() della stessa nota nuova
-  // creerebbero due note con due id.
-  const salvaUscendo = useRef<() => Promise<void>>(async () => {});
-  const salvataggioInCorso = useRef<Promise<void> | null>(null);
+  // Un'uscita che fallisce lo scrive in logcat (dal telefono è l'unica
+  // traccia) e dice false: chi apre un'altra nota non copre quel testo.
+  const salvaUscendo = useRef<() => Promise<boolean>>(async () => true);
   useEffect(() => {
     salvaUscendo.current = async () => {
-      if (salvataggioInCorso.current) return salvataggioInCorso.current;
-      if (!daSalvare()) return;
-      salvataggioInCorso.current = salva().finally(() => { salvataggioInCorso.current = null; });
-      return salvataggioInCorso.current;
+      try {
+        if (daSalvare()) await salva();
+        return true;
+      } catch (e) {
+        console.error("note: salvataggio uscendo non riuscito", e);
+        return false;
+      }
     };
   });
   useEffect(() => () => { void salvaUscendo.current(); }, []);

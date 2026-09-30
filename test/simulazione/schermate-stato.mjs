@@ -1407,14 +1407,16 @@ libreriaPrima.smonta();
 // SEZIONE F — app/(tabs)/note.tsx: editor, salvataggio, abbandono
 // ===========================================================================
 ancora("NOT guardia del vuoto", "app/(tabs)/note.tsx", "if (!testo.trim() && !titolo.trim()) return;");
-ancora("NOT id nuovo o esistente", "app/(tabs)/note.tsx", 'const id = apertaId === "nuova" || !apertaId ? Crypto.randomUUID() : apertaId;');
+ancora("NOT id nuovo o esistente, letto dal ref prima dell'await", "app/(tabs)/note.tsx", 'const corrente = idAperto.current; const nuovo = corrente === "nuova" || !corrente; const id = nuovo || !corrente ? Crypto.randomUUID() : corrente; idAperto.current = id;');
 ancora("NOT setApertaId dopo l'await", "app/(tabs)/note.tsx", "setApertaId(id); await ricarica();");
 ancora("NOT si esce salvando", "app/(tabs)/note.tsx",
   "async function esci(dopo: () => void) { if (daSalvare()) await salva(); dopo(); }");
 ancora("NOT la nota gia' aperta non si riapre", "app/(tabs)/note.tsx",
   "onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}");
 ancora("NOT salvataggio allo smontaggio", "app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);");
-ancora("NOT la copia salvata si aggiorna dopo la scrittura", "app/(tabs)/note.tsx", "salvato.current = { titolo, testo, pubblicabile };");
+ancora("NOT la copia salvata si aggiorna PRIMA della scrittura, e torna indietro se fallisce", "app/(tabs)/note.tsx", "salvato.current = { titolo, testo, pubblicabile }; try {");
+ancora("NOT il ref dell'id si fissa aprendo una nota", "app/(tabs)/note.tsx", "idAperto.current = n.id;");
+ancora("NOT il ref dell'id si fissa su una nota nuova", "app/(tabs)/note.tsx", 'idAperto.current = "nuova";');
 ancora("NOT titolo vuoto come NULL", "app/(tabs)/note.tsx", "titolo || null");
 ancora("NOT ordine dell'elenco", "app/(tabs)/note.tsx", "SELECT * FROM note ORDER BY creato_a DESC");
 ancora("NOT filtro pubblicabili", "app/(tabs)/note.tsx", "SELECT * FROM note WHERE pubblicabile = 1 ORDER BY creato_a DESC");
@@ -1450,8 +1452,11 @@ function ModelloNote(p) {
   // Copia di cio' che sta sul disco per la nota aperta: dice se c'e' qualcosa
   // da salvare prima di uscire, senza un flag da aggiornare a ogni tasto.
   const salvato = useRif({ titolo: "", testo: "", pubblicabile: false });
+  // L'id della nota aperta, fissato prima dell'await (vedi note.tsx).
+  const idAperto = useRif(null);
 
   function apriNota(n) {
+    idAperto.current = n.id;
     setApertaId(n.id);
     setTitolo(n.titolo ?? "");
     setTesto(n.testo);
@@ -1460,6 +1465,7 @@ function ModelloNote(p) {
   }
 
   function nuova() {
+    idAperto.current = "nuova";
     setApertaId("nuova");
     setTitolo("");
     setTesto("");
@@ -1480,28 +1486,37 @@ function ModelloNote(p) {
 
   async function salva() {
     if (!testo.trim() && !titolo.trim()) return;
-    const id = apertaId === "nuova" || !apertaId ? p.randomUUID() : apertaId;
-    const nuovo = apertaId === "nuova" || !apertaId;
-    await p.registra(
-      "note",
-      id,
-      nuovo ? "crea" : "aggiorna",
-      { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
-      async (d, hlc) => {
-        if (nuovo) {
-          await d.runAsync(
-            `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
-            [id, titolo || null, testo, pubblicabile ? 1 : 0, dataOra().toISOString(), hlc]
-          );
-        } else {
-          await d.runAsync(
-            `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
-            [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]
-          );
-        }
-      }
-    );
+    const corrente = idAperto.current;
+    const nuovo = corrente === "nuova" || !corrente;
+    const id = nuovo || !corrente ? p.randomUUID() : corrente;
+    idAperto.current = id;
+    const prima = salvato.current;
     salvato.current = { titolo, testo, pubblicabile };
+    try {
+      await p.registra(
+        "note",
+        id,
+        nuovo ? "crea" : "aggiorna",
+        { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
+        async (d, hlc) => {
+          if (nuovo) {
+            await d.runAsync(
+              `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
+              [id, titolo || null, testo, pubblicabile ? 1 : 0, dataOra().toISOString(), hlc]
+            );
+          } else {
+            await d.runAsync(
+              `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
+              [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]
+            );
+          }
+        }
+      );
+    } catch (e) {
+      salvato.current = prima;
+      if (nuovo) idAperto.current = corrente;
+      throw e;
+    }
     setApertaId(id);
     await ricarica();
   }
@@ -1601,7 +1616,10 @@ ok("F10 nessun riscontro visivo del salvataggio riuscito: nessun avviso", avvisi
 //       misura piu' un difetto ma la sua correzione (F11, F12);
 //   (b) secondo tocco sul pulsante del disegno PRECEDENTE, cioe' prima che
 //       React abbia mostrato il nuovo stato (setApertaId sta dopo l'await).
-//       Questo e' un difetto della SCHERMATA, non del registro, e resta (F12b).
+//       Era un difetto della SCHERMATA (F12b). Chiuso quando l'id della nota
+//       aperta e' passato in un ref fissato prima dell'await: il secondo
+//       salvataggio legge l'id del primo e diventa un 'aggiorna'. La stessa
+//       correzione fa di (a) UNA nota con 'crea' e 'aggiorna', non due note.
 await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
 await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Nota scritta con due dita."));
 const primaDelDoppio = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
@@ -1627,10 +1645,11 @@ for (const n of notaScrittaDueDita) {
 }
 corretto(
   "NOT-03b",
-  "F12 dopo il doppio tocco nessuna nota resta senza il suo evento: ogni riga scritta ha il suo 'crea' nel registro (invariante 1)",
-  dopoIlDoppio > primaDelDoppio &&
-    notaScrittaDueDita.length === dopoIlDoppio - primaDelDoppio &&
-    eventiDelleNoteDueDita.every((e) => e.length === 1 && e[0].tipo === "crea"),
+  "F12 il doppio tocco scrive UNA sola nota, con il suo 'crea' seguito da un 'aggiorna' nel registro (invariante 1, nessun doppione)",
+  dopoIlDoppio === primaDelDoppio + 1 &&
+    notaScrittaDueDita.length === 1 &&
+    eventiDelleNoteDueDita.length === 1 &&
+    eventiDelleNoteDueDita[0].map((e) => e.tipo).sort().join(",") === "aggiorna,crea",
   `note ${primaDelDoppio}->${dopoIlDoppio}, righe con quel testo ${notaScrittaDueDita.length}, eventi per riga: ${
     eventiDelleNoteDueDita.map((e) => e.length).join("/") || "nessuna riga"
   }`
@@ -1645,7 +1664,7 @@ await tocca(noteSchermata, () => salvaVecchio());
 await tocca(noteSchermata, () => salvaVecchio());
 const dopoIlTardivo = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
 const duplicate = await base.getAllAsync("SELECT id FROM note WHERE testo = 'Secondo tocco sul pulsante vecchio.'");
-difetto("NOT-03c", "F12b un secondo tocco sul pulsante del disegno precedente crea una SECONDA nota: apertaId e' ancora 'nuova' in quella chiusura", dopoIlTardivo === primaDelTardivo + 2 && duplicate.length === 2 && duplicate[0].id !== duplicate[1].id, `note ${primaDelTardivo}->${dopoIlTardivo}`);
+corretto("NOT-03c", "F12b un secondo tocco sul pulsante del disegno precedente NON crea una seconda nota: l'id si legge dal ref, non dallo stato ancora 'nuova'", dopoIlTardivo === primaDelTardivo + 1 && duplicate.length === 1, `note ${primaDelTardivo}->${dopoIlTardivo}`);
 
 // --- salvataggio di una nota ESISTENTE
 const notaEsistente = noteSchermata.schermo.elenco.voci.find((v) => v.titolo === "Kleppmann cap. 5");
