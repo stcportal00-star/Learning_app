@@ -457,6 +457,14 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   // componente).
   ok("S11 il «di N» di Oggi si conta con unitaConVerifiche() di lib/percorso.ts",
     sorgente("components/ProssimoPasso.tsx").includes("conVerifiche: unitaConVerifiche(unita),"));
+  // Un'unità di sola lettura ha posizione null, e null è un figlio valido per
+  // React: né tsc né il banco vedrebbero una cella vuota in Studio o
+  // «Unità  · T0» nell'intestazione.
+  ok("S12 Studio mette «·» al posto del numero che non c'è",
+    sorgente("app/(tabs)/studio.tsx").includes('{u.stato === "completa" ? "✓" : u.posizione ?? "·"}'));
+  ok("S12 l'intestazione dell'unità dice «Unità N» solo se il numero c'è",
+    sorgente("app/unita.tsx").includes('{u.posizione !== null ? `Unità ${u.posizione} · ` : ""}') &&
+    !/Unità \{u\.posizione\}/.test(sorgente("app/unita.tsx")));
 }
 
 console.log(`\nsimulazione percorso (lib/percorso.ts, lib/avanzamento.ts)`);
