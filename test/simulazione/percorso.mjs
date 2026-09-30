@@ -372,6 +372,12 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S9 Note salva anche alla perdita del fuoco e in background, non solo allo smontaggio",
     /useFocusEffect\(useCallback\(\(\) => \(\) => \{ void salvaUscendo\.current\(\); \}, \[\]\)\)/.test(note) &&
     /stato === "background"\) void salvaUscendo\.current\(\)/.test(note));
+  for (const [f, tetto] of [["app/esercizi.tsx", 220], ["app/codice.tsx", 300]]) {
+    const t = sorgente(f);
+    ok(`S9 ${f}: sul telefono il riquadro in alto non ha flex:1 dentro maxHeight ${tetto}`,
+      t.includes(`<View style={{ maxHeight: ${tetto} }}>`) &&
+      /affiancato \? \{ flex: 1[^}]*\} : \{ flexGrow: 0, flexShrink: 1/.test(t));
+  }
 }
 
 console.log(`\nsimulazione percorso (lib/percorso.ts, lib/avanzamento.ts)`);

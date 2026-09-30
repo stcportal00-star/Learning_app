@@ -97,8 +97,13 @@ export default function Esercizi() {
     );
   }
 
+  // Sul telefono la consegna sta in un contenitore con la sola altezza
+  // massima: con flex:1 la base è zero e il contenitore si stringeva al
+  // padding, 32 dp — si vedeva la riga dell'id e non la domanda. Senza flex
+  // prende l'altezza del testo, e oltre i 220 dp scorre. Affiancata (tablet)
+  // riempie la colonna come prima.
   const Consegna = (
-    <ScrollView style={{ flex: 1, padding: 16 }}>
+    <ScrollView style={affiancato ? { flex: 1, padding: 16 } : { flexGrow: 0, flexShrink: 1, padding: 16 }}>
       <Text style={{ fontSize: 12, opacity: 0.6, marginBottom: 4 }}>
         {corrente.id} · livello {corrente.livello} · {corrente.tema_slug}
         {corrente.ordine_rilevante === 1 ? " · l'ordine conta" : ""}

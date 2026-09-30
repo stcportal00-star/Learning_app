@@ -84,7 +84,9 @@ export default function Codice() {
   }
 
   const Codice = (
-    <ScrollView style={{ flex: 1 }} horizontal={false}>
+    // Stessa ragione della consegna in app/esercizi.tsx: con flex:1 dentro un
+    // contenitore che ha solo maxHeight, sul telefono il codice era alto zero.
+    <ScrollView style={affiancato ? { flex: 1 } : { flexGrow: 0, flexShrink: 1 }} horizontal={false}>
       <Text style={{ fontSize: 12, opacity: 0.6, padding: 12, paddingBottom: 4 }}>
         {e.id} · livello {e.livello} {extra.categoria && fase === "confronto" ? `· ${extra.categoria}` : ""}
       </Text>
