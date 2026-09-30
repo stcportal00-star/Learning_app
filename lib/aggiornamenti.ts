@@ -306,9 +306,26 @@ async function scarica(r: Release): Promise<{ uri?: string; errore?: string }> {
 /**
  * Consegna l'APK all'installatore di Android. «aperto» vuol dire che Android
  * ha preso il file: da lì in poi decide lui, e la prima volta chiede di
- * consentire le installazioni da Percorso.
+ * consentire le installazioni da Percorso. Se l'installazione riesce, Android
+ * chiude l'app e questa promessa non si risolve mai: quando si risolve,
+ * l'installatore si è chiuso senza installare.
+ *
+ * Un installatore alla volta. expo-intent-launcher tiene una sola attività in
+ * attesa e rifiuta la seconda (E_ACTIVITY_ALREADY_STARTED): con lo scarico
+ * condiviso, Oggi e Profilo arrivavano qui insieme, e il secondo riquadro
+ * diceva «Android non ha aperto l'installatore» mentre era aperto davanti.
+ * Il secondo chiamante aspetta lo stesso installatore e ne riceve l'esito.
  */
-export async function installa(uri: string): Promise<"aperto" | "mancante" | "errore"> {
+let installazioneInCorso: Promise<"aperto" | "mancante" | "errore"> | null = null;
+
+export function installa(uri: string): Promise<"aperto" | "mancante" | "errore"> {
+  if (installazioneInCorso) return installazioneInCorso;
+  const p = apriInstallatore(uri).finally(() => { installazioneInCorso = null; });
+  installazioneInCorso = p;
+  return p;
+}
+
+async function apriInstallatore(uri: string): Promise<"aperto" | "mancante" | "errore"> {
   const f = new File(uri);
   if (!f.exists) return "mancante";
   try {

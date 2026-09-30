@@ -291,6 +291,15 @@ ok("A7 e un uri che l'installatore può aprire",
   typeof chiamata?.parametri.data === "string" && chiamata.parametri.data.length > 0,
   JSON.stringify(chiamata?.parametri));
 uguale("A7 un file sparito non apre niente", await agg.installa(pronto.uri + ".no"), "mancante");
+
+// Due riquadri, un solo installatore: il secondo aspetta il primo e ne riceve
+// l'esito, invece del rifiuto che Android dà a una seconda attività in attesa.
+const primaDoppio = intent.giornale.length;
+const [i1, i2] = await Promise.all([agg.installa(pronto.uri), agg.installa(pronto.uri)]);
+uguale("A7 due tocchi insieme aprono un installatore solo, e dicono la stessa cosa",
+  [intent.giornale.length - primaDoppio, i1, i2], [1, "aperto", "aperto"]);
+uguale("A7 e chiuso quello, il successivo si apre di nuovo",
+  [await agg.installa(pronto.uri), intent.giornale.length - primaDoppio], ["aperto", 2]);
 intent.programmaNessunVisore();
 uguale("A7 un installatore che rifiuta si dice", await agg.installa(pronto.uri), "errore");
 
