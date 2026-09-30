@@ -295,7 +295,10 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
   a mano a `C.suPrimario`: è l'unico caso in cui il colore predefinito è
   sbagliato. Lo sfondo delle schermate lo danno `contentStyle` (pila) e
   `sceneStyle` (schede); quello della finestra, della barra di stato e dello
-  splash sta in `app.json`. `userInterfaceStyle: dark` resta inerte finché
+  splash sta in `app.json`. Lo splash ha bisogno di un'immagine
+  (`assets/avvio/splash.png`, trasparente): configurato senza, prebuild
+  cancella il logo predefinito ma lo stile continua a citarlo, e il build
+  muore al collegamento delle risorse. `userInterfaceStyle: dark` resta inerte finché
   `expo-system-ui` non è installato (prebuild lo dice): i dialoghi di sistema
   seguono il tema del telefono.
 - I commenti spiegano **perché**, non cosa. Se un commento descrive ciò che il

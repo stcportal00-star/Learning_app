@@ -40,7 +40,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#000000"
+          "backgroundColor": "#000000",
+          "image": "./assets/avvio/splash.png",
+          "imageWidth": 1
         }
       ],
       "./plugins/firma-release",
