@@ -333,7 +333,9 @@ materiale non è un'unità.
   con `navigate` o `push`. In expo-router 6 NAVIGATE riusa una schermata della
   pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
   SECONDO gruppo di schede, con un secondo editor delle note che può
-  sovrascrivere il primo. `dismissTo` torna alle schede che esistono già.
+  sovrascrivere il primo. `dismissTo` torna alle schede che esistono già. Il
+  prezzo, accettato: dopo «Svolgi in Note» l'indietro porta a Oggi, non
+  all'unità, che si riapre da Studio.
 - **Note tiene l'id della nota aperta in un ref** (`idAperto`), fissato prima
   dell'await di `salva()` insieme alla copia salvata. Note salva uscendo in
   tre modi — perdita del fuoco, background, smontaggio — oltre ai pulsanti,

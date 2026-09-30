@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { View, Pressable, ScrollView } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { registra } from "../lib/db";
 import {
@@ -25,8 +25,10 @@ const ETICHETTA_STATO: Record<UnitaPercorso["stato"], string> = {
  * questo prima di quello».
  *
  * Si rilegge a ogni ritorno in primo piano: si esce per fare un esercizio o
- * scrivere uno scenario, e al ritorno l'avanzamento deve essere già quello
- * nuovo, non quello di quando la schermata si era aperta.
+ * un ripasso, e al ritorno l'avanzamento deve essere già quello nuovo, non
+ * quello di quando la schermata si era aperta. Lo scenario e il volume da
+ * scaricare portano invece alle schede Note e Libreria, e l'unità si chiude
+ * (vedi apriScheda): da lì l'indietro va a Oggi, e l'unità si riapre da Studio.
  */
 export default function Unita() {
   const { tema } = useLocalSearchParams<{ tema: string }>();
@@ -36,6 +38,7 @@ export default function Unita() {
   const [volumi, setVolumi] = useState<VolumeDiUnita[]>([]);
   const [scenari, setScenari] = useState<ScenarioDiUnita[]>([]);
   const inCreazione = useRef(false);
+  const navigation = useNavigation();
 
   useFocusEffect(useCallback(() => {
     let vivo = true;
@@ -66,9 +69,15 @@ export default function Unita() {
    * se lo scenario è svolto. Se esiste già, si riapre quella: due note per
    * lo stesso scenario sarebbero due risposte a metà.
    *
-   * La guardia resta alzata dopo una creazione riuscita, fino al prossimo
-   * ritorno in primo piano: un secondo tocco mentre la schermata se ne va
-   * creerebbe una seconda nota.
+   * La guardia resta alzata dopo una creazione riuscita, finché la
+   * schermata non se ne va o torna in primo piano: un secondo tocco nel
+   * frattempo creerebbe una seconda nota.
+   *
+   * Mentre la scrittura è in coda (una sincronizzazione può tenerla ferma
+   * qualche secondo) si può già essere andati altrove, a un esercizio o
+   * indietro: dismissTo toglierebbe quella schermata, o verrebbe ignorato.
+   * La nota si apre solo se l'unità è ancora quella davanti; altrimenti lo
+   * scenario resta «iniziato» e la nota si riapre da qui.
    */
   async function svolgi(s: ScenarioDiUnita) {
     if (inCreazione.current) return;
@@ -91,7 +100,7 @@ export default function Unita() {
         });
       creata = true;
       setScenari((p) => p.map((x) => (x.id === s.id ? { ...x, notaId: id } : x)));
-      apriScheda(`/note?nota=${encodeURIComponent(id)}`);
+      if (navigation.isFocused()) apriScheda(`/note?nota=${encodeURIComponent(id)}`);
     } finally {
       if (!creata) inCreazione.current = false;
     }
