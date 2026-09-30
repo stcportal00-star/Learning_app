@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Pressable, FlatList, useWindowDimensions } from "react-native";
+import { View, Pressable, FlatList, useWindowDimensions, AppState } from "react-native";
 import * as Crypto from "expo-crypto";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { database, registra } from "../../lib/db";
 import { Text, TextInput } from "../../components/Base";
 import { C } from "../../lib/tema";
@@ -54,6 +54,9 @@ export default function Note() {
   useEffect(() => {
     if (!daAprire) return;
     (async () => {
+      // Un salvataggio partito alla perdita del fuoco può essere ancora in
+      // corso: esci() lo rifarebbe, e per una nota nuova sarebbe un doppione.
+      if (salvataggioInCorso.current) await salvataggioInCorso.current;
       await ricarica();
       const n = await database().getFirstAsync<Nota>("SELECT * FROM note WHERE id = ?", [String(daAprire)]);
       router.setParams({ nota: undefined } as never);
@@ -106,15 +109,36 @@ export default function Note() {
     await ricarica();
   }
 
-  // Cambio di scheda e tasto indietro di sistema smontano la schermata senza
-  // passare da nessun pulsante. Il salvataggio parte lo stesso: che nessuno
-  // ne veda più l'esito non lo ferma, perché registra() vive nel livello dati
-  // e la sua transazione è già in coda quando il componente non c'è più.
+  // Si esce dalla nota anche senza toccare un pulsante: la schermata si
+  // smonta, si cambia scheda, il tasto indietro porta a Oggi, l'app va in
+  // background. Le schede restano MONTATE quando si cambia scheda, quindi lo
+  // smontaggio da solo non basta: si salva anche quando Note perde il fuoco e
+  // quando l'app va in background, dove Android può chiuderla senza
+  // preavviso — e un'ora di risposta a uno scenario non si riscrive.
+  // Il salvataggio parte lo stesso anche se nessuno ne vedrà l'esito:
+  // registra() vive nel livello dati e la sua transazione è già in coda.
+  //
+  // Perdita del fuoco e smontaggio arrivano nello stesso istante quando la
+  // scheda se ne va: senza la guardia, due salva() della stessa nota nuova
+  // creerebbero due note con due id.
   const salvaUscendo = useRef<() => Promise<void>>(async () => {});
+  const salvataggioInCorso = useRef<Promise<void> | null>(null);
   useEffect(() => {
-    salvaUscendo.current = async () => { if (daSalvare()) await salva(); };
+    salvaUscendo.current = async () => {
+      if (salvataggioInCorso.current) return salvataggioInCorso.current;
+      if (!daSalvare()) return;
+      salvataggioInCorso.current = salva().finally(() => { salvataggioInCorso.current = null; });
+      return salvataggioInCorso.current;
+    };
   });
   useEffect(() => () => { void salvaUscendo.current(); }, []);
+  useFocusEffect(useCallback(() => () => { void salvaUscendo.current(); }, []));
+  useEffect(() => {
+    const ascolto = AppState.addEventListener("change", (stato) => {
+      if (stato === "background") void salvaUscendo.current();
+    });
+    return () => ascolto.remove();
+  }, []);
 
   const Elenco = (
     <View style={{ flex: 1 }}>

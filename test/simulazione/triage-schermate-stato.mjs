@@ -446,7 +446,13 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
 console.log("\nI. app/(tabs)/note.tsx");
 {
   ok("I1 NOT-03c setApertaId(id) sta dopo l'await", contiene("app/(tabs)/note.tsx", "setApertaId(id);\n    await ricarica();"));
-  ok("I2 NOT-03b/c salva() non ha nessuna guardia di riesecuzione", !/const \[inCorso|salvataggioInCorso|if \(inCorso\)/.test(sorgente("app/(tabs)/note.tsx")));
+  // La prova guarda il corpo di salva(): la guardia di salvaUscendo (uscita
+  // per perdita del fuoco e smontaggio nello stesso istante) non protegge il
+  // doppio tocco su Salva, che chiama salva() direttamente.
+  const corpoSalva = (sorgente("app/(tabs)/note.tsx").match(/async function salva\(\) \{[\s\S]*?\n  \}\n/) ?? [""])[0];
+  ok("I2 NOT-03b/c salva() non ha nessuna guardia di riesecuzione",
+    corpoSalva.includes("Crypto.randomUUID()") && !/inCorso|InCorso|guardia/.test(corpoSalva) &&
+    contiene("app/(tabs)/note.tsx", "onPress={salva}"));
   // NOT-07 corretto dopo questo triage: le tre vie di uscita passano tutte da
   // esci(), che salva se c'e' qualcosa da salvare. Le righe restano, con il
   // verso cambiato: erano la prova del difetto, ora sono la prova della

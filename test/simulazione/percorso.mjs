@@ -368,6 +368,10 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     unita.includes("router.dismissTo(") &&
     !/router\.(navigate|push)\(\s*[`"(]\/(note|libreria)/.test(unita) &&
     !/router\.navigate\(/.test(unita));
+  const note = sorgente("app/(tabs)/note.tsx");
+  ok("S9 Note salva anche alla perdita del fuoco e in background, non solo allo smontaggio",
+    /useFocusEffect\(useCallback\(\(\) => \(\) => \{ void salvaUscendo\.current\(\); \}, \[\]\)\)/.test(note) &&
+    /stato === "background"\) void salvaUscendo\.current\(\)/.test(note));
 }
 
 console.log(`\nsimulazione percorso (lib/percorso.ts, lib/avanzamento.ts)`);
