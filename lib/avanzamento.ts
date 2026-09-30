@@ -46,18 +46,29 @@ async function scenari(tema?: string): Promise<Array<ScenarioDiUnita & { tema: s
     `SELECT id, tema_slug AS tema, consegna, rubrica FROM esercizi
      WHERE tipo = 'rubrica'${tema ? " AND tema_slug = ?" : ""} ORDER BY id`,
     tema ? [tema] : []);
-  // La nota più recente per scenario: se per qualche ragione ne esistono due
-  // (due dispositivi che l'hanno aperta prima di sincronizzarsi), vale
-  // l'ultima scritta.
+  // Uno scenario può avere più di una nota: due dispositivi che l'hanno
+  // aperto prima di sincronizzarsi ne creano una ciascuno. Lo scenario è
+  // svolto se ALMENO UNA è stata scritta — una nota vuota nata dopo non
+  // cancella una risposta nata prima — e «Riapri la nota» porta a quella
+  // scritta più di recente. Più di recente vuol dire per HLC, che è l'ora
+  // dell'ultima modifica e ordina come testo; creato_a è solo la nascita.
   const note = await d.getAllAsync<{ id: string; origine_url: string; testo: string }>(
-    `SELECT id, origine_url, testo FROM note WHERE origine_url LIKE 'scenario:%' ORDER BY creato_a`);
-  const perScenario = new Map(note.map((n) => [n.origine_url.slice("scenario:".length), n]));
+    `SELECT id, origine_url, testo FROM note WHERE origine_url LIKE 'scenario:%' ORDER BY hlc`);
+  const perScenario = new Map<string, Array<{ id: string; testo: string }>>();
+  for (const n of note) {
+    const chiave = n.origine_url.slice("scenario:".length);
+    const elenco = perScenario.get(chiave) ?? [];
+    elenco.push(n);
+    perScenario.set(chiave, elenco);
+  }
   const nomi = new Map(TEMI.map(([slug, nome]) => [slug, nome]));
   return righe.map((r) => {
     const s: Scenario = { id: r.id, consegna: r.consegna, rubrica: parseRubrica(r.rubrica) };
-    const nota = perScenario.get(r.id);
     const modello = modelloScenario(s, nomi.get(r.tema ?? "") ?? r.tema ?? "");
-    return { ...s, tema: r.tema, notaId: nota?.id ?? null, svolto: nota ? scenarioSvolto(nota.testo, modello.testo) : false };
+    const tutte = perScenario.get(r.id) ?? [];
+    const scritte = tutte.filter((n) => scenarioSvolto(n.testo, modello.testo));
+    const scelta = scritte[scritte.length - 1] ?? tutte[tutte.length - 1];
+    return { ...s, tema: r.tema, notaId: scelta?.id ?? null, svolto: scritte.length > 0 };
   });
 }
 

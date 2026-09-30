@@ -287,6 +287,30 @@ uguale("S4 kpi ha 2 scenari, nessuno con una nota", scKpi.map((s) => s.notaId), 
   await d.runAsync("UPDATE note SET testo = ? WHERE id = 'nota-sc'", [m.testo + "Copertura: dosi / popolazione target."]);
   ok("S4 scritta la risposta, lo scenario è svolto", (await A.leggiScenari("kpi"))[0].svolto === true);
   uguale("S4 e conta nel passo", (await A.leggiMateriali()).kpi.scenariSvolti, 1);
+
+  // Due dispositivi aprono lo stesso scenario prima di sincronizzarsi: sul
+  // secondo nasce, DOPO, una nota rimasta il modello. Non deve cancellare la
+  // risposta scritta sul primo.
+  const nuova = (id, testo, hlc) => d.runAsync(
+    "INSERT INTO note (id, tema_slug, titolo, testo, pubblicabile, origine_url, creato_a, hlc) VALUES (?,?,?,?,0,?,?,?)",
+    [id, "kpi", m.titolo, testo, `scenario:${scKpi[0].id}`, adesso, hlc]);
+  await nuova("nota-sc-tablet", m.testo, "0000000000ff-0000-tablet");
+  const due = (await A.leggiScenari("kpi"))[0];
+  ok("S4b una nota vuota nata dopo non toglie lo svolto", due.svolto === true, JSON.stringify(due));
+  uguale("S4b e «Riapri la nota» porta alla risposta, non al modello", due.notaId, "nota-sc");
+  await nuova("nota-sc-seconda", m.testo + "Seconda stesura.", "000000000100-0000-tablet");
+  await nuova("nota-sc-prima", m.testo + "Prima stesura.", "000000000001-0000-telefono");
+  uguale("S4c fra due risposte vale la più recente per HLC, non l'ultima inserita",
+    (await A.leggiScenari("kpi"))[0].notaId, "nota-sc-seconda");
+  uguale("S4c e lo scenario conta una volta sola", (await A.leggiMateriali()).kpi.scenariSvolti, 1);
+  const m2 = P.modelloScenario(scKpi[1], "KPI e misurazione");
+  await d.runAsync(
+    "INSERT INTO note (id, tema_slug, titolo, testo, pubblicabile, origine_url, creato_a, hlc) VALUES (?,?,?,?,0,?,?,?), (?,?,?,?,0,?,?,?)",
+    ["m2-vecchia", "kpi", m2.titolo, m2.testo, `scenario:${scKpi[1].id}`, adesso, "000000000200-0000-a",
+     "m2-nuova", "kpi", m2.titolo, m2.testo, `scenario:${scKpi[1].id}`, adesso, "000000000300-0000-a"]);
+  const solo = (await A.leggiScenari("kpi"))[1];
+  ok("S4d con due note rimaste il modello: non svolto, e si riapre la più recente",
+    solo.svolto === false && solo.notaId === "m2-nuova", JSON.stringify(solo));
 }
 
 // --- volumi
