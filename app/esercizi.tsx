@@ -10,6 +10,7 @@ import { verifica, Esito } from "../lib/verifica";
 import * as Crypto from "expo-crypto";
 import { useLocalSearchParams } from "expo-router";
 import { useTastiera } from "../lib/useTastiera";
+import { tettoRiquadro } from "../lib/tetto";
 
 type Esercizio = {
   id: string; tema_slug: string; tipo: string; livello: number; consegna: string;
@@ -197,9 +198,9 @@ export default function Esercizi() {
   ) : (
     <View style={{ flex: 1 }}>
       {/* Il tetto segue la finestra (schermo diviso) e si stringe mentre si
-          scrive: la tastiera copre invece di restringere, e l'editor sotto
-          deve restare visibile. */}
-      <View style={{ maxHeight: tastiera ? 72 : Math.min(220, Math.round(height * 0.3)) }}>{Consegna}</View>
+          scrive, quanto basta a lasciare all'editor circa otto righe e il
+          pulsante: la tastiera copre invece di restringere. */}
+      <View style={{ maxHeight: tettoRiquadro(height, tastiera, 220, 0.3, 280) }}>{Consegna}</View>
       {Editor}
     </View>
   );

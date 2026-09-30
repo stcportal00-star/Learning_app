@@ -6,6 +6,7 @@ import { File, Paths } from "expo-file-system";
 import { database, registra } from "../lib/db";
 import { Text, TextInput } from "../components/Base";
 import { useTastiera } from "../lib/useTastiera";
+import { tettoRiquadro } from "../lib/tetto";
 import { C } from "../lib/tema";
 
 type Esercizio = {
@@ -102,8 +103,12 @@ export default function Codice() {
     </ScrollView>
   );
 
+  // "handled": con la tastiera aperta il primo tocco su «Mostra il test»
+  // la chiudeva soltanto, il riquadro del codice tornava alto e il pulsante
+  // scivolava giù sotto il dito — il secondo tocco andava a vuoto.
   const Pannello = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12 }}
+      keyboardShouldPersistTaps="handled">
       <View>
         <Text style={{ fontSize: 13, fontWeight: "600", marginBottom: 6 }}>
           1 · La tua ipotesi, prima di guardare oltre
@@ -198,8 +203,9 @@ export default function Codice() {
   ) : (
     <View style={{ flex: 1 }}>
       {/* Come in app/esercizi.tsx: il tetto segue la finestra e si stringe
-          mentre si scrive l'ipotesi, che altrimenti finisce sotto la tastiera. */}
-      <View style={{ maxHeight: tastiera ? 72 : Math.min(300, Math.round(height * 0.35)) }}>{Codice}</View>
+          mentre si scrive l'ipotesi, quanto basta a tenere visibili campo e
+          pulsante, che altrimenti finiscono sotto la tastiera. */}
+      <View style={{ maxHeight: tettoRiquadro(height, tastiera, 300, 0.35, 260) }}>{Codice}</View>
       {Pannello}
     </View>
   );

@@ -356,6 +356,18 @@ if (!conWindow) {
 
 uguale("S8 nessun tentativo di rete", reteTentata, []);
 
+// ============================================================ TETTO
+// Il riquadro in alto di Esercizi e Codice: a tastiera chiusa il tetto, a
+// tastiera aperta quanto resta al campo di scrittura, mai meno di due righe.
+{
+  const T = await import("../../lib/tetto.ts");
+  uguale("T1 tastiera chiusa, telefono alto: il tetto pieno", T.tettoRiquadro(800, 0, 220, 0.3, 280), 220);
+  uguale("T1 tastiera chiusa, schermo diviso: una frazione della finestra", T.tettoRiquadro(376, 0, 220, 0.3, 280), 113);
+  uguale("T2 tastiera aperta su un telefono alto: si stringe solo quanto serve", T.tettoRiquadro(851, 300, 220, 0.3, 280), 220);
+  uguale("T2 tastiera aperta su un telefono basso: resta lo spazio per l'editor", T.tettoRiquadro(700, 300, 220, 0.3, 280), 120);
+  uguale("T3 mai meno di 72 dp", T.tettoRiquadro(640, 308, 300, 0.35, 260), 72);
+}
+
 // ============================================================ SORGENTI
 // Tre difetti trovati in revisione che nessun banco può esercitare, perché
 // vivono nella navigazione e nell'impaginazione: qui si guarda che la forma
@@ -375,7 +387,7 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   for (const [f, tetto] of [["app/esercizi.tsx", 220], ["app/codice.tsx", 300]]) {
     const t = sorgente(f);
     ok(`S9 ${f}: sul telefono il riquadro in alto non ha flex:1 dentro il tetto di ${tetto} dp`,
-      t.includes(`maxHeight: tastiera ? 72 : Math.min(${tetto}, Math.round(height * `) &&
+      t.includes(`maxHeight: tettoRiquadro(height, tastiera, ${tetto}, `) &&
       /affiancato \? \{ flex: 1[^}]*\} : \{ flexGrow: 0, flexShrink: 1/.test(t));
   }
 }
