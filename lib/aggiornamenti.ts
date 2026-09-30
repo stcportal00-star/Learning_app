@@ -44,8 +44,11 @@ import { File, Directory, Paths } from "expo-file-system";
 import * as IntentLauncher from "expo-intent-launcher";
 import AsyncStorageLike from "expo-sqlite/kv-store";
 
+// Cento, il massimo di una pagina. Ogni push di un ramo pubblica una release
+// preliminare, e con trenta bastavano trenta build di ramo senza un merge per
+// spingere l'ultima di main fuori dalla pagina.
 export const ELENCO_RELEASE =
-  "https://api.github.com/repos/stcportal00-star/Learning_app/releases?per_page=30";
+  "https://api.github.com/repos/stcportal00-star/Learning_app/releases?per_page=100";
 
 /** Sei ore: quattro controlli al giorno bastano per una build che esce di rado. */
 export const OGNI_MS = 6 * 3600 * 1000;
@@ -171,8 +174,16 @@ export async function controlla(
   opzioni: { forza?: boolean; adesso?: number; tempoMaxMs?: number } = {}
 ): Promise<Stato> {
   const adesso = opzioni.adesso ?? Date.now();
+  // La pulizia non ha bisogno della rete: basta sapere quale build gira. Farla
+  // solo dopo un controllo riuscito lasciava l'APK appena installato nella
+  // cache per settimane, se il viaggio cominciava subito dopo.
+  liberaScaricati(corsaAttuale);
   const precedente = await ultimoControllo();
-  if (!opzioni.forza && precedente?.ultima && adesso - precedente.quando < OGNI_MS) {
+  // Un intervallo negativo è un orologio che è stato avanti e poi è tornato
+  // indietro (un fuso sbagliato, un'impostazione a mano): vale come scaduto,
+  // altrimenti il freno terrebbe fermi i controlli fino a quella data futura.
+  const trascorso = precedente ? adesso - precedente.quando : -1;
+  if (!opzioni.forza && precedente?.ultima && trascorso >= 0 && trascorso < OGNI_MS) {
     return confronta(corsaAttuale, precedente);
   }
 
@@ -185,10 +196,12 @@ export async function controlla(
       signal: interrompi.signal,
     });
     if (r.ok) {
-      const ultima = ultimaRelease(await r.json());
+      // Una risposta buona senza nessuna build di main (tutte preliminari, o
+      // release cancellate) non è una notizia sull'ultima build: non deve
+      // cancellare quella nota. Si rinnova solo l'ora, così il freno resta.
+      const ultima = ultimaRelease(await r.json()) ?? precedente?.ultima ?? null;
       const c: Controllo = { quando: adesso, ultima };
       await AsyncStorageLike.setItem(CHIAVE, JSON.stringify(c));
-      liberaScaricati(corsaAttuale);
       return confronta(corsaAttuale, c);
     }
     // 403 con il contatore a zero è il limite orario, non un divieto: si dice

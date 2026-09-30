@@ -184,6 +184,26 @@ const primaDelGuasto = chiamate;
 await agg.controlla("27", { adesso: scaduto + 5 });
 uguale("A5 e il tentativo dopo non aspetta sei ore", chiamate, primaDelGuasto + 1);
 
+// Una risposta buona senza build di main non è una notizia: trenta build di
+// ramo di fila, o le release apk-* cancellate a mano. Il ricordo resta, e con
+// lui il freno delle sei ore.
+rispostaRete = { stato: 200, corpo: Array.from({ length: 30 }, (_, i) => release(40 + i, { prerelease: true })) };
+const soloRami = scaduto + agg.OGNI_MS;
+s = await agg.controlla("27", { adesso: soloRami });
+uguale("A5 una pagina di sole build di ramo non fa dimenticare la 28",
+  [s.tipo, s.tipo !== "ignoto" && s.ultima.corsa, (await agg.statoNoto("27")).tipo], ["disponibile", 28, "disponibile"]);
+const primaDelFreno = chiamate;
+await agg.controlla("27", { adesso: soloRami + 1000 });
+uguale("A5 e il freno delle sei ore resta", chiamate, primaDelFreno);
+ok("A5 e si chiede la pagina più lunga che GitHub concede", /per_page=100\b/.test(agg.ELENCO_RELEASE), agg.ELENCO_RELEASE);
+
+// Un orologio che era avanti e poi è tornato giusto: l'ultimo controllo sta nel
+// futuro. Vale come scaduto, altrimenti niente controlli fino a quella data.
+rispostaRete = { stato: 200, corpo: ELENCO };
+const primaDelFuturo = chiamate;
+await agg.controlla("27", { adesso: soloRami - 3 * 24 * 3600 * 1000 });
+uguale("A5 un controllo datato nel futuro non ferma quelli di oggi", chiamate, primaDelFuturo + 1);
+
 await azzera();
 rispostaRete = "guasto";
 s = await agg.controlla("27");
@@ -253,6 +273,12 @@ uguale("A8 una build locale non cancella niente", agg.liberaScaricati(null), 0);
 uguale("A8 la build 27 cancella la 26 e sé stessa, non la 28", agg.liberaScaricati("27"), 2);
 uguale("A8 resta solo la 28",
   agg.cartellaAggiornamenti().list().map((f) => f.name).sort(), ["percorso-28.apk"]);
+// Installata la 28 all'aeroporto, e poi niente rete per settimane: la pulizia
+// non deve aspettare un controllo riuscito, le basta sapere quale build gira.
+rispostaRete = "guasto";
+await agg.controlla("28");
+uguale("A8 dopo l'installazione l'APK si cancella anche senza rete",
+  agg.cartellaAggiornamenti().list().map((f) => f.name), []);
 
 uguale("A9 i megabyte si dicono tondi", [agg.megabyte(58085325), agg.megabyte(0)],
   ["58 MB", "dimensione sconosciuta"]);
