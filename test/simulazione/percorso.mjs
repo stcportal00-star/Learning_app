@@ -129,7 +129,9 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
 // --- la numerazione: le unità di sola lettura non hanno numero
 // La mattina dopo la conduttura porta articoli a un tema che non aveva niente
 // e un volume a un tema fra due unità: i numeri delle unità con verifiche non
-// si muovono, e l'ultimo resta il «di N» di Oggi.
+// si muovono, e l'ultimo resta il «di N» di Oggi. Le unità numerate sono una
+// superata, una in corso e una da iniziare: il numero dipende dall'avere
+// verifiche, non da quanto se n'è fatto.
 {
   const temi = [
     { slug: "vuoto", nome: "Vuoto", trimestre: "T0" },
@@ -139,7 +141,7 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     { slug: "c", nome: "C", trimestre: "T2" },
   ];
   const ordine = temi.map((t) => t.slug);
-  const prima = { a: M({ esercizi: 3 }), b: M({ schede: 2 }), c: M({ scenari: 1 }) };
+  const prima = { a: M({ esercizi: 3, risolti: 3 }), b: M({ schede: 2, schedeSapute: 1 }), c: M({ scenari: 1 }) };
   const dopo = { ...prima, vuoto: M({ articoliDaLeggere: 3 }), lett: M({ volumi: 1, volumiSulTelefono: 1 }) };
   const numeri = (u) => Object.fromEntries(u.map((x) => [x.tema.slug, x.posizione]));
   const uPrima = P.costruisciPercorso(temi, prima, ordine);
@@ -147,8 +149,8 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
   uguale("P4b prima: tre unità, numerate 1, 2, 3", numeri(uPrima), { a: 1, b: 2, c: 3 });
   uguale("P4b dopo: le unità di sola lettura ci sono, al loro posto, senza numero",
     uDopo.map((x) => [x.tema.slug, x.stato, x.posizione]),
-    [["vuoto", "senza_verifiche", null], ["a", "da_iniziare", 1], ["lett", "senza_verifiche", null],
-     ["b", "da_iniziare", 2], ["c", "da_iniziare", 3]]);
+    [["vuoto", "senza_verifiche", null], ["a", "completa", 1], ["lett", "senza_verifiche", null],
+     ["b", "in_corso", 2], ["c", "da_iniziare", 3]]);
   const numerate = uDopo.filter((x) => x.posizione !== null);
   uguale("P4b i numeri delle unità con verifiche non si spostano",
     Object.fromEntries(numerate.map((x) => [x.tema.slug, x.posizione])), numeri(uPrima));
@@ -156,7 +158,7 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     numerate.map((x) => x.posizione),
     Array.from({ length: P.unitaConVerifiche(uDopo) }, (_, i) => i + 1));
   const ind = P.prossimoPasso(uDopo);
-  uguale("P4b il prossimo passo cade sempre su un'unità con un numero", ind && ind.unita.posizione, 1);
+  uguale("P4b il prossimo passo cade sempre su un'unità con un numero", ind && [ind.unita.tema.slug, ind.unita.posizione], ["b", 2]);
 }
 
 // --- il prossimo passo
