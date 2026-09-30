@@ -126,6 +126,39 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     u.map((x) => x.posizione), [1, 2, 3, 4, 5]);
 }
 
+// --- la numerazione: le unità di sola lettura non hanno numero
+// La mattina dopo la conduttura porta articoli a un tema che non aveva niente
+// e un volume a un tema fra due unità: i numeri delle unità con verifiche non
+// si muovono, e l'ultimo resta il «di N» di Oggi.
+{
+  const temi = [
+    { slug: "vuoto", nome: "Vuoto", trimestre: "T0" },
+    { slug: "a", nome: "A", trimestre: "T1" },
+    { slug: "lett", nome: "Lett", trimestre: "T1" },
+    { slug: "b", nome: "B", trimestre: "T1" },
+    { slug: "c", nome: "C", trimestre: "T2" },
+  ];
+  const ordine = temi.map((t) => t.slug);
+  const prima = { a: M({ esercizi: 3 }), b: M({ schede: 2 }), c: M({ scenari: 1 }) };
+  const dopo = { ...prima, vuoto: M({ articoliDaLeggere: 3 }), lett: M({ volumi: 1, volumiSulTelefono: 1 }) };
+  const numeri = (u) => Object.fromEntries(u.map((x) => [x.tema.slug, x.posizione]));
+  const uPrima = P.costruisciPercorso(temi, prima, ordine);
+  const uDopo = P.costruisciPercorso(temi, dopo, ordine);
+  uguale("P4b prima: tre unità, numerate 1, 2, 3", numeri(uPrima), { a: 1, b: 2, c: 3 });
+  uguale("P4b dopo: le unità di sola lettura ci sono, al loro posto, senza numero",
+    uDopo.map((x) => [x.tema.slug, x.stato, x.posizione]),
+    [["vuoto", "senza_verifiche", null], ["a", "da_iniziare", 1], ["lett", "senza_verifiche", null],
+     ["b", "da_iniziare", 2], ["c", "da_iniziare", 3]]);
+  const numerate = uDopo.filter((x) => x.posizione !== null);
+  uguale("P4b i numeri delle unità con verifiche non si spostano",
+    Object.fromEntries(numerate.map((x) => [x.tema.slug, x.posizione])), numeri(uPrima));
+  uguale("P4b numerate sono esattamente le unità con verifiche, e il numero più alto è il loro conto",
+    numerate.map((x) => x.posizione),
+    uDopo.filter((x) => x.stato !== "senza_verifiche").map((_, i) => i + 1));
+  const ind = P.prossimoPasso(uDopo);
+  uguale("P4b il prossimo passo cade sempre su un'unità con un numero", ind && ind.unita.posizione, 1);
+}
+
 // --- il prossimo passo
 {
   const temi = [
@@ -335,6 +368,33 @@ await d.runAsync(
   const g = perSlug(await A.leggiPercorso()).gdpr;
   const r = g.passi.find((p) => p.tipo === "rassegna");
   uguale("S6 la rassegna del tema conta solo i non letti", r && r.totale, 1);
+}
+
+// --- la numerazione sui contenuti veri
+// Ciò che si è visto sul telefono con la 38: la prima mattina la conduttura
+// porta un articolo e un volume a «gestione» (T0), che fino a lì non aveva
+// materiale, e SQL — fondamenti passava da «unità 1» a «unità 2».
+{
+  const numeriDi = (u) => Object.fromEntries(u.filter((x) => x.posizione !== null).map((x) => [x.tema.slug, x.posizione]));
+  const prima = await A.leggiPercorso();
+  await d.runAsync(
+    "INSERT INTO articoli (id, titolo, tema_slug, raccolto_a, letto) VALUES ('a-gest','Tre','gestione',?,0)", [adesso]);
+  await d.runAsync(
+    "INSERT INTO biblioteca (id, titolo, tema_slug, trimestre, aggiunto_a) VALUES ('v-gest','Un manuale','gestione','T0',?)",
+    [adesso]);
+  const dopo = await A.leggiPercorso();
+  const g = perSlug(dopo).gestione;
+  ok("S10 «gestione» adesso è un'unità di sola lettura, la prima dell'elenco, senza numero",
+    g && g.stato === "senza_verifiche" && dopo[0] === g && g.posizione === null);
+  uguale("S10 sql_base resta l'unità 1", perSlug(dopo).sql_base.posizione, 1);
+  uguale("S10 nessuna unità con verifiche cambia numero", numeriDi(dopo), numeriDi(prima));
+  const conVerifiche = dopo.filter((x) => x.stato !== "senza_verifiche").length;
+  uguale("S10 i numeri vanno da 1 al «di N» di Oggi, senza buchi",
+    dopo.filter((x) => x.posizione !== null).map((x) => x.posizione),
+    Array.from({ length: conVerifiche }, (_, i) => i + 1));
+  uguale("S10 le unità di sola lettura sono tutte e sole quelle senza numero",
+    dopo.filter((x) => x.posizione === null).map((x) => x.tema.slug),
+    dopo.filter((x) => x.stato === "senza_verifiche").map((x) => x.tema.slug));
 }
 
 // --- window functions

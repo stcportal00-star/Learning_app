@@ -142,7 +142,7 @@ export default function Unita() {
         <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Indietro</Text>
       </Pressable>
       <Text style={{ fontSize: 12, opacity: 0.6 }}>
-        Unità {u.posizione}{u.tema.trimestre ? ` · ${u.tema.trimestre}` : ""} · {ETICHETTA_STATO[u.stato]}
+        {u.posizione !== null ? `Unità ${u.posizione} · ` : ""}{u.tema.trimestre ? `${u.tema.trimestre} · ` : ""}{ETICHETTA_STATO[u.stato]}
       </Text>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>{u.tema.nome}</Text>
       <View style={{ height: 6, borderRadius: 3, backgroundColor: C.superficieAlta, overflow: "hidden" }}>
