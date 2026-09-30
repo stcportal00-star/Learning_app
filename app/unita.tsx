@@ -4,8 +4,9 @@ import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "exp
 import * as Crypto from "expo-crypto";
 import { registra } from "../lib/db";
 import {
-  Unita as UnitaPercorso, Passo, descriviPasso, destinazione, modelloScenario,
+  Unita as UnitaPercorso, Passo, Progetto, descriviPasso, destinazione, modelloScenario, progetti,
 } from "../lib/percorso";
+import { leggiSeguiti, segui, smettiDiSeguire } from "../lib/progetti";
 import {
   leggiPercorso, leggiScenari, leggiVolumi, volumeDaAprire, ScenarioDiUnita, VolumeDiUnita,
 } from "../lib/avanzamento";
@@ -37,6 +38,9 @@ export default function Unita() {
   const [trovata, setTrovata] = useState(true);
   const [volumi, setVolumi] = useState<VolumeDiUnita[]>([]);
   const [scenari, setScenari] = useState<ScenarioDiUnita[]>([]);
+  const [seguiti, setSeguiti] = useState<string[]>([]);
+  const [tuttiProgetti, setTuttiProgetti] = useState<Progetto[]>([]);
+  const [versione, setVersione] = useState(0);
   const inCreazione = useRef(false);
   const navigation = useNavigation();
 
@@ -44,13 +48,20 @@ export default function Unita() {
     let vivo = true;
     inCreazione.current = false;
     (async () => {
-      const [tutte, v, s] = await Promise.all([leggiPercorso(), leggiVolumi(slug), leggiScenari(slug)]);
+      const [tutte, v, s, seg] = await Promise.all([
+        leggiPercorso(), leggiVolumi(slug), leggiScenari(slug), leggiSeguiti()]);
       if (!vivo) return;
       const x = tutte.find((t) => t.tema.slug === slug) ?? null;
       setU(x); setTrovata(Boolean(x)); setVolumi(v); setScenari(s);
+      setSeguiti(seg); setTuttiProgetti(progetti(tutte, seg));
     })();
     return () => { vivo = false; };
-  }, [slug]));
+  }, [slug, versione]));
+
+  async function cambiaSeguito(azione: () => Promise<unknown>) {
+    await azione();
+    setVersione((n) => n + 1);
+  }
 
   /**
    * Note e Libreria sono SCHEDE, e questa schermata sta sopra di loro nella
@@ -131,6 +142,43 @@ export default function Unita() {
     </Text>
   );
 
+  // Il progetto che lavora qui, e quello nato da questo tema se ormai lavora
+  // altrove (il tema è superato e si è passati al successivo dell'area).
+  const progettoQui = tuttiProgetti.find((p) => p.passo && p.unita.tema.slug === slug) ?? null;
+  const natoQui = seguiti.includes(slug)
+    ? tuttiProgetti.find((p) => p.seguito === slug) ?? null : null;
+  const Seguito = u.stato === "senza_verifiche" ? null : progettoQui ? (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <Text style={{ fontSize: 13, color: C.blu, flex: 1, lineHeight: 18 }}>
+        {progettoQui.subentrata ? "Progetto: qui si continua dopo il tema che avevi scelto." : "Lo stai seguendo: è uno dei tuoi progetti."}
+      </Text>
+      <Pressable onPress={() => { void cambiaSeguito(() => smettiDiSeguire(progettoQui.seguito)); }}
+        style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: C.superficieAlta }}>
+        <Text style={{ fontSize: 13, fontWeight: "600" }}>Smetti di seguire</Text>
+      </Pressable>
+    </View>
+  ) : natoQui ? (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <Text style={{ fontSize: 13, color: C.verde, flex: 1, lineHeight: 18 }}>
+        {natoQui.passo ? `Superato: il progetto continua con «${natoQui.unita.tema.nome}».` : "Superato, e con lui tutta l'area."}
+      </Text>
+      <Pressable onPress={() => { void cambiaSeguito(() => smettiDiSeguire(slug)); }}
+        style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: C.superficieAlta }}>
+        <Text style={{ fontSize: 13, fontWeight: "600" }}>Smetti di seguire</Text>
+      </Pressable>
+    </View>
+  ) : u.stato !== "completa" ? (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <Text style={{ fontSize: 13, opacity: 0.65, flex: 1, lineHeight: 18 }}>
+        Seguilo per portarlo avanti insieme agli altri, fuori dall'ordine del piano.
+      </Text>
+      <Pressable onPress={() => { void cambiaSeguito(() => segui(slug)); }}
+        style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 9, backgroundColor: C.primario }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: C.suPrimario }}>Segui</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
   const vaiA = (p: Passo) => {
     const d = destinazione(slug, p, volumeDaAprire(volumi));
     if (d === "/libreria") apriScheda(d); else router.push(d as never);
@@ -145,6 +193,7 @@ export default function Unita() {
         {u.posizione !== null ? `Unità ${u.posizione} · ` : ""}{u.tema.trimestre ? `${u.tema.trimestre} · ` : ""}{ETICHETTA_STATO[u.stato]}
       </Text>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>{u.tema.nome}</Text>
+      {Seguito}
       <View style={{ height: 6, borderRadius: 3, backgroundColor: C.superficieAlta, overflow: "hidden" }}>
         <View style={{ width: `${Math.round(u.avanzamento * 100)}%`, height: 6,
                        backgroundColor: u.stato === "completa" ? C.verde : C.blu }} />

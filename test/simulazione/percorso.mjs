@@ -216,6 +216,54 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
   }
 }
 
+// --- i progetti in parallelo
+// Temi scelti fuori dall'ordine del piano; superato uno, il successivo della
+// stessa area; mai due progetti sulla stessa unità.
+{
+  const temi = [
+    { slug: "lett", nome: "Lett", trimestre: "T0", pista: "gestione" },
+    { slug: "d1", nome: "D1", trimestre: "T1", pista: "dati" },
+    { slug: "d2", nome: "D2", trimestre: "T1", pista: "dati" },
+    { slug: "i", nome: "I", trimestre: "T3", pista: "ia" },
+    { slug: "d3", nome: "D3", trimestre: "T4", pista: "dati" },
+    { slug: "h", nome: "H", trimestre: "T5", pista: "hardware" },
+    { slug: "orfano", nome: "Orfano", trimestre: "T5" },
+  ];
+  const ordine = temi.map((t) => t.slug);
+  const fatto = M({ esercizi: 2, risolti: 2 });
+  const aperto = M({ esercizi: 2 });
+  const base = { lett: M({ articoliDaLeggere: 2 }), d1: aperto, d2: aperto, i: aperto, d3: aperto, h: aperto, orfano: aperto };
+  const pr = (mat, seguiti) => P.progetti(P.costruisciPercorso(temi, { ...base, ...mat }, ordine), seguiti)
+    .map((x) => [x.seguito, x.unita.tema.slug, x.passo && x.passo.tipo, x.subentrata]);
+
+  uguale("P8 nessun tema seguito, nessun progetto", pr({}, []), []);
+  uguale("P8 l'hardware prima di SQL: i progetti stanno nell'ordine in cui si sono scelti, non in quello del piano",
+    pr({}, ["h", "d1"]), [["h", "h", "esercizi", false], ["d1", "d1", "esercizi", false]]);
+  uguale("P8 superato il tema scelto, subentra il successivo della stessa area",
+    pr({ d1: fatto }, ["d1"]), [["d1", "d2", "esercizi", true]]);
+  uguale("P8 il successivo salta le unità già di un altro progetto (join e aggregazione, non due volte join)",
+    pr({ d1: fatto }, ["d1", "d2"]), [["d1", "d3", "esercizi", true], ["d2", "d2", "esercizi", false]]);
+  uguale("P8 dopo l'ultimo dell'area si torna al primo rimasto indietro",
+    pr({ d3: fatto }, ["d3"]), [["d3", "d1", "esercizi", true]]);
+  uguale("P8 area tutta superata: il progetto resta, senza passo",
+    pr({ d1: fatto, d2: fatto, d3: fatto }, ["d2"]), [["d2", "d2", null, false]]);
+  uguale("P8 un tema senza area, superato, non ha un seguito",
+    pr({ orfano: fatto }, ["orfano"]), [["orfano", "orfano", null, false]]);
+  uguale("P8 temi di sola lettura, sconosciuti o ripetuti non fanno progetti",
+    pr({}, ["lett", "zzz", "i", "i"]), [["i", "i", "esercizi", false]]);
+  uguale("P8 senza progetti il piano resta quello di prima",
+    P.prossimoPasso(P.costruisciPercorso(temi, base, ordine)).unita.tema.slug, "d1");
+}
+
+{
+  const S = await import("../../lib/progetti.ts");
+  uguale("P9 niente di salvato: nessun tema seguito", S.elencoSeguiti(null), []);
+  uguale("P9 un valore illeggibile vale nessun tema seguito", S.elencoSeguiti("{rotto"), []);
+  uguale("P9 un oggetto al posto dell'elenco, idem", S.elencoSeguiti('{"a":1}'), []);
+  uguale("P9 si tengono le stringhe non vuote, una volta sola, nell'ordine",
+    S.elencoSeguiti('["h","h",3,"","d1"]'), ["h", "d1"]);
+}
+
 // --- gli scenari
 {
   const s = { id: "SC-1", consegna: "Progetta un indicatore.", rubrica: ["Definizione chiara", "Fonte del dato"] };
@@ -416,6 +464,23 @@ if (!conWindow) {
     u.sql_window && u.sql_window.passi.find((p) => p.tipo === "esercizi").totale, 23);
 }
 
+// --- i progetti sui contenuti veri, con il kv-store del banco
+{
+  const S = await import("../../lib/progetti.ts");
+  uguale("S13 all'inizio nessun tema seguito", await S.leggiSeguiti(), []);
+  await Promise.all([S.segui("hardware"), S.segui("ia"), S.segui("hardware")]);
+  uguale("S13 tre tocchi ravvicinati: nessuno si perde, nessuno si ripete", await S.leggiSeguiti(), ["hardware", "ia"]);
+  const u = await A.leggiPercorso();
+  const pr = P.progetti(u, await S.leggiSeguiti());
+  uguale("S13 due progetti fuori dall'ordine del piano: hardware (T5) e IA (T3), nessuno dei due è SQL",
+    pr.map((x) => [x.unita.tema.slug, x.passo !== null, x.subentrata]), [["hardware", true, false], ["ia", true, false]]);
+  ok("S13 le unità dei progetti portano l'area, che serve a trovare il seguito",
+    pr.every((x) => x.unita.tema.pista === (x.unita.tema.slug === "ia" ? "ia" : "hardware")));
+  await S.smettiDiSeguire("hardware");
+  uguale("S13 smettere toglie solo quel tema", await S.leggiSeguiti(), ["ia"]);
+  await S.smettiDiSeguire("ia");
+}
+
 uguale("S8 nessun tentativo di rete", reteTentata, []);
 
 // ============================================================ TETTO
@@ -465,6 +530,15 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S12 l'intestazione dell'unità dice «Unità N» solo se il numero c'è",
     sorgente("app/unita.tsx").includes('{u.posizione !== null ? `Unità ${u.posizione} · ` : ""}') &&
     !/Unità \{u\.posizione\}/.test(sorgente("app/unita.tsx")));
+  // I progetti vivono in tre schermate che il banco non disegna.
+  const pp = sorgente("components/ProssimoPasso.tsx");
+  ok("S14 Oggi e Studio mostrano un riquadro per progetto, e il piano quando non ce n'è",
+    pp.includes("const tutti = progetti(unita, seguiti);") && pp.includes("const piano = prossimoPassoDi(unita);"));
+  ok("S14 Studio evidenzia le unità dei progetti, non solo quella del piano",
+    sorgente("app/(tabs)/studio.tsx").includes("const attivi = progetti(unita, seguiti).filter((p) => p.passo)"));
+  const un = sorgente("app/unita.tsx");
+  ok("S14 dall'unità si segue e si smette di seguire",
+    un.includes("cambiaSeguito(() => segui(slug))") && un.includes("cambiaSeguito(() => smettiDiSeguire(progettoQui.seguito))"));
 }
 
 console.log(`\nsimulazione percorso (lib/percorso.ts, lib/avanzamento.ts)`);
