@@ -173,6 +173,15 @@ export function costruisciPercorso(
   return unita;
 }
 
+/**
+ * Il «di N» di Oggi. Sta qui, accanto alla numerazione, e non nella
+ * schermata: quando le due cose si contavano in due posti diversi, il numero
+ * di un'unità è arrivato a superare N.
+ */
+export function unitaConVerifiche(unita: Unita[]): number {
+  return unita.filter((u) => u.stato !== "senza_verifiche").length;
+}
+
 export type Indicazione = { unita: Unita; passo: Passo };
 
 /**

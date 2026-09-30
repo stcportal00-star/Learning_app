@@ -154,7 +154,7 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     Object.fromEntries(numerate.map((x) => [x.tema.slug, x.posizione])), numeri(uPrima));
   uguale("P4b numerate sono esattamente le unità con verifiche, e il numero più alto è il loro conto",
     numerate.map((x) => x.posizione),
-    uDopo.filter((x) => x.stato !== "senza_verifiche").map((_, i) => i + 1));
+    Array.from({ length: P.unitaConVerifiche(uDopo) }, (_, i) => i + 1));
   const ind = P.prossimoPasso(uDopo);
   uguale("P4b il prossimo passo cade sempre su un'unità con un numero", ind && ind.unita.posizione, 1);
 }
@@ -388,7 +388,7 @@ await d.runAsync(
     g && g.stato === "senza_verifiche" && dopo[0] === g && g.posizione === null);
   uguale("S10 sql_base resta l'unità 1", perSlug(dopo).sql_base.posizione, 1);
   uguale("S10 nessuna unità con verifiche cambia numero", numeriDi(dopo), numeriDi(prima));
-  const conVerifiche = dopo.filter((x) => x.stato !== "senza_verifiche").length;
+  const conVerifiche = P.unitaConVerifiche(dopo);
   uguale("S10 i numeri vanno da 1 al «di N» di Oggi, senza buchi",
     dopo.filter((x) => x.posizione !== null).map((x) => x.posizione),
     Array.from({ length: conVerifiche }, (_, i) => i + 1));
@@ -450,6 +450,11 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
       t.includes(`maxHeight: tettoRiquadro(height, tastiera, ${tetto}, `) &&
       /affiancato \? \{ flex: 1[^}]*\} : \{ flexGrow: 0, flexShrink: 1/.test(t));
   }
+  // Il «di N» e i numeri delle unità vengono da lib/percorso.ts: contati
+  // nella schermata, divergevano (P4b e S10 provano la funzione, non il
+  // componente).
+  ok("S11 il «di N» di Oggi si conta con unitaConVerifiche() di lib/percorso.ts",
+    sorgente("components/ProssimoPasso.tsx").includes("conVerifiche: unitaConVerifiche(unita),"));
 }
 
 console.log(`\nsimulazione percorso (lib/percorso.ts, lib/avanzamento.ts)`);

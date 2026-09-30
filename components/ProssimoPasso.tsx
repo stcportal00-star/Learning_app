@@ -3,7 +3,9 @@ import { View, Pressable } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { leggiPercorso, leggiVolumi, volumeDaAprire } from "../lib/avanzamento";
 // Rinominata: il componente si chiama come la funzione.
-import { Indicazione, descriviPasso, destinazione, prossimoPasso as prossimoPassoDi } from "../lib/percorso";
+import {
+  Indicazione, descriviPasso, destinazione, prossimoPasso as prossimoPassoDi, unitaConVerifiche,
+} from "../lib/percorso";
 import { Text } from "./Base";
 import { C } from "../lib/tema";
 
@@ -33,7 +35,7 @@ export default function ProssimoPasso() {
         setS({
           indicazione, volume,
           superate: unita.filter((u) => u.stato === "completa").length,
-          conVerifiche: unita.filter((u) => u.stato !== "senza_verifiche").length,
+          conVerifiche: unitaConVerifiche(unita),
         });
       }
     })();
