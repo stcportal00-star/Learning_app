@@ -29,7 +29,7 @@ export default function Schede() {
         tabBarInactiveTintColor: C.testoTenue,
         // Sul tablet la scheda attiva ha uno sfondo, e il predefinito è il blu
         // pieno di React Navigation.
-        tabBarActiveBackgroundColor: C.superficieAlta,
+        tabBarActiveBackgroundColor: tablet ? C.superficieAlta : undefined,
       }}
     >
       <Tabs.Screen name="oggi" options={{ title: "Oggi" }} />
