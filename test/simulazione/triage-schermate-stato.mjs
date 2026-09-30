@@ -382,7 +382,15 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
   ok("H1 OGG-05 l'effetto di Oggi dipende solo da [versione]", contiene("app/(tabs)/oggi.tsx", "}, [versione]);"));
   ok("H2 OGG-05 l'effetto di Studio non ha dipendenze", contiene("app/(tabs)/studio.tsx", "}, []);"));
   ok("H3 PRF-02 l'effetto del Profilo non ha dipendenze", contiene("app/(tabs)/profilo.tsx", "}, []);"));
-  ok("H4 OGG-05 nessuna schermata usa useFocusEffect", !["app/(tabs)/oggi.tsx", "app/(tabs)/studio.tsx", "app/(tabs)/profilo.tsx"].some((f) => contiene(f, "useFocusEffect")));
+  // Il percorso si rilegge al ritorno (Studio, e il riquadro ProssimoPasso di
+  // Oggi); i CONTEGGI no, ed è quello il difetto. La prova guarda che l'unico
+  // useFocusEffect delle tre schede sia quello del percorso, e che non tocchi
+  // le query dei conteggi.
+  const fuocoStudio = sorgente("app/(tabs)/studio.tsx").match(/useFocusEffect\(useCallback\(\(\) => \{[\s\S]*?\}, \[\]\)\);/g) ?? [];
+  ok("H4 OGG-05 nessun conteggio usa useFocusEffect: in Studio lo usa solo il percorso, Oggi e Profilo per niente",
+    !["app/(tabs)/oggi.tsx", "app/(tabs)/profilo.tsx"].some((f) => contiene(f, "useFocusEffect")) &&
+    (sorgente("app/(tabs)/studio.tsx").match(/useFocusEffect\(/g) ?? []).length === 1 &&
+    fuocoStudio.length === 1 && fuocoStudio[0].includes("leggiPercorso()") && !/FROM (esercizi|ripasso)/.test(fuocoStudio[0]));
 
   // OGG-06: numeratore e denominatore su popolazioni diverse, sui contenuti veri.
   const sql = JSON.parse(readFileSync(join(RADICE, "assets/contenuti/esercizi_sql.json"), "utf8"));

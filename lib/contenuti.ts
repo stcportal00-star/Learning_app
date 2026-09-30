@@ -30,7 +30,11 @@ type VolumeAperto = {
   trimestre: string; licenza: string; url: string; formato: string; nota: string;
 };
 
-const TEMI: Array<[string, string, string, string]> = [
+/**
+ * L'ordine di questa lista è l'ordine del percorso dentro ogni trimestre
+ * (lib/percorso.ts): le basi prima di ciò che le usa.
+ */
+export const TEMI: Array<[string, string, string, string]> = [
   ["gestione", "Gestione delle persone", "gestione", "T0"],
   ["sql_base", "SQL — fondamenti", "dati", "T1"],
   ["sql_join", "SQL — join", "dati", "T1"],

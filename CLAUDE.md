@@ -301,6 +301,34 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
 - I commenti spiegano **perché**, non cosa. Se un commento descrive ciò che il
   codice già dice, va tolto.
 
+## Il percorso di studio
+
+Studio non è un elenco di strumenti: è il **percorso**. `lib/percorso.ts`
+(logica pura) fa di ogni tema un'unità, nell'ordine del piano — trimestre, poi
+l'ordine di `TEMI` in `lib/contenuti.ts` —, e dentro ogni unità i passi del
+ciclo: leggere la fonte, esercitarsi, fissare i concetti con le schede,
+applicarli a uno scenario, restare aggiornati con la rassegna. Un tema senza
+materiale non è un'unità.
+
+- **Si supera all'80%** (`SOGLIA_PERCENTO`) degli esercizi e delle schede, più
+  uno scenario svolto (`SCENARI_RICHIESTI`), dove ci sono. Leggere e la rassegna
+  non contano per chiudere un'unità: un volume che non è sul telefono, in aereo,
+  bloccherebbe il percorso fino a novembre.
+- **Il prossimo passo** (`prossimoPasso()`) è il primo passo non fatto della
+  prima unità non superata; la lettura viene prima solo se il volume è sul
+  telefono e mai aperto. Sta in cima a Oggi e a Studio
+  (`components/ProssimoPasso.tsx`), e si ricalcola a ogni ritorno in primo piano.
+- **L'avanzamento non ha eventi suoi.** `lib/avanzamento.ts` lo legge dalle
+  tabelle che l'app scrive già (tentativi, ripasso, note, biblioteca, articoli):
+  un secondo registro dell'avanzamento andrebbe tenuto allineato al primo.
+- **Gli scenari si svolgono in Note.** L'unità crea la nota con consegna e
+  rubrica e `origine_url = scenario:<id>`; lo scenario è svolto quando la nota
+  non è più il modello con cui è nata. Se la nota esiste già, si riapre quella.
+- Esercizi, Ripasso e Rassegna accettano `?tema=`: dall'unità si arriva già
+  filtrati. Senza parametro fanno quello che facevano prima.
+- Le prove sono in `test/simulazione/percorso.mjs`, sul codice vero e sui
+  contenuti veri.
+
 ## Stato verificato al momento della consegna
 
 | Verifica | Esito |

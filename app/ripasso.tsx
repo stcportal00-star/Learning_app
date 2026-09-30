@@ -3,6 +3,7 @@ import { View, Pressable, ScrollView } from "react-native";
 import { Text } from "../components/Base";
 import { C } from "../lib/tema";
 import { database, registra } from "../lib/db";
+import { useLocalSearchParams } from "expo-router";
 
 type Scheda = { id: string; consegna: string; soluzione_riferimento: string; fonte_citazione: string | null };
 
@@ -18,17 +19,29 @@ export default function Ripasso() {
   const [coda, setCoda] = useState<Scheda[]>([]);
   const [i, setI] = useState(0);
   const [scoperta, setScoperta] = useState(false);
+  // Con il tema, sono le schede di un'unità del percorso: quelle mai viste e
+  // quelle tornate in scadenza, dello stesso argomento. Senza, il ripasso di
+  // tutto, come prima.
+  const { tema } = useLocalSearchParams<{ tema?: string }>();
 
   useEffect(() => {
     (async () => {
       const d = database();
-      setCoda(await d.getAllAsync<Scheda>(
-        `SELECT e.id, e.consegna, e.soluzione_riferimento, e.fonte_citazione
+      const adesso = new Date().toISOString();
+      setCoda(tema
+        ? await d.getAllAsync<Scheda>(
+          `SELECT e.id, e.consegna, e.soluzione_riferimento, e.fonte_citazione
+           FROM ripasso r JOIN esercizi e ON e.id = r.esercizio_id
+           WHERE e.tema_slug = ? AND r.prossima_revisione <= ?
+           ORDER BY r.prossima_revisione, e.id LIMIT 30`,
+          [String(tema), adesso])
+        : await d.getAllAsync<Scheda>(
+          `SELECT e.id, e.consegna, e.soluzione_riferimento, e.fonte_citazione
          FROM ripasso r JOIN esercizi e ON e.id = r.esercizio_id
          WHERE r.prossima_revisione <= ? ORDER BY r.prossima_revisione LIMIT 30`,
-        [new Date().toISOString()]));
+          [adesso]));
     })();
-  }, []);
+  }, [tema]);
 
   const s = coda[i];
   if (!s) return (

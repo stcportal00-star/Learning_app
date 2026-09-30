@@ -8,6 +8,7 @@ import { database, registra } from "../lib/db";
 import { esegui, eseguiConPreparazione, supportaWindowFunctions } from "../lib/palestra";
 import { verifica, Esito } from "../lib/verifica";
 import * as Crypto from "expo-crypto";
+import { useLocalSearchParams } from "expo-router";
 
 type Esercizio = {
   id: string; tema_slug: string; tipo: string; livello: number; consegna: string;
@@ -18,6 +19,9 @@ type Esercizio = {
 export default function Esercizi() {
   const { width } = useWindowDimensions();
   const affiancato = width >= 600;
+  // Dal percorso si arriva con il tema dell'unità: la coda è quella del tema,
+  // non i 150 esercizi di tutti i trimestri. Da Studio, senza tema, tutto.
+  const { tema } = useLocalSearchParams<{ tema?: string }>();
 
   const [coda, setCoda] = useState<Esercizio[]>([]);
   const [indice, setIndice] = useState(0);
@@ -34,14 +38,15 @@ export default function Esercizi() {
         `SELECT e.* FROM esercizi e
          LEFT JOIN (SELECT esercizio_id, max(eseguito_a) AS ultimo, esito
                     FROM tentativi GROUP BY esercizio_id) t ON t.esercizio_id = e.id
-         WHERE e.tipo = 'sql_eseguibile' AND e.dataset = 'palestra.db'${filtro}
+         WHERE e.tipo = 'sql_eseguibile' AND e.dataset = 'palestra.db'${filtro}${tema ? " AND e.tema_slug = ?" : ""}
            AND (t.esito IS NULL OR t.esito <> 'corretto')
-         ORDER BY e.livello, e.id LIMIT 40`
+         ORDER BY e.livello, e.id LIMIT 40`,
+        tema ? [String(tema)] : []
       );
       setCoda(righe);
       setIniziato(Date.now());
     })();
-  }, []);
+  }, [tema]);
 
   const corrente = coda[indice];
 

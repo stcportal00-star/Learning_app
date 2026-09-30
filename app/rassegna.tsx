@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Pressable, FlatList, useWindowDimensions } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { elencaArticoli, temiConNovita, Articolo } from "../lib/nuvola/articoli";
 import { descriviByte } from "../lib/nuvola/media";
 import { Text } from "../components/Base";
@@ -18,7 +18,9 @@ export default function Rassegna() {
   const colonne = width >= 900 ? 2 : 1;
   const [voci, setVoci] = useState<Articolo[]>([]);
   const [temi, setTemi] = useState<Array<{ tema_slug: string; n: number }>>([]);
-  const [tema, setTema] = useState<string | null>(null);
+  // Dall'unità del percorso si arriva già filtrati sul suo tema.
+  const { tema: temaIniziale } = useLocalSearchParams<{ tema?: string }>();
+  const [tema, setTema] = useState<string | null>(temaIniziale ? String(temaIniziale) : null);
   const [soloDaLeggere, setSoloDaLeggere] = useState(true);
 
   const ricarica = useCallback(async () => {

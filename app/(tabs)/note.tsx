@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Pressable, FlatList, useWindowDimensions } from "react-native";
 import * as Crypto from "expo-crypto";
+import { router, useLocalSearchParams } from "expo-router";
 import { database, registra } from "../../lib/db";
 import { Text, TextInput } from "../../components/Base";
 import { C } from "../../lib/tema";
@@ -44,6 +45,21 @@ export default function Note() {
   }, [soloPubblicabili]);
 
   useEffect(() => { ricarica(); }, [ricarica]);
+
+  // Uno scenario del percorso apre qui la sua nota: `nota` è il suo id. La
+  // nota può essere appena nata in un'altra schermata, quindi l'elenco si
+  // rilegge prima. Il parametro si consuma: le schede restano montate, e
+  // tornare su Note non deve riaprirla sopra quella che si sta scrivendo.
+  const { nota: daAprire } = useLocalSearchParams<{ nota?: string }>();
+  useEffect(() => {
+    if (!daAprire) return;
+    (async () => {
+      await ricarica();
+      const n = await database().getFirstAsync<Nota>("SELECT * FROM note WHERE id = ?", [String(daAprire)]);
+      router.setParams({ nota: undefined } as never);
+      if (n && apertaId !== n.id) await esci(() => apri(n));
+    })();
+  }, [daAprire]);
 
   function apri(n: Nota) {
     setApertaId(n.id); setTitolo(n.titolo ?? ""); setTesto(n.testo);

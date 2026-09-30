@@ -7,6 +7,7 @@ import { divergenzaCorrente } from "../../lib/sync/stato";
 import { Divergenza } from "../../lib/sync/auto";
 import Cronometro from "../../components/Cronometro";
 import Aggiornamento from "../../components/Aggiornamento";
+import ProssimoPasso from "../../components/ProssimoPasso";
 import { riepilogoSettimana, Sessione } from "../../lib/sessioni";
 import { contaNovita } from "../../lib/nuvola/articoli";
 import { statoNuvola, sincronizzaNuvola, StatoNuvola } from "../../lib/nuvola/sincronia";
@@ -71,6 +72,9 @@ export default function Oggi() {
 
       {/* Compare solo quando c'è una build nuova da installare. */}
       <Aggiornamento compatto />
+
+      {/* Prima di tutto il resto: è la domanda con cui si apre l'app. */}
+      <ProssimoPasso />
 
       {/*
         Il riquadro della rassegna. Sta sopra al cronometro di proposito: è la

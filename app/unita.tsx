@@ -1,0 +1,176 @@
+import { useCallback, useRef, useState } from "react";
+import { View, Pressable, ScrollView } from "react-native";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import * as Crypto from "expo-crypto";
+import { registra } from "../lib/db";
+import {
+  Unita as UnitaPercorso, Passo, descriviPasso, destinazione, modelloScenario,
+} from "../lib/percorso";
+import {
+  leggiPercorso, leggiScenari, leggiVolumi, volumeDaAprire, ScenarioDiUnita, VolumeDiUnita,
+} from "../lib/avanzamento";
+import { Text } from "../components/Base";
+import { C } from "../lib/tema";
+
+const ETICHETTA_STATO: Record<UnitaPercorso["stato"], string> = {
+  completa: "Superata",
+  in_corso: "In corso",
+  da_iniziare: "Da iniziare",
+  senza_verifiche: "Solo lettura",
+};
+
+/**
+ * Un'unità del percorso: un tema, con i suoi passi nell'ordine in cui si
+ * fanno. È la schermata che risponde a «che cosa studio adesso, e perché
+ * questo prima di quello».
+ *
+ * Si rilegge a ogni ritorno in primo piano: si esce per fare un esercizio o
+ * scrivere uno scenario, e al ritorno l'avanzamento deve essere già quello
+ * nuovo, non quello di quando la schermata si era aperta.
+ */
+export default function Unita() {
+  const { tema } = useLocalSearchParams<{ tema: string }>();
+  const slug = String(tema ?? "");
+  const [u, setU] = useState<UnitaPercorso | null>(null);
+  const [trovata, setTrovata] = useState(true);
+  const [volumi, setVolumi] = useState<VolumeDiUnita[]>([]);
+  const [scenari, setScenari] = useState<ScenarioDiUnita[]>([]);
+  const inCreazione = useRef(false);
+
+  useFocusEffect(useCallback(() => {
+    let vivo = true;
+    (async () => {
+      const [tutte, v, s] = await Promise.all([leggiPercorso(), leggiVolumi(slug), leggiScenari(slug)]);
+      if (!vivo) return;
+      const x = tutte.find((t) => t.tema.slug === slug) ?? null;
+      setU(x); setTrovata(Boolean(x)); setVolumi(v); setScenari(s);
+    })();
+    return () => { vivo = false; };
+  }, [slug]));
+
+  /**
+   * Lo scenario si svolge in Note. La nota nasce qui, con consegna e rubrica,
+   * e porta `origine_url = scenario:<id>`: è così che l'unità la ritrova e sa
+   * se lo scenario è svolto. Se esiste già, si riapre quella: due note per
+   * lo stesso scenario sarebbero due risposte a metà.
+   */
+  async function svolgi(s: ScenarioDiUnita) {
+    if (s.notaId) { router.navigate(`/note?nota=${encodeURIComponent(s.notaId)}`); return; }
+    if (!u || inCreazione.current) return;
+    inCreazione.current = true;
+    try {
+      const id = Crypto.randomUUID();
+      const m = modelloScenario(s, u.tema.nome);
+      const creato = new Date().toISOString();
+      const origine = `scenario:${s.id}`;
+      await registra("note", id, "crea",
+        { titolo: m.titolo, testo: m.testo, pubblicabile: 0, tema_slug: slug, origine_url: origine, creato_a: creato },
+        async (d, hlc) => {
+          await d.runAsync(
+            `INSERT INTO note (id, tema_slug, titolo, testo, pubblicabile, origine_url, creato_a, hlc)
+             VALUES (?,?,?,?,0,?,?,?)`,
+            [id, slug, m.titolo, m.testo, origine, creato, hlc]);
+        });
+      router.navigate(`/note?nota=${encodeURIComponent(id)}`);
+    } finally {
+      inCreazione.current = false;
+    }
+  }
+
+  if (!u) {
+    return (
+      <View style={{ flex: 1, padding: 16, gap: 12 }}>
+        <Pressable onPress={() => router.back()}>
+          <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Indietro</Text>
+        </Pressable>
+        <Text style={{ fontSize: 14, opacity: 0.7 }}>
+          {trovata ? "…" : "Questo tema non ha materiale su questo dispositivo."}
+        </Text>
+      </View>
+    );
+  }
+
+  // Il passo da fare adesso, con la stessa regola di prossimoPasso():
+  // il primo non fatto che si può fare, e la lettura solo se il volume c'è.
+  const corrente = u.stato === "completa" ? null
+    : u.passi.find((p) => !p.completo && p.eseguibile && (p.conta || p.tipo === "leggi")) ?? null;
+
+  const Segno = ({ p }: { p: Passo }) => (
+    <Text style={{ fontSize: 13, fontWeight: "600",
+                   color: p.completo ? C.verde : p === corrente ? C.blu : C.testoTenue }}>
+      {p.completo ? "✓ superato" : p === corrente ? "→ adesso" : p.conta ? `${p.fatto}/${p.soglia}` : "facoltativo"}
+    </Text>
+  );
+
+  const vaiA = (p: Passo) => router.push(destinazione(slug, p, volumeDaAprire(volumi)) as never);
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
+      <Pressable onPress={() => router.back()}>
+        <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Indietro</Text>
+      </Pressable>
+      <Text style={{ fontSize: 12, opacity: 0.6 }}>
+        Unità {u.posizione}{u.tema.trimestre ? ` · ${u.tema.trimestre}` : ""} · {ETICHETTA_STATO[u.stato]}
+      </Text>
+      <Text style={{ fontSize: 22, fontWeight: "600" }}>{u.tema.nome}</Text>
+      <View style={{ height: 6, borderRadius: 3, backgroundColor: C.superficieAlta, overflow: "hidden" }}>
+        <View style={{ width: `${Math.round(u.avanzamento * 100)}%`, height: 6,
+                       backgroundColor: u.stato === "completa" ? C.verde : C.blu }} />
+      </View>
+      <Text style={{ fontSize: 13, opacity: 0.65, lineHeight: 19 }}>
+        Si supera con l'80% degli esercizi e delle schede e uno scenario svolto, dove ci sono.
+        Leggere e la rassegna non bloccano: si fanno quando il materiale è sul telefono.
+      </Text>
+
+      {u.passi.map((p, n) => {
+        const d = descriviPasso(p);
+        const evidenza = p === corrente;
+        const toccabile = p.tipo !== "scenario" && p.tipo !== "leggi";
+        const Corpo = (
+          <View style={{ borderWidth: 1, borderRadius: 12, padding: 14, gap: 4,
+                         borderColor: evidenza ? C.bluBordo : C.bordo,
+                         backgroundColor: evidenza ? C.bluFondo : "transparent" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <Text style={{ fontSize: 16, fontWeight: "600", flex: 1 }}>{n + 1}. {d.titolo}</Text>
+              <Segno p={p} />
+            </View>
+            <Text style={{ fontSize: 13, opacity: 0.7, lineHeight: 18 }}>{d.dettaglio}</Text>
+
+            {p.tipo === "leggi" ? volumi.map((v) => (
+              <Pressable key={v.id}
+                onPress={() => router.push((v.file_locale ? `/lettore?id=${encodeURIComponent(v.id)}` : "/libreria") as never)}
+                style={{ marginTop: 8, padding: 10, borderRadius: 9, backgroundColor: C.superficie }}>
+                <Text style={{ fontSize: 14, fontWeight: "500" }} numberOfLines={2}>{v.titolo}</Text>
+                <Text style={{ fontSize: 12, marginTop: 2, color: v.file_locale ? C.testoSecondario : C.ambra }}>
+                  {v.file_locale
+                    ? (v.ultima_pagina > 0 ? `Pagina ${v.ultima_pagina}${v.pagine ? ` di ${v.pagine}` : ""}` : "Sul telefono, mai aperto")
+                    : "Non è sul telefono: si scarica da Libreria"}
+                  {v.autore ? ` · ${v.autore}` : ""}
+                </Text>
+              </Pressable>
+            )) : null}
+
+            {p.tipo === "scenario" ? scenari.map((s) => (
+              <View key={s.id} style={{ marginTop: 8, padding: 11, borderRadius: 9, backgroundColor: C.superficie, gap: 8 }}>
+                <Text style={{ fontSize: 14, lineHeight: 20 }}>{s.consegna}</Text>
+                <Text style={{ fontSize: 12, opacity: 0.6 }}>
+                  Rubrica: {s.rubrica.length} criteri{s.svolto ? " · svolto" : s.notaId ? " · iniziato" : ""}
+                </Text>
+                <Pressable onPress={() => { void svolgi(s); }}
+                  style={{ alignSelf: "flex-start", paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9,
+                           backgroundColor: s.notaId ? C.superficieAlta : C.primario }}>
+                  <Text style={{ fontSize: 13, fontWeight: "600", color: s.notaId ? C.testo : C.suPrimario }}>
+                    {s.notaId ? "Riapri la nota" : "Svolgi in Note"}
+                  </Text>
+                </Pressable>
+              </View>
+            )) : null}
+          </View>
+        );
+        return toccabile
+          ? <Pressable key={p.tipo} onPress={() => vaiA(p)}>{Corpo}</Pressable>
+          : <View key={p.tipo}>{Corpo}</View>;
+      })}
+    </ScrollView>
+  );
+}
