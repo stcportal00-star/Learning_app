@@ -1410,8 +1410,8 @@ ancora("NOT guardia del vuoto", "app/(tabs)/note.tsx", "if (!testo.trim() && !ti
 ancora("NOT l'id è della sessione di modifica, deciso quando tocca a quel salvataggio", "app/(tabs)/note.tsx", "const noto = idDiSessione.current.get(s); const nuovo = !noto; const id = noto ?? Crypto.randomUUID();");
 ancora("NOT i salvataggi passano uno alla volta", "app/(tabs)/note.tsx", "const turno = catena.current.catch(() => {}).then(() => scrivi(s, c)); catena.current = turno; await turno;");
 ancora("NOT setApertaId dopo l'await, solo nella stessa sessione", "app/(tabs)/note.tsx", "{ salvato.current = c; setApertaId(id); } await ricarica();");
-ancora("NOT si esce salvando", "app/(tabs)/note.tsx",
-  "async function esci(dopo: () => void) { if (daSalvare()) await salva(); dopo(); }");
+ancora("NOT si esce salvando, due passate: la seconda prende ciò che si è scritto durante l'attesa", "app/(tabs)/note.tsx",
+  "async function esci(dopo: () => void) { if (daSalvare()) await salva(); if (!(await salvaUscendo.current())) return; dopo(); }");
 ancora("NOT la nota gia' aperta non si riapre", "app/(tabs)/note.tsx",
   "onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}");
 ancora("NOT salvataggio allo smontaggio", "app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);");
@@ -1485,6 +1485,7 @@ function ModelloNote(p) {
 
   async function esci(dopo) {
     if (daSalvare()) await salva();
+    if (!(await salvaUscendo.current())) return;
     dopo();
   }
 
@@ -1528,10 +1529,15 @@ function ModelloNote(p) {
 
   // Cambio di scheda e tasto indietro di sistema: la schermata si smonta senza
   // passare da nessun pulsante, e il salvataggio parte lo stesso.
-  const salvaUscendo = useRif(async () => {});
+  const salvaUscendo = useRif(async () => true);
   useEffetto(() => {
     salvaUscendo.current = async () => {
-      if (daSalvare()) await salva();
+      try {
+        if (daSalvare()) await salva();
+        return true;
+      } catch {
+        return false;
+      }
     };
   });
   useEffetto(() => () => {
@@ -1707,6 +1713,28 @@ corretto("NOT-08", "F12d a disco pieno Salva fallisce senza scrivere, il testo r
     dueFalliti.every((e) => e.status === "rejected") && primaDelRecupero === 0 &&
     noteSchermata.schermo.editor.testo === "Risposta scritta a disco pieno." && dopoIlRecupero.length === 1,
   JSON.stringify({ primaDelRecupero, dopo: dopoIlRecupero.length, dueFalliti: dueFalliti.map((e) => e.status) }));
+
+// (e) una sincronizzazione tiene ferma la coda delle scritture: l'uscita
+// aspetta, l'editor resta scrivibile, e ciò che si scrive intanto non deve
+// sparire quando l'uscita finalmente apre la nota nuova.
+let liberaCoda = null;
+const codaTenuta = DB.inTransazione(() => new Promise((r) => { liberaCoda = r; }));
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Prima parte."));
+const salvataggioInCoda = noteSchermata.schermo.editor.salva();
+const uscitaInCoda = noteSchermata.schermo.elenco.nuova();
+await noteSchermata.stabilizza();
+const editorDuranteAttesa = noteSchermata.schermo.editor.testo;
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Prima parte. Scritta durante l'attesa."));
+liberaCoda();
+await codaTenuta;
+await Promise.allSettled([salvataggioInCoda, uscitaInCoda]);
+await noteSchermata.stabilizza();
+const righeAttesa = await base.getAllAsync("SELECT testo FROM note WHERE testo LIKE 'Prima parte.%'");
+corretto("NOT-09", "F12e scritto mentre l'uscita aspetta la coda: si salva nella stessa nota prima di cambiare, senza doppioni",
+  editorDuranteAttesa === "Prima parte." && righeAttesa.length === 1 &&
+    righeAttesa[0].testo === "Prima parte. Scritta durante l'attesa." && noteSchermata.schermo.editor.testo === "",
+  JSON.stringify({ editorDuranteAttesa, righeAttesa, dopo: noteSchermata.schermo.editor.testo }));
 
 // --- salvataggio di una nota ESISTENTE
 const notaEsistente = noteSchermata.schermo.elenco.voci.find((v) => v.titolo === "Kleppmann cap. 5");

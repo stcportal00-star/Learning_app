@@ -89,7 +89,9 @@ export default function Note() {
       // ciò che si è scritto mentre la lettura qui sopra era in corso. Se
       // il salvataggio non riesce si resta sulla nota com'è, invece di
       // coprirne il testo con l'altra.
-      if (await salvaUscendo.current()) apri(n);
+      // Due passate, come in esci(): la seconda prende ciò che si è
+      // scritto mentre la prima aspettava in coda.
+      if (await salvaUscendo.current() && await salvaUscendo.current()) apri(n);
     })();
   }, [daAprire]);
 
@@ -113,9 +115,16 @@ export default function Note() {
     return titolo !== s.titolo || testo !== s.testo || pubblicabile !== s.pubblicabile;
   }
 
-  /** Si esce sempre salvando: una bozza in più si cancella, un testo perso no. */
+  /**
+   * Si esce sempre salvando: una bozza in più si cancella, un testo perso no.
+   * Il salvataggio può aspettare in coda qualche secondo (una
+   * sincronizzazione), e l'editor intanto resta scrivibile: ciò che si scrive
+   * in quell'attesa si salva dall'ultimo disegno prima di cambiare nota,
+   * altrimenti dopo() lo coprirebbe. Se non riesce, si resta dove si è.
+   */
   async function esci(dopo: () => void) {
     if (daSalvare()) await salva();
+    if (!(await salvaUscendo.current())) return;
     dopo();
   }
 
