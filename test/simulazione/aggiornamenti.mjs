@@ -234,6 +234,8 @@ const giusto = await agg.scaricaRelease(r28);
 ok("A6 lo scarico completo dà un file", !!giusto.uri && new fs.File(giusto.uri).exists, JSON.stringify(giusto));
 uguale("A6 con il nome della build", giusto.uri && giusto.uri.endsWith("percorso-28.apk"), true);
 
+// Da qui in poi si scarica da capo: il file completo di prima si riuserebbe.
+new fs.File(agg.cartellaAggiornamenti(), "percorso-28.apk").delete();
 fs.rispondi(URL_APK(28), Buffer.alloc(1000, 1));
 const troncato = await agg.scaricaRelease(r28);
 ok("A6 uno scarico a metà si dice, e il file sparisce",
@@ -245,6 +247,36 @@ fs.guastaRete(URL_APK(28), "rete non raggiungibile");
 const fallito = await agg.scaricaRelease(r28);
 ok("A6 uno scarico fallito non lascia un file né un uri",
   !fallito.uri && /non riuscito/.test(fallito.errore ?? ""), JSON.stringify(fallito));
+
+// Il file completo si riusa: se si torna dall'installatore, l'installazione
+// non è avvenuta, e riscaricare sessanta megabyte a ogni tentativo li farebbe
+// pagare ogni volta. Qui la rete non risponde più: il riuso non la tocca.
+await azzera();
+fs.rispondi(URL_APK(28), Buffer.alloc(4096, 1));
+const primo = await agg.scaricaRelease(r28);
+fs.azzeraRete();
+const riuso = await agg.scaricaRelease(r28);
+uguale("A6 un APK già completo si riusa senza riscaricarlo", [riuso.uri, riuso.errore], [primo.uri, undefined]);
+
+// Un file a metà lasciato da un tentativo precedente non si riusa.
+new fs.File(agg.cartellaAggiornamenti(), "percorso-28.apk").write(Buffer.alloc(100, 1));
+fs.rispondi(URL_APK(28), Buffer.alloc(4096, 1));
+const rifatto = await agg.scaricaRelease(r28);
+uguale("A6 un file a metà si riscarica intero",
+  rifatto.uri && new fs.File(rifatto.uri).size, 4096);
+
+// Due pulsanti, un solo scarico: Oggi e Profilo restano montati entrambi.
+new fs.File(agg.cartellaAggiornamenti(), "percorso-28.apk").delete();
+const veroScarica = fs.File.downloadFileAsync;
+let scarichi = 0;
+fs.File.downloadFileAsync = async (...a) => { scarichi++; await new Promise((ok) => setTimeout(ok, 20)); return veroScarica(...a); };
+try {
+  const [x, y] = await Promise.all([agg.scaricaRelease(r28), agg.scaricaRelease(r28)]);
+  uguale("A6 due tocchi insieme fanno uno scarico solo, con lo stesso esito",
+    [scarichi, x.uri === y.uri, !!x.uri], [1, true, true]);
+} finally {
+  fs.File.downloadFileAsync = veroScarica;
+}
 
 // ================================================================= A7 installatore
 await azzera();

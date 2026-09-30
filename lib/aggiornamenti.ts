@@ -257,10 +257,32 @@ export function liberaScaricati(corsaAttuale: unknown): number {
  * interrotto a metà produce un file che l'installatore rifiuta con «errore di
  * analisi del pacchetto», che non dice niente a chi è in aeroporto. Meglio
  * dirlo qui, e con parole sue.
+ *
+ * Un file già completo si riusa. Se l'installazione riesce, Android chiude
+ * l'app; se si torna qui, non è riuscita (annullata, consenso da dare, spazio),
+ * e riscaricare sessanta megabyte a ogni tentativo li farebbe pagare ogni
+ * volta, magari in roaming.
+ *
+ * Uno scarico alla volta per build: Oggi e Profilo hanno ciascuno il suo
+ * pulsante e restano montati. Due scarichi sullo stesso file si cancellano a
+ * vicenda e finiscono entrambi «incompleti».
  */
-export async function scaricaRelease(r: Release): Promise<{ uri?: string; errore?: string }> {
+const scarichiInCorso = new Map<number, Promise<{ uri?: string; errore?: string }>>();
+
+export function scaricaRelease(r: Release): Promise<{ uri?: string; errore?: string }> {
+  const gia = scarichiInCorso.get(r.corsa);
+  if (gia) return gia;
+  const p = scarica(r).finally(() => scarichiInCorso.delete(r.corsa));
+  scarichiInCorso.set(r.corsa, p);
+  return p;
+}
+
+async function scarica(r: Release): Promise<{ uri?: string; errore?: string }> {
   const destinazione = new File(cartellaAggiornamenti(), `percorso-${r.corsa}.apk`);
-  if (destinazione.exists) destinazione.delete();
+  if (destinazione.exists) {
+    if (r.byte > 0 && destinazione.size === r.byte) return { uri: destinazione.uri };
+    destinazione.delete();
+  }
   let uri = "";
   let byte: number | null = null;
   try {
@@ -268,6 +290,9 @@ export async function scaricaRelease(r: Release): Promise<{ uri?: string; errore
     uri = scaricato.uri;
     byte = scaricato.size ?? null;
   } catch (e) {
+    // Uno scarico interrotto può lasciare il file a metà: via subito, non al
+    // prossimo tentativo, che magari non arriva prima di settimane.
+    if (destinazione.exists) destinazione.delete();
     return { errore: "scaricamento non riuscito: " + String(e).slice(0, 160) };
   }
   if (r.byte > 0 && byte !== r.byte) {
