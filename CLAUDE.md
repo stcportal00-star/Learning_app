@@ -334,6 +334,15 @@ materiale non è un'unità.
   pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
   SECONDO gruppo di schede, con un secondo editor delle note che può
   sovrascrivere il primo. `dismissTo` torna alle schede che esistono già.
+- **L'avanzamento è per dispositivo, per ora.** Gli eventi dei tentativi
+  portano solo `{esercizio_id, esito}` e quelli del ripasso `{grado,
+  stabilita}`: sull'altro dispositivo un tentativo ricevuto resta incompleto
+  (manca `eseguito_a`, NOT NULL) e il ripasso aggiorna solo `stabilita`. Anche
+  `file_locale` viaggia nel payload della biblioteca, e su un secondo
+  dispositivo un volume può risultare «sul telefono» senza esserci. Chiuderlo
+  è la decisione aperta in DA-FARE (voce 17 e SYN-01: sincronizzare davvero o
+  tenere i due dispositivi come due isole), non una correzione da fare di
+  passaggio.
 - Le prove sono in `test/simulazione/percorso.mjs`, sul codice vero e sui
   contenuti veri.
 
