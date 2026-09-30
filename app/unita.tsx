@@ -181,7 +181,8 @@ export default function Unita() {
 
   const vaiA = (p: Passo) => {
     const d = destinazione(slug, p, volumeDaAprire(volumi));
-    if (d === "/libreria") apriScheda(d); else router.push(d as never);
+    // Libreria e Notizie sono schede: ci si torna, non si impilano.
+    if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d); else router.push(d as never);
   };
 
   return (

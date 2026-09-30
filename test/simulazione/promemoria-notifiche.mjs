@@ -1520,7 +1520,7 @@ const spento = (o = 7, m = 0, tipo = "mattina") => ({ attivo: false, ora: o, min
     };
   }
 
-  // Riga di app/(tabs)/profilo.tsx:44-46, per verificare la coerenza al rientro.
+  // Riga di app/profilo.tsx:44-46, per verificare la coerenza al rientro.
   const rigaProfilo = (prom) => prom.attivo
     ? `Blocco ${prom.tipo} alle ${comeTesto(prom)}, ogni giorno.`
     : "Nessun avviso. Notifica locale, funziona anche in aereo.";

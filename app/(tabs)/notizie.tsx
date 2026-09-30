@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Pressable, FlatList, useWindowDimensions } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { elencaArticoli, temiConNovita, Articolo } from "../lib/nuvola/articoli";
-import { descriviByte } from "../lib/nuvola/media";
-import { Text } from "../components/Base";
-import { C } from "../lib/tema";
+import { elencaArticoli, temiConNovita, Articolo } from "../../lib/nuvola/articoli";
+import { descriviByte } from "../../lib/nuvola/media";
+import { Text } from "../../components/Base";
+import { C } from "../../lib/tema";
 
 /**
- * La rassegna: quello che la conduttura ha raccolto stanotte.
+ * Le notizie: quello che la conduttura ha raccolto stanotte. È la quinta
+ * scheda, al posto di Profilo.
  *
  * Ordine: prima i non letti, poi i più recenti. Chi apre questa schermata ha
  * dieci minuti, non un pomeriggio: la cosa da leggere deve stare in cima senza
@@ -18,9 +19,17 @@ export default function Rassegna() {
   const colonne = width >= 900 ? 2 : 1;
   const [voci, setVoci] = useState<Articolo[]>([]);
   const [temi, setTemi] = useState<Array<{ tema_slug: string; n: number }>>([]);
-  // Dall'unità del percorso si arriva già filtrati sul suo tema.
-  const { tema: temaIniziale } = useLocalSearchParams<{ tema?: string }>();
-  const [tema, setTema] = useState<string | null>(temaIniziale ? String(temaIniziale) : null);
+  // Dall'unità del percorso si arriva già filtrati sul suo tema. La scheda
+  // può essere già montata: il parametro si legge a ogni arrivo, non solo al
+  // primo disegno, e poi si consuma, così un ritorno alla scheda non rimette
+  // il filtro che si era tolto.
+  const { tema: temaChiesto } = useLocalSearchParams<{ tema?: string }>();
+  const [tema, setTema] = useState<string | null>(temaChiesto ? String(temaChiesto) : null);
+  useEffect(() => {
+    if (!temaChiesto) return;
+    setTema(String(temaChiesto));
+    router.setParams({ tema: undefined } as never);
+  }, [temaChiesto]);
   const [soloDaLeggere, setSoloDaLeggere] = useState(true);
 
   const ricarica = useCallback(async () => {
@@ -41,10 +50,7 @@ export default function Rassegna() {
   return (
     <View style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
-        <Pressable onPress={() => router.back()}>
-          <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Indietro</Text>
-        </Pressable>
-        <Text style={{ fontSize: 22, fontWeight: "600", marginTop: 6 }}>Rassegna</Text>
+        <Text style={{ fontSize: 22, fontWeight: "600" }}>Notizie</Text>
         <Text style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
           Il testo è già sul dispositivo: si legge senza rete.
         </Text>

@@ -324,7 +324,7 @@ export function destinazione(slug: string, p: Passo, volume?: string | null): st
     case "scenario":
       return `/unita?tema=${encodeURIComponent(slug)}`;
     case "rassegna":
-      return `/rassegna?tema=${encodeURIComponent(slug)}`;
+      return `/notizie?tema=${encodeURIComponent(slug)}`;
   }
 }
 

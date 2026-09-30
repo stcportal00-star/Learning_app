@@ -1,16 +1,16 @@
 import { useEffect, useState } from "react";
 import { View, ScrollView } from "react-native";
-import { Text } from "../../components/Base";
-import { C } from "../../lib/tema";
-import { Link } from "expo-router";
+import { Text } from "../components/Base";
+import { C } from "../lib/tema";
+import { Link, router } from "expo-router";
 import Constants from "expo-constants";
 import { Pressable } from "react-native";
-import { database } from "../../lib/db";
-import { divergenzaCorrente } from "../../lib/sync/stato";
-import { Divergenza } from "../../lib/sync/auto";
-import { leggiPromemoria } from "../../lib/notifiche";
-import { Promemoria, PREDEFINITO, comeTesto } from "../../lib/promemoria";
-import Aggiornamento from "../../components/Aggiornamento";
+import { database } from "../lib/db";
+import { divergenzaCorrente } from "../lib/sync/stato";
+import { Divergenza } from "../lib/sync/auto";
+import { leggiPromemoria } from "../lib/notifiche";
+import { Promemoria, PREDEFINITO, comeTesto } from "../lib/promemoria";
+import Aggiornamento from "../components/Aggiornamento";
 
 /**
  * Quale build sta girando, in una riga. Si calcola una volta sola al caricamento
@@ -54,6 +54,11 @@ export default function Profilo() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
+      {/* Non è più una scheda: la quinta è Notizie, che si apre ogni giorno,
+          mentre qui si viene per un aggiornamento o un accoppiamento. */}
+      <Pressable onPress={() => router.back()}>
+        <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Indietro</Text>
+      </Pressable>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>Profilo</Text>
 
       {/* Sotto il titolo e non in fondo: quando serve — un crash, un

@@ -286,7 +286,11 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
   deliberatamente rimossa perché dichiarata e mai usata.
 - Layout adattivo con un solo punto di rottura: `useWindowDimensions()`, 600dp.
   Niente rami separati per telefono e tablet.
-- Massimo cinque schede. Il resto sono schermate impilate.
+- Massimo cinque schede: Oggi, Studio, Libreria, Note, Notizie. Il resto sono
+  schermate impilate. Profilo è impilato e si apre dal pulsante in alto in
+  Oggi: si apre di rado (aggiornamento, accoppiamento, promemoria), mentre le
+  Notizie ogni giorno. La rotta resta `/profilo`, e il collegamento
+  `percorso://profilo` del test di fumo continua ad aprirla.
 - **Tema nero.** I colori stanno solo in `lib/tema.ts` (`C`): nessun esadecimale
   nelle schermate. `Text`, `TextInput` e `ActivityIndicator` si importano da
   `components/Base`, mai da `react-native`: il testo predefinito di React Native
@@ -340,8 +344,9 @@ conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
 - **Gli scenari si svolgono in Note.** L'unità crea la nota con consegna e
   rubrica e `origine_url = scenario:<id>`; lo scenario è svolto quando la nota
   non è più il modello con cui è nata. Se la nota esiste già, si riapre quella.
-- Esercizi, Ripasso e Rassegna accettano `?tema=`: dall'unità si arriva già
-  filtrati. Senza parametro fanno quello che facevano prima.
+- Esercizi, Ripasso e Notizie accettano `?tema=`: dall'unità si arriva già
+  filtrati. Senza parametro fanno quello che facevano prima. Notizie è una
+  scheda: dall'unità ci si va con `dismissTo`, come a Note e Libreria.
 - **Da una schermata impilata a una scheda si va con `router.dismissTo`**, mai
   con `navigate` o `push`. In expo-router 6 NAVIGATE riusa una schermata della
   pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
@@ -436,8 +441,8 @@ Actions fa da PC**: compila, firma, installa su un emulatore, legge logcat.
   GitHub l'elenco delle release, prende la build di `main` con il numero di
   corsa più alto (le preliminari dei rami restano fuori), la confronta con
   `extra.corsa` e, se è più recente, la scarica e la consegna all'installatore
-  di Android con un intent VIEW. Il riquadro sta in Profilo, e in Oggi compare
-  solo quando c'è qualcosa da installare. Si controlla al massimo ogni sei
+  di Android con un intent VIEW. Il riquadro sta in Profilo (Oggi → Profilo,
+  in alto), e in Oggi compare solo quando c'è qualcosa da installare. Si controlla al massimo ogni sei
   ore, l'ultimo esito si ricorda senza rete, e un controllo fallito non fa
   dimenticare quello buono. Serve il permesso `REQUEST_INSTALL_PACKAGES` in
   `app.json`: senza, Android rifiuta in silenzio. La firma la verifica il

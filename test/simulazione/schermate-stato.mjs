@@ -756,14 +756,14 @@ function ModelloSchede() {
     intestazioneVisibile: false,
     posizioneBarra: tablet ? "left" : "bottom",
     posizioneEtichetta: tablet ? "beside-icon" : "below-icon",
-    schede: ["oggi", "studio", "libreria", "note", "profilo"],
+    schede: ["oggi", "studio", "libreria", "note", "notizie"],
     larghezza: width,
   };
 }
 
 const schede = await monta("Schede", ModelloSchede, { larghezza: 392 });
 ok("B1 su telefono (392dp) la barra e' in basso con l'etichetta sotto l'icona", schede.schermo.posizioneBarra === "bottom" && schede.schermo.posizioneEtichetta === "below-icon");
-ok("B2 le schede sono esattamente cinque, nell'ordine del piano", schede.schermo.schede.join(",") === "oggi,studio,libreria,note,profilo");
+ok("B2 le schede sono esattamente cinque, nell'ordine del piano", schede.schermo.schede.join(",") === "oggi,studio,libreria,note,notizie");
 ok("B3 nessuna intestazione di sistema sopra le schede", schede.schermo.intestazioneVisibile === false);
 
 await ruota(schede, 599);
@@ -1838,15 +1838,15 @@ ok("F30 emoji, markdown e caratteri di controllo si salvano alla lettera", senza
 noteRimontate.smonta();
 
 // ===========================================================================
-// SEZIONE G — app/(tabs)/profilo.tsx: sezioni vuote e sottotitoli fermi
+// SEZIONE G — app/profilo.tsx: sezioni vuote e sottotitoli fermi
 // ===========================================================================
-ancora("PRF artefatti", "app/(tabs)/profilo.tsx", "SELECT trimestre, count(*) AS n FROM artefatti GROUP BY trimestre ORDER BY trimestre");
-ancora("PRF credenziali", "app/(tabs)/profilo.tsx", "IFNULL(sum(costo_usd),0) AS costo");
-ancora("PRF invito supabase", "app/(tabs)/profilo.tsx", "Sincronizza il piano da Supabase.");
-ancora("PRF effetto senza dipendenze", "app/(tabs)/profilo.tsx", "}, []);");
-ancora("PRF sottotitolo promemoria", "app/(tabs)/profilo.tsx", "`Blocco ${prom.tipo} alle ${comeTesto(prom)}, ogni giorno.`");
+ancora("PRF artefatti", "app/profilo.tsx", "SELECT trimestre, count(*) AS n FROM artefatti GROUP BY trimestre ORDER BY trimestre");
+ancora("PRF credenziali", "app/profilo.tsx", "IFNULL(sum(costo_usd),0) AS costo");
+ancora("PRF invito supabase", "app/profilo.tsx", "Sincronizza il piano da Supabase.");
+ancora("PRF effetto senza dipendenze", "app/profilo.tsx", "}, []);");
+ancora("PRF sottotitolo promemoria", "app/profilo.tsx", "`Blocco ${prom.tipo} alle ${comeTesto(prom)}, ogni giorno.`");
 
-/** Copia della macchina a stati di app/(tabs)/profilo.tsx. */
+/** Copia della macchina a stati di app/profilo.tsx. */
 function ModelloProfilo(p) {
   const [art, setArt] = useStato([]);
   const [cred, setCred] = useStato([]);

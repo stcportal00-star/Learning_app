@@ -209,7 +209,7 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
   uguale("P6 lo scenario si apre dall'unità", P.destinazione("kpi", p("scenario")), "/unita?tema=kpi");
   uguale("P6 leggi con un volume: il lettore", P.destinazione("kpi", p("leggi"), "vol 1"), "/lettore?id=vol%201");
   uguale("P6 leggi senza volume: la libreria", P.destinazione("kpi", p("leggi"), null), "/libreria");
-  uguale("P6 la rassegna filtrata per tema", P.destinazione("gdpr", p("rassegna")), "/rassegna?tema=gdpr");
+  uguale("P6 la rassegna filtrata per tema", P.destinazione("gdpr", p("rassegna")), "/notizie?tema=gdpr");
   for (const t of ["leggi", "esercizi", "schede", "scenario", "rassegna"]) {
     const d = P.descriviPasso(p(t));
     ok(`P6 ogni passo ha titolo e spiegazione (${t})`, d.titolo.length > 0 && d.dettaglio.length > 0);
@@ -537,6 +537,17 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S14 Studio evidenzia le unità dei progetti, non solo quella del piano",
     sorgente("app/(tabs)/studio.tsx").includes("const attivi = progetti(unita, seguiti).filter((p) => p.passo)"));
   const un = sorgente("app/unita.tsx");
+  // Notizie è la quinta scheda, Profilo si apre da Oggi.
+  const schede = sorgente("app/(tabs)/_layout.tsx");
+  const nomi = [...schede.matchAll(/<Tabs\.Screen name="([a-z]+)"/g)].map((m) => m[1]);
+  uguale("S15 le cinque schede, con Notizie al posto di Profilo", nomi, ["oggi", "studio", "libreria", "note", "notizie"]);
+  const { existsSync } = await import("node:fs");
+  ok("S15 Profilo resta una rotta (/profilo, anche per il collegamento del test di fumo), fuori dalle schede",
+    existsSync(join(RADICE_PROGETTO, "app/profilo.tsx")) && !existsSync(join(RADICE_PROGETTO, "app/(tabs)/profilo.tsx")));
+  ok("S15 da Oggi si aprono Profilo e le Notizie",
+    sorgente("app/(tabs)/oggi.tsx").includes('router.push("/profilo")') && sorgente("app/(tabs)/oggi.tsx").includes('router.push("/notizie")'));
+  ok("S15 dall'unità alle Notizie si torna alla scheda, non se ne impila una seconda",
+    un.includes('if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d);'));
   ok("S14 dall'unità si segue e si smette di seguire",
     un.includes("cambiaSeguito(() => segui(slug))") && un.includes("cambiaSeguito(() => smettiDiSeguire(progettoQui.seguito))"));
 }
