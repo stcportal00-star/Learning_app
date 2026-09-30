@@ -350,6 +350,16 @@ Actions fa da PC**: compila, firma, installa su un emulatore, legge logcat.
   non si reinstalla il vecchio APK, e non si disinstalla mai. Il numero della
   corsa vive in `version` (cioè `versionName`, leggibile in Impostazioni → App
   anche ad app rotta) e in `extra`, da cui lo legge la riga in Profilo.
+- **Gli aggiornamenti si installano dall'app.** `lib/aggiornamenti.ts` chiede a
+  GitHub l'elenco delle release, prende la build di `main` con il numero di
+  corsa più alto (le preliminari dei rami restano fuori), la confronta con
+  `extra.corsa` e, se è più recente, la scarica e la consegna all'installatore
+  di Android con un intent VIEW. Il riquadro sta in Profilo, e in Oggi compare
+  solo quando c'è qualcosa da installare. Si controlla al massimo ogni sei
+  ore, l'ultimo esito si ricorda senza rete, e un controllo fallito non fa
+  dimenticare quello buono. Serve il permesso `REQUEST_INSTALL_PACKAGES` in
+  `app.json`: senza, Android rifiuta in silenzio. La firma la verifica il
+  sistema, quindi la regola della chiave unica vale anche qui.
 - La biblioteca aperta si scarica con il workflow `biblioteca` (avvio manuale).
 - I trasporti di sincronizzazione 1 e 2 richiedono moduli nativi propri: non in
   questa fase. Il trasporto 3 passa dal foglio di condivisione e da Quick Share,

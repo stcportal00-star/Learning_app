@@ -211,6 +211,27 @@ uguale("M9 e il tipo che la fonte dichiara", chiamata.parametri.type, "video/mp4
 // che non ha il permesso di leggere, e si apre su un errore invece che sul video.
 uguale("M9 e il permesso di lettura sull'indirizzo", chiamata.parametri.flags, 1);
 
+// Un tipo che non è audio né video non arriva all'intent: con il permesso di
+// installare pacchetti, `application/vnd.android.package-archive` scritto in un
+// evento remoto aprirebbe l'installatore di Android su un file qualunque.
+for (const [nome, t] of [["un APK", "application/vnd.android.package-archive"],
+                         ["un PDF", "application/pdf"], ["un tipo vuoto", ""]]) {
+  await base.runAsync("UPDATE articoli SET tipo_media = ? WHERE id = ?", [t, "m9"]);
+  await media.apriMedia("m9");
+  uguale(`M9 ${nome} dichiarato dalla fonte si apre come audio`,
+    intent.giornale.at(-1).parametri.type, "audio/mpeg");
+}
+// Ma un video resta un video: con i parametri che certi feed aggiungono, o
+// con un sottotipo che il filtro non riconosce.
+for (const [dichiarato, atteso] of [["video/mp4; codecs=avc1", "video/mp4"], ["Audio/MPEG", "audio/mpeg"],
+                                    ["audio/x_m4a", "audio/x_m4a"], ["video/mp4 <script>", "video/*"],
+                                    ["video/", "video/*"]]) {
+  await base.runAsync("UPDATE articoli SET tipo_media = ? WHERE id = ?", [dichiarato, "m9"]);
+  await media.apriMedia("m9");
+  uguale(`M9 «${dichiarato}» arriva all'intent come ${atteso}`, intent.giornale.at(-1).parametri.type, atteso);
+}
+await base.runAsync("UPDATE articoli SET tipo_media = ? WHERE id = ?", ["video/mp4", "m9"]);
+
 intent.programmaNessunVisore(true);
 uguale("M9 senza lettore registrato si ripiega sul foglio di condivisione",
   await media.apriMedia("m9"), "aperto");
