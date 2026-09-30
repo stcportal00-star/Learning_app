@@ -377,6 +377,30 @@ conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
 - Le prove sono in `test/simulazione/percorso.mjs`, sul codice vero e sui
   contenuti veri.
 
+## Le notizie
+
+La quinta scheda (`app/(tabs)/notizie.tsx`, logica in `lib/notizie.ts`) è la
+rassegna letta come un giornale. Le categorie sono fisse e nello stesso
+ordine: Per te, In primo piano, le sette aree di `AREE`, Esplorazione,
+Salvati.
+
+- **Le categorie sono le aree, non i trimestri.** Il trimestre di un
+  articolo lo scrive la conduttura, e per cinque temi non coincide con
+  quello del piano; l'area si ricava dal tema con `TEMI`. Un articolo senza
+  tema, o con un tema che il piano non conosce, finisce in Esplorazione: mai
+  fuori dall'elenco.
+- **In primo piano** ha una sezione per area con la notizia principale e tre
+  dopo; **Per te** le aree dei progetti (senza progetti, quella dell'unità del
+  piano). L'area intera e non il tema, perché le parti di SQL la conduttura
+  non le assegna mai.
+- **Le date sono quelle del telefono.** «3 ore fa» solo se l'ora c'è: le date
+  nude la conduttura le scrive come mezzanotte UTC, e diventano «oggi»,
+  «ieri». L'ordine è per data d'uscita, perché tutti gli articoli di una
+  corsa hanno lo stesso `raccolto_a`. `verifica.sh` esegue
+  `test/simulazione/notizie.mjs` in UTC, a Città del Messico e a Roma: un
+  giorno calcolato in UTC passa la prima e sbaglia la seconda.
+- L'elenco non legge la colonna `testo`, che pesa: sa solo se c'è.
+
 ## Stato verificato al momento della consegna
 
 | Verifica | Esito |

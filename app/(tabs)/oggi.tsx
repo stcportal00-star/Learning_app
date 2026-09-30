@@ -92,7 +92,7 @@ export default function Oggi() {
         style={{ padding: 13, borderRadius: 11, borderWidth: 1,
                  borderColor: novita.daLeggere ? C.verde : C.bordo,
                  backgroundColor: novita.daLeggere ? C.verdeFondo : "transparent" }}>
-        <Text style={{ fontSize: 12, opacity: 0.6 }}>Rassegna quotidiana</Text>
+        <Text style={{ fontSize: 12, opacity: 0.6 }}>Notizie</Text>
         <Text style={{ fontSize: 20, fontWeight: "500", marginTop: 2 }}>
           {novita.daLeggere ? `${novita.daLeggere} da leggere` : "Tutto letto"}
         </Text>
