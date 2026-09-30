@@ -128,8 +128,14 @@ export async function apriMedia(
   // (lib/aggiornamenti.ts), un evento con il tipo di un APK farebbe aprire
   // l'installatore di Android su un file qualunque. Il solo tipo APK che
   // l'app usa è una costante in `aggiornamenti.installa`, mai un dato.
-  const dichiarato = a.tipo_media ?? "";
-  const tipo = /^(audio|video)\/[A-Za-z0-9.+-]+$/.test(dichiarato) ? dichiarato : "audio/mpeg";
+  //
+  // Il tipo base, senza parametri: i feed dichiarano anche `video/mp4;
+  // codecs=avc1`, e un video non deve aprirsi come audio. Se il tipo non
+  // passa, si tiene almeno la famiglia.
+  const base = (a.tipo_media ?? "").split(";")[0].trim().toLowerCase();
+  const tipo = /^(audio|video)\/[a-z0-9._+-]+$/.test(base)
+    ? base
+    : base.startsWith("video/") ? "video/*" : "audio/mpeg";
   try {
     await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
       data: f.contentUri,
