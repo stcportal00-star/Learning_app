@@ -9,6 +9,7 @@ import { esegui, eseguiConPreparazione, supportaWindowFunctions } from "../lib/p
 import { verifica, Esito } from "../lib/verifica";
 import * as Crypto from "expo-crypto";
 import { useLocalSearchParams } from "expo-router";
+import { useTastiera } from "../lib/useTastiera";
 
 type Esercizio = {
   id: string; tema_slug: string; tipo: string; livello: number; consegna: string;
@@ -17,8 +18,9 @@ type Esercizio = {
 };
 
 export default function Esercizi() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const affiancato = width >= 600;
+  const tastiera = useTastiera();
   // Dal percorso si arriva con il tema dell'unità: la coda è quella del tema,
   // non i 150 esercizi di tutti i trimestri. Da Studio, senza tema, tutto.
   const { tema } = useLocalSearchParams<{ tema?: string }>();
@@ -100,10 +102,14 @@ export default function Esercizi() {
   // Sul telefono la consegna sta in un contenitore con la sola altezza
   // massima: con flex:1 la base è zero e il contenitore si stringeva al
   // padding, 32 dp — si vedeva la riga dell'id e non la domanda. Senza flex
-  // prende l'altezza del testo, e oltre i 220 dp scorre. Affiancata (tablet)
+  // prende l'altezza del testo, e oltre il tetto scorre. Affiancata (tablet)
   // riempie la colonna come prima.
+  // Il padding sta nel contenitore del contenuto: sulla ScrollView sposta il
+  // contenuto in giù ma non allunga lo scorrimento, e gli ultimi 16 dp non si
+  // raggiungevano. La chiave fa ripartire ogni esercizio dall'inizio.
   const Consegna = (
-    <ScrollView style={affiancato ? { flex: 1, padding: 16 } : { flexGrow: 0, flexShrink: 1, padding: 16 }}>
+    <ScrollView key={corrente.id} style={affiancato ? { flex: 1 } : { flexGrow: 0, flexShrink: 1 }}
+      contentContainerStyle={{ padding: 16 }}>
       <Text style={{ fontSize: 12, opacity: 0.6, marginBottom: 4 }}>
         {corrente.id} · livello {corrente.livello} · {corrente.tema_slug}
         {corrente.ordine_rilevante === 1 ? " · l'ordine conta" : ""}
@@ -190,7 +196,10 @@ export default function Esercizi() {
     </View>
   ) : (
     <View style={{ flex: 1 }}>
-      <View style={{ maxHeight: 220 }}>{Consegna}</View>
+      {/* Il tetto segue la finestra (schermo diviso) e si stringe mentre si
+          scrive: la tastiera copre invece di restringere, e l'editor sotto
+          deve restare visibile. */}
+      <View style={{ maxHeight: tastiera ? 72 : Math.min(220, Math.round(height * 0.3)) }}>{Consegna}</View>
       {Editor}
     </View>
   );

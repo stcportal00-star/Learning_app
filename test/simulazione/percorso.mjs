@@ -374,8 +374,8 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     /stato === "background"\) void salvaUscendo\.current\(\)/.test(note));
   for (const [f, tetto] of [["app/esercizi.tsx", 220], ["app/codice.tsx", 300]]) {
     const t = sorgente(f);
-    ok(`S9 ${f}: sul telefono il riquadro in alto non ha flex:1 dentro maxHeight ${tetto}`,
-      t.includes(`<View style={{ maxHeight: ${tetto} }}>`) &&
+    ok(`S9 ${f}: sul telefono il riquadro in alto non ha flex:1 dentro il tetto di ${tetto} dp`,
+      t.includes(`maxHeight: tastiera ? 72 : Math.min(${tetto}, Math.round(height * `) &&
       /affiancato \? \{ flex: 1[^}]*\} : \{ flexGrow: 0, flexShrink: 1/.test(t));
   }
 }

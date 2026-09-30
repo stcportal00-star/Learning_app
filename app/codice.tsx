@@ -5,6 +5,7 @@ import * as Sharing from "expo-sharing";
 import { File, Paths } from "expo-file-system";
 import { database, registra } from "../lib/db";
 import { Text, TextInput } from "../components/Base";
+import { useTastiera } from "../lib/useTastiera";
 import { C } from "../lib/tema";
 
 type Esercizio = {
@@ -19,8 +20,9 @@ type Esercizio = {
  * saltare il primo passo trasforma l'esercizio in lettura passiva e lo annulla.
  */
 export default function Codice() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const affiancato = width >= 600;
+  const tastiera = useTastiera();
 
   const [coda, setCoda] = useState<Esercizio[]>([]);
   const [i, setI] = useState(0);
@@ -86,7 +88,8 @@ export default function Codice() {
   const Codice = (
     // Stessa ragione della consegna in app/esercizi.tsx: con flex:1 dentro un
     // contenitore che ha solo maxHeight, sul telefono il codice era alto zero.
-    <ScrollView style={affiancato ? { flex: 1 } : { flexGrow: 0, flexShrink: 1 }} horizontal={false}>
+    // La chiave fa ripartire ogni modulo dall'inizio dello scorrimento.
+    <ScrollView key={e.id} style={affiancato ? { flex: 1 } : { flexGrow: 0, flexShrink: 1 }} horizontal={false}>
       <Text style={{ fontSize: 12, opacity: 0.6, padding: 12, paddingBottom: 4 }}>
         {e.id} · livello {e.livello} {extra.categoria && fase === "confronto" ? `· ${extra.categoria}` : ""}
       </Text>
@@ -194,7 +197,9 @@ export default function Codice() {
     </View>
   ) : (
     <View style={{ flex: 1 }}>
-      <View style={{ maxHeight: 300 }}>{Codice}</View>
+      {/* Come in app/esercizi.tsx: il tetto segue la finestra e si stringe
+          mentre si scrive l'ipotesi, che altrimenti finisce sotto la tastiera. */}
+      <View style={{ maxHeight: tastiera ? 72 : Math.min(300, Math.round(height * 0.35)) }}>{Codice}</View>
       {Pannello}
     </View>
   );

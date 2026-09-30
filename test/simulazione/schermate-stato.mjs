@@ -1880,7 +1880,7 @@ ancora("ESE stato vuoto", "app/esercizi.tsx", "Nessun esercizio in coda.");
 ancora("ESE nota sul confronto", "app/esercizi.tsx", '{!esito.corretto && esito.motivo !== "errore_sql" ? (');
 ancora("ESE durata", "app/esercizi.tsx", "const durata = Math.round((Date.now() - iniziato) / 1000);");
 ancora("ESE esito prima della scrittura", "app/esercizi.tsx", "setEsito(r);");
-ancora("ESE altezza della consegna", "app/esercizi.tsx", "<View style={{ maxHeight: 220 }}>{Consegna}</View>");
+ancora("ESE altezza della consegna: tetto di 220 dp, relativo alla finestra, stretto con la tastiera", "app/esercizi.tsx", "<View style={{ maxHeight: tastiera ? 72 : Math.min(220, Math.round(height * 0.3)) }}>{Consegna}</View>");
 
 /** Copia della macchina a stati di app/esercizi.tsx. */
 function ModelloEsercizi(p) {
