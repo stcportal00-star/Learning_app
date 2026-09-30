@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, TextInput, ScrollView, Alert, ActivityIndicator } from "react-native";
+import { View, Pressable, ScrollView, Alert } from "react-native";
+import { Text, TextInput, ActivityIndicator } from "../components/Base";
+import { C } from "../lib/tema";
 import AsyncStorageLike from "expo-sqlite/kv-store";
 import { generaAccoppiamento, leggiAccoppiamento, Accoppiamento } from "../lib/sync/accoppiamento";
 import { salvaAccoppiamento, leggiAccoppiamentoSalvato, dimenticaAccoppiamento, divergenzaCorrente } from "../lib/sync/stato";
@@ -45,8 +47,8 @@ export default function Sync() {
   }
 
   const coloreDivergenza =
-    divergenza?.livello === "allineati" ? "#E8F5EE"
-    : divergenza?.livello === "leggera" ? "#FDF0D5" : "#FDECEC";
+    divergenza?.livello === "allineati" ? C.verdeFondo
+    : divergenza?.livello === "leggera" ? C.ambraFondo : C.rossoFondo;
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
@@ -70,23 +72,23 @@ export default function Sync() {
             e trascrivilo sull'altro: da lì in poi la sincronizzazione è silenziosa.
           </Text>
           <Pressable onPress={genera}
-            style={{ backgroundColor: "#18181B", padding: 14, borderRadius: 10, alignItems: "center" }}>
-            <Text style={{ color: "#fff", fontWeight: "600" }}>Genera il codice su questo dispositivo</Text>
+            style={{ backgroundColor: C.primario, padding: 14, borderRadius: 10, alignItems: "center" }}>
+            <Text style={{ color: C.suPrimario, fontWeight: "600" }}>Genera il codice su questo dispositivo</Text>
           </Pressable>
           <Text style={{ textAlign: "center", opacity: 0.5, fontSize: 12 }}>oppure</Text>
           <TextInput value={inserito} onChangeText={setInserito} autoCapitalize="characters"
             autoCorrect={false} placeholder="XXXX-XXXX-XXXX-XXXX-X"
-            style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 10, padding: 13,
+            style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 10, padding: 13,
                      fontFamily: "monospace", fontSize: 16, letterSpacing: 1 }} />
           <Pressable onPress={collega} disabled={inserito.length < 4}
-            style={{ borderWidth: 1, borderColor: "#E4E4E7", padding: 14, borderRadius: 10, alignItems: "center" }}>
+            style={{ borderWidth: 1, borderColor: C.bordo, padding: 14, borderRadius: 10, alignItems: "center" }}>
             <Text style={{ fontWeight: "600" }}>Inserisci il codice dell'altro dispositivo</Text>
           </Pressable>
         </View>
       ) : (
         <View style={{ gap: 12 }}>
           {codiceMostrato ? (
-            <View style={{ padding: 16, backgroundColor: "#F4F4F5", borderRadius: 11 }}>
+            <View style={{ padding: 16, backgroundColor: C.superficie, borderRadius: 11 }}>
               <Text style={{ fontSize: 12, opacity: 0.6, marginBottom: 8 }}>
                 Trascrivi questo codice sull'altro dispositivo
               </Text>
@@ -99,17 +101,17 @@ export default function Sync() {
               </Text>
             </View>
           ) : (
-            <View style={{ padding: 12, backgroundColor: "#E8F5EE", borderRadius: 10 }}>
-              <Text style={{ fontSize: 13, color: "#0F6E56" }}>Dispositivi accoppiati.</Text>
+            <View style={{ padding: 12, backgroundColor: C.verdeFondo, borderRadius: 10 }}>
+              <Text style={{ fontSize: 13, color: C.verde }}>Dispositivi accoppiati.</Text>
             </View>
           )}
 
           <Pressable onPress={async () => { setInCorso(true); await sincronizzaOra(); setInCorso(false); }}
             disabled={inCorso}
-            style={{ backgroundColor: inCorso ? "#A1A1AA" : "#18181B", padding: 15,
+            style={{ backgroundColor: inCorso ? C.disattivo : C.primario, padding: 15,
                      borderRadius: 10, alignItems: "center" }}>
-            {inCorso ? <ActivityIndicator color="#fff" />
-                     : <Text style={{ color: "#fff", fontWeight: "600" }}>Sincronizza adesso</Text>}
+            {inCorso ? <ActivityIndicator color={C.suDisattivo} />
+                     : <Text style={{ color: C.suPrimario, fontWeight: "600" }}>Sincronizza adesso</Text>}
           </Pressable>
 
           <Text style={{ fontSize: 12, opacity: 0.6, lineHeight: 18 }}>
@@ -119,7 +121,7 @@ export default function Sync() {
           </Text>
 
           {ultimoDiario.length ? (
-            <View style={{ padding: 12, backgroundColor: "#F4F4F5", borderRadius: 10 }}>
+            <View style={{ padding: 12, backgroundColor: C.superficie, borderRadius: 10 }}>
               <Text style={{ fontSize: 13, lineHeight: 19 }}>{riassumi(ultimoDiario)}</Text>
             </View>
           ) : null}
@@ -130,7 +132,7 @@ export default function Sync() {
               [{ text: "Annulla", style: "cancel" },
                { text: "Dimentica", style: "destructive",
                  onPress: async () => { await dimenticaAccoppiamento(); setAccoppiato(null); setCodiceMostrato(null); } }])}>
-            <Text style={{ fontSize: 12, color: "#A12B2B", textAlign: "center", marginTop: 6 }}>
+            <Text style={{ fontSize: 12, color: C.rosso, textAlign: "center", marginTop: 6 }}>
               Dimentica l'accoppiamento
             </Text>
           </Pressable>

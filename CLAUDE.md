@@ -287,8 +287,77 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
 - Layout adattivo con un solo punto di rottura: `useWindowDimensions()`, 600dp.
   Niente rami separati per telefono e tablet.
 - Massimo cinque schede. Il resto sono schermate impilate.
+- **Tema nero.** I colori stanno solo in `lib/tema.ts` (`C`): nessun esadecimale
+  nelle schermate. `Text`, `TextInput` e `ActivityIndicator` si importano da
+  `components/Base`, mai da `react-native`: il testo predefinito di React Native
+  è nero, su sfondo nero sparisce, e con React 19 `defaultProps` non lo corregge
+  più. Il pulsante principale è chiaro (`C.primario`) e il testo sopra va messo
+  a mano a `C.suPrimario`: è l'unico caso in cui il colore predefinito è
+  sbagliato. Lo sfondo delle schermate lo danno `contentStyle` (pila) e
+  `sceneStyle` (schede); quello della finestra, della barra di stato e dello
+  splash sta in `app.json`. Lo splash ha bisogno di un'immagine
+  (`assets/avvio/splash.png`, trasparente): configurato senza, prebuild
+  cancella il logo predefinito ma lo stile continua a citarlo, e il build
+  muore al collegamento delle risorse. `userInterfaceStyle: dark` resta inerte finché
+  `expo-system-ui` non è installato (prebuild lo dice): i dialoghi di sistema
+  seguono il tema del telefono.
 - I commenti spiegano **perché**, non cosa. Se un commento descrive ciò che il
   codice già dice, va tolto.
+
+## Il percorso di studio
+
+Studio non è un elenco di strumenti: è il **percorso**. `lib/percorso.ts`
+(logica pura) fa di ogni tema un'unità, nell'ordine del piano — trimestre, poi
+l'ordine di `TEMI` in `lib/contenuti.ts` —, e dentro ogni unità i passi del
+ciclo: leggere la fonte, esercitarsi, fissare i concetti con le schede,
+applicarli a uno scenario, restare aggiornati con la rassegna. Un tema senza
+materiale non è un'unità.
+
+- **Si supera all'80%** (`SOGLIA_PERCENTO`) degli esercizi e delle schede, più
+  uno scenario svolto (`SCENARI_RICHIESTI`), dove ci sono. Leggere e la rassegna
+  non contano per chiudere un'unità: un volume che non è sul telefono, in aereo,
+  bloccherebbe il percorso fino a novembre.
+- **Il prossimo passo** (`prossimoPasso()`) è il primo passo non fatto della
+  prima unità non superata; la lettura viene prima solo se il volume è sul
+  telefono e mai aperto. Sta in cima a Oggi e a Studio
+  (`components/ProssimoPasso.tsx`), e si ricalcola a ogni ritorno in primo piano.
+- **L'avanzamento non ha eventi suoi.** `lib/avanzamento.ts` lo legge dalle
+  tabelle che l'app scrive già (tentativi, ripasso, note, biblioteca, articoli):
+  un secondo registro dell'avanzamento andrebbe tenuto allineato al primo.
+- **Gli scenari si svolgono in Note.** L'unità crea la nota con consegna e
+  rubrica e `origine_url = scenario:<id>`; lo scenario è svolto quando la nota
+  non è più il modello con cui è nata. Se la nota esiste già, si riapre quella.
+- Esercizi, Ripasso e Rassegna accettano `?tema=`: dall'unità si arriva già
+  filtrati. Senza parametro fanno quello che facevano prima.
+- **Da una schermata impilata a una scheda si va con `router.dismissTo`**, mai
+  con `navigate` o `push`. In expo-router 6 NAVIGATE riusa una schermata della
+  pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
+  SECONDO gruppo di schede, con un secondo editor delle note che può
+  sovrascrivere il primo. `dismissTo` torna alle schede che esistono già. Il
+  prezzo, accettato: dopo «Svolgi in Note» l'indietro porta a Oggi, non
+  all'unità, che si riapre da Studio.
+- **Note salva uno alla volta, per sessione di modifica.** Note salva uscendo
+  in tre modi — perdita del fuoco, background, smontaggio — oltre ai
+  pulsanti, e i salvataggi possono sovrapporsi. Aprire una nota o
+  cominciarne una nuova apre una sessione; ogni salvataggio porta la
+  sessione del disegno da cui parte, passa dalla `catena` (uno alla volta) e
+  scrive nella nota di quella sessione, con l'id letto quando tocca a lui. Id
+  e copia salvata si aggiornano solo a scrittura riuscita. Con l'id preso
+  dallo stato `apertaId`, due salvataggi della stessa nota nuova creavano
+  due note; con un ref «della nota aperta», un gestore rimasto indietro
+  scriveva nella nota aperta dopo. Le prove sono F11–F12d in
+  `test/simulazione/schermate-stato.mjs`.
+- **L'avanzamento è per dispositivo, per ora.** Gli eventi dei tentativi
+  portano solo `{esercizio_id, esito}` e quelli del ripasso `{grado,
+  stabilita}`: sull'altro dispositivo un tentativo ricevuto resta incompleto
+  (manca `eseguito_a`, NOT NULL) e il ripasso aggiorna solo `stabilita`. Anche
+  `file_locale` viaggia nel payload della biblioteca, e su un secondo
+  dispositivo un volume può risultare «sul telefono» senza esserci. Chiuderlo
+  è la decisione aperta in DA-FARE (voce 17 e SYN-01: sincronizzare davvero o
+  tenere i due dispositivi come due isole), non una correzione da fare di
+  passaggio.
+- Le prove sono in `test/simulazione/percorso.mjs`, sul codice vero e sui
+  contenuti veri.
 
 ## Stato verificato al momento della consegna
 

@@ -170,11 +170,11 @@ const html = `<!doctype html>
 <title>Lettore</title>
 <!-- pdf.js ${versione} (Mozilla, Apache-2.0), incorporato per l'uso offline -->
 <style>
-  html, body { margin: 0; background: #F4F4F5; }
+  html, body { margin: 0; background: #000000; }
   #pagine { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 40px; }
-  .pagina { width: calc(100vw - 16px); background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+  .pagina { width: calc(100vw - 16px); background: #fff; }
   .pagina canvas { display: block; width: 100%; height: auto; }
-  #stato { padding: 40vh 24px 0; text-align: center; font: 14px system-ui, sans-serif; color: #71717A; }
+  #stato { padding: 40vh 24px 0; text-align: center; font: 14px system-ui, sans-serif; color: #A1A1AA; }
 </style>
 </head>
 <body>

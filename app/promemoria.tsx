@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, TextInput, ScrollView, Switch, Alert, Linking } from "react-native";
+import { View, Pressable, ScrollView, Switch, Alert, Linking } from "react-native";
+import { Text, TextInput } from "../components/Base";
+import { C } from "../lib/tema";
 import { router } from "expo-router";
 import { database } from "../lib/db";
 import { leggiPromemoria, salvaPromemoria, applica, permessoConcesso, programmate } from "../lib/notifiche";
@@ -73,7 +75,7 @@ export default function SchermataPromemoria() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 14 }}>
       <Pressable onPress={() => router.back()} hitSlop={12}>
-        <Text style={{ color: "#0C447C", fontSize: 16 }}>←</Text>
+        <Text style={{ color: C.blu, fontSize: 16 }}>←</Text>
       </Pressable>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>Promemoria</Text>
       <Text style={{ fontSize: 13, opacity: 0.6, lineHeight: 19 }}>
@@ -81,24 +83,25 @@ export default function SchermataPromemoria() {
       </Text>
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-                     borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14 }}>
+                     borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 14 }}>
         <Text style={{ fontSize: 16, fontWeight: "500" }}>Promemoria quotidiano</Text>
-        <Switch value={p.attivo} onValueChange={(v) => void aggiorna({ ...p, attivo: v }, v)} />
+        <Switch value={p.attivo} onValueChange={(v) => void aggiorna({ ...p, attivo: v }, v)}
+          trackColor={{ false: C.bordoForte, true: C.verde }} thumbColor={C.testo} />
       </View>
 
       {p.attivo && !permesso ? (
-        <View style={{ backgroundColor: "#FDECEC", borderRadius: 10, padding: 12 }}>
-          <Text style={{ fontSize: 13, color: "#A12B2B", lineHeight: 19 }}>
+        <View style={{ backgroundColor: C.rossoFondo, borderRadius: 10, padding: 12 }}>
+          <Text style={{ fontSize: 13, color: C.rosso, lineHeight: 19 }}>
             Il promemoria è acceso ma Android non permette le notifiche: non suonerà.
             Concedi il permesso dalle impostazioni del sistema.
           </Text>
           <Pressable onPress={() => void Linking.openSettings()} style={{ marginTop: 8 }}>
-            <Text style={{ color: "#0C447C", fontWeight: "600" }}>Apri impostazioni</Text>
+            <Text style={{ color: C.blu, fontWeight: "600" }}>Apri impostazioni</Text>
           </Pressable>
         </View>
       ) : null}
 
-      <View style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14, gap: 10 }}>
+      <View style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 14, gap: 10 }}>
         <Text style={{ fontSize: 12, opacity: 0.6 }}>Ora</Text>
         <TextInput
           value={testoOra}
@@ -114,14 +117,14 @@ export default function SchermataPromemoria() {
         </Text>
       </View>
 
-      <View style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 11, padding: 14, gap: 8 }}>
+      <View style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 11, padding: 14, gap: 8 }}>
         <Text style={{ fontSize: 12, opacity: 0.6 }}>Blocco</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {TIPI.map((t) => (
             <Pressable key={t} onPress={() => void aggiorna({ ...p, tipo: t }, p.attivo)}
               style={{ paddingVertical: 7, paddingHorizontal: 12, borderRadius: 9,
-                       backgroundColor: p.tipo === t ? "#18181B" : "#F4F4F5" }}>
-              <Text style={{ fontSize: 13, color: p.tipo === t ? "#fff" : "#18181B" }}>
+                       backgroundColor: p.tipo === t ? C.primario : C.superficie }}>
+              <Text style={{ fontSize: 13, color: p.tipo === t ? C.suPrimario : C.testo }}>
                 {NOMI[t]} · {DURATA_PREVISTA[t]}′
               </Text>
             </Pressable>
@@ -129,7 +132,7 @@ export default function SchermataPromemoria() {
         </View>
       </View>
 
-      <View style={{ backgroundColor: "#F4F4F5", borderRadius: 11, padding: 14, gap: 4 }}>
+      <View style={{ backgroundColor: C.superficie, borderRadius: 11, padding: 14, gap: 4 }}>
         <Text style={{ fontSize: 12, opacity: 0.6 }}>Anteprima</Text>
         <Text style={{ fontSize: 15, fontWeight: "500" }}>{anteprima.titolo}</Text>
         <Text style={{ fontSize: 13, opacity: 0.75 }}>{anteprima.corpo}</Text>

@@ -5,7 +5,16 @@
     "version": "0.1.0",
     "orientation": "default",
     "scheme": "percorso",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#000000",
+    "androidStatusBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#000000"
+    },
+    "androidNavigationBar": {
+      "barStyle": "light-content",
+      "backgroundColor": "#000000"
+    },
     "assetBundlePatterns": [
       "assets/contenuti/*"
     ],
@@ -28,6 +37,14 @@
       "expo-router",
       "expo-sqlite",
       "expo-document-picker",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/avvio/splash.png",
+          "imageWidth": 1
+        }
+      ],
       "./plugins/firma-release",
       "./plugins/senza-gms"
     ],

@@ -382,7 +382,15 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
   ok("H1 OGG-05 l'effetto di Oggi dipende solo da [versione]", contiene("app/(tabs)/oggi.tsx", "}, [versione]);"));
   ok("H2 OGG-05 l'effetto di Studio non ha dipendenze", contiene("app/(tabs)/studio.tsx", "}, []);"));
   ok("H3 PRF-02 l'effetto del Profilo non ha dipendenze", contiene("app/(tabs)/profilo.tsx", "}, []);"));
-  ok("H4 OGG-05 nessuna schermata usa useFocusEffect", !["app/(tabs)/oggi.tsx", "app/(tabs)/studio.tsx", "app/(tabs)/profilo.tsx"].some((f) => contiene(f, "useFocusEffect")));
+  // Il percorso si rilegge al ritorno (Studio, e il riquadro ProssimoPasso di
+  // Oggi); i CONTEGGI no, ed è quello il difetto. La prova guarda che l'unico
+  // useFocusEffect delle tre schede sia quello del percorso, e che non tocchi
+  // le query dei conteggi.
+  const fuocoStudio = sorgente("app/(tabs)/studio.tsx").match(/useFocusEffect\(useCallback\(\(\) => \{[\s\S]*?\}, \[\]\)\);/g) ?? [];
+  ok("H4 OGG-05 nessun conteggio usa useFocusEffect: in Studio lo usa solo il percorso, Oggi e Profilo per niente",
+    !["app/(tabs)/oggi.tsx", "app/(tabs)/profilo.tsx"].some((f) => contiene(f, "useFocusEffect")) &&
+    (sorgente("app/(tabs)/studio.tsx").match(/useFocusEffect\(/g) ?? []).length === 1 &&
+    fuocoStudio.length === 1 && fuocoStudio[0].includes("leggiPercorso()") && !/FROM (esercizi|ripasso)/.test(fuocoStudio[0]));
 
   // OGG-06: numeratore e denominatore su popolazioni diverse, sui contenuti veri.
   const sql = JSON.parse(readFileSync(join(RADICE, "assets/contenuti/esercizi_sql.json"), "utf8"));
@@ -437,8 +445,17 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
 // ============================================================== I. NOTE
 console.log("\nI. app/(tabs)/note.tsx");
 {
-  ok("I1 NOT-03c setApertaId(id) sta dopo l'await", contiene("app/(tabs)/note.tsx", "setApertaId(id);\n    await ricarica();"));
-  ok("I2 NOT-03b/c salva() non ha nessuna guardia di riesecuzione", !/const \[inCorso|salvataggioInCorso|if \(inCorso\)/.test(sorgente("app/(tabs)/note.tsx")));
+  // NOT-03b/c corretti: le due prove qui erano le premesse del difetto
+  // (setApertaId dopo l'await, nessuna protezione dalla riesecuzione). Ora
+  // guardano la correzione: l'id viene dalla sessione di modifica, non dallo
+  // stato, e i salvataggi passano uno alla volta dalla catena.
+  const corpoSalva = (sorgente("app/(tabs)/note.tsx").match(/async function salva\(\) \{[\s\S]*?\n  \}\n/) ?? [""])[0];
+  const corpoScrivi = (sorgente("app/(tabs)/note.tsx").match(/async function scrivi\([^)]*\) \{[\s\S]*?\n  \}\n/) ?? [""])[0];
+  ok("I1 NOT-03c (corretto) l'id si legge dalla sessione quando tocca a quel salvataggio, non dallo stato apertaId",
+    corpoScrivi.includes("idDiSessione.current.get(s)") && !/apertaId ===|!apertaId/.test(corpoScrivi + corpoSalva));
+  ok("I2 NOT-03b/c (corretto) salva() mette in fila: un salvataggio alla volta",
+    corpoSalva.includes("catena.current.catch(() => {}).then(() => scrivi(s, c))") &&
+    contiene("app/(tabs)/note.tsx", "onPress={salva}"));
   // NOT-07 corretto dopo questo triage: le tre vie di uscita passano tutte da
   // esci(), che salva se c'e' qualcosa da salvare. Le righe restano, con il
   // verso cambiato: erano la prova del difetto, ora sono la prova della

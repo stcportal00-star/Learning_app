@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
+import { View, Pressable } from "react-native";
 import Constants from "expo-constants";
 import {
   Stato, statoNoto, controlla, scaricaRelease, installa, megabyte, numeroCorsa,
 } from "../lib/aggiornamenti";
+import { Text, ActivityIndicator } from "./Base";
+import { C } from "../lib/tema";
 
 /** Il numero di corsa di QUESTA build, o null se è stata compilata a mano. */
 const CORSA = ((Constants.expoConfig?.extra ?? {}) as { corsa?: string | null }).corsa ?? null;
@@ -94,8 +96,8 @@ export default function Aggiornamento({ compatto = false }: { compatto?: boolean
 
   return (
     <View style={{ padding: 13, borderRadius: 11, borderWidth: 1,
-                   borderColor: evidenza ? "#B5D4F4" : "#E4E4E7",
-                   backgroundColor: evidenza ? "#EEF5FC" : undefined }}>
+                   borderColor: evidenza ? C.bluBordo : C.bordo,
+                   backgroundColor: evidenza ? C.bluFondo : undefined }}>
       <Text style={{ fontSize: 15, fontWeight: "600" }}>Aggiornamenti</Text>
       <Text style={{ fontSize: 13, opacity: 0.75, marginTop: 3, lineHeight: 18 }}>{testo}</Text>
       {avviso ? (
@@ -117,13 +119,13 @@ export default function Aggiornamento({ compatto = false }: { compatto?: boolean
           <>
             {puoiScaricare ? (
               <Pressable onPress={scaricaEInstalla}
-                style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: "#185FA5" }}>
-                <Text style={{ fontSize: 13, fontWeight: "600", color: "#FFFFFF" }}>Scarica e installa</Text>
+                style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: C.blu }}>
+                <Text style={{ fontSize: 13, fontWeight: "600", color: C.suPrimario }}>Scarica e installa</Text>
               </Pressable>
             ) : null}
             {!compatto ? (
               <Pressable onPress={controllaOra}
-                style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: "#F4F4F5" }}>
+                style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: C.superficie }}>
                 <Text style={{ fontSize: 13, fontWeight: "600" }}>Controlla ora</Text>
               </Pressable>
             ) : null}

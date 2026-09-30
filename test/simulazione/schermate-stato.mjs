@@ -1407,14 +1407,16 @@ libreriaPrima.smonta();
 // SEZIONE F — app/(tabs)/note.tsx: editor, salvataggio, abbandono
 // ===========================================================================
 ancora("NOT guardia del vuoto", "app/(tabs)/note.tsx", "if (!testo.trim() && !titolo.trim()) return;");
-ancora("NOT id nuovo o esistente", "app/(tabs)/note.tsx", 'const id = apertaId === "nuova" || !apertaId ? Crypto.randomUUID() : apertaId;');
-ancora("NOT setApertaId dopo l'await", "app/(tabs)/note.tsx", "setApertaId(id); await ricarica();");
-ancora("NOT si esce salvando", "app/(tabs)/note.tsx",
-  "async function esci(dopo: () => void) { if (daSalvare()) await salva(); dopo(); }");
+ancora("NOT l'id è della sessione di modifica, deciso quando tocca a quel salvataggio", "app/(tabs)/note.tsx", "const noto = idDiSessione.current.get(s); const nuovo = !noto; const id = noto ?? Crypto.randomUUID();");
+ancora("NOT i salvataggi passano uno alla volta", "app/(tabs)/note.tsx", "const turno = catena.current.catch(() => {}).then(() => scrivi(s, c)); catena.current = turno; await turno;");
+ancora("NOT setApertaId dopo l'await, solo nella stessa sessione", "app/(tabs)/note.tsx", "{ salvato.current = c; setApertaId(id); } await ricarica();");
+ancora("NOT si esce salvando, due passate: la seconda prende ciò che si è scritto durante l'attesa", "app/(tabs)/note.tsx",
+  "async function esci(dopo: () => void) { if (daSalvare()) await salva(); if (!(await salvaUscendo.current())) return; dopo(); }");
 ancora("NOT la nota gia' aperta non si riapre", "app/(tabs)/note.tsx",
   "onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}");
 ancora("NOT salvataggio allo smontaggio", "app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);");
-ancora("NOT la copia salvata si aggiorna dopo la scrittura", "app/(tabs)/note.tsx", "salvato.current = { titolo, testo, pubblicabile };");
+ancora("NOT id, copia salvata e apertaId si aggiornano solo a scrittura riuscita, e solo nella stessa sessione", "app/(tabs)/note.tsx", "idDiSessione.current.set(s, id); if (s === sessione.current) { salvato.current = c; setApertaId(id); } await ricarica();");
+ancora("NOT aprire una nota apre una sessione con il suo id", "app/(tabs)/note.tsx", "sessione.current += 1; idDiSessione.current.set(sessione.current, n.id);");
 ancora("NOT titolo vuoto come NULL", "app/(tabs)/note.tsx", "titolo || null");
 ancora("NOT ordine dell'elenco", "app/(tabs)/note.tsx", "SELECT * FROM note ORDER BY creato_a DESC");
 ancora("NOT filtro pubblicabili", "app/(tabs)/note.tsx", "SELECT * FROM note WHERE pubblicabile = 1 ORDER BY creato_a DESC");
@@ -1450,8 +1452,15 @@ function ModelloNote(p) {
   // Copia di cio' che sta sul disco per la nota aperta: dice se c'e' qualcosa
   // da salvare prima di uscire, senza un flag da aggiornare a ogni tasto.
   const salvato = useRif({ titolo: "", testo: "", pubblicabile: false });
+  // Sessioni di modifica e salvataggi in fila, come in note.tsx.
+  const sessione = useRif(0);
+  const sessioneDisegno = sessione.current;
+  const idDiSessione = useRif(new Map());
+  const catena = useRif(Promise.resolve());
 
   function apriNota(n) {
+    sessione.current += 1;
+    idDiSessione.current.set(sessione.current, n.id);
     setApertaId(n.id);
     setTitolo(n.titolo ?? "");
     setTesto(n.testo);
@@ -1460,6 +1469,7 @@ function ModelloNote(p) {
   }
 
   function nuova() {
+    sessione.current += 1;
     setApertaId("nuova");
     setTitolo("");
     setTesto("");
@@ -1475,43 +1485,59 @@ function ModelloNote(p) {
 
   async function esci(dopo) {
     if (daSalvare()) await salva();
+    if (!(await salvaUscendo.current())) return;
     dopo();
   }
 
   async function salva() {
     if (!testo.trim() && !titolo.trim()) return;
-    const id = apertaId === "nuova" || !apertaId ? p.randomUUID() : apertaId;
-    const nuovo = apertaId === "nuova" || !apertaId;
+    const s = sessioneDisegno;
+    const c = { titolo, testo, pubblicabile };
+    const turno = catena.current.catch(() => {}).then(() => scrivi(s, c));
+    catena.current = turno;
+    await turno;
+  }
+
+  async function scrivi(s, c) {
+    const noto = idDiSessione.current.get(s);
+    const nuovo = !noto;
+    const id = noto ?? p.randomUUID();
     await p.registra(
       "note",
       id,
       nuovo ? "crea" : "aggiorna",
-      { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
+      { titolo: c.titolo, testo: c.testo, pubblicabile: c.pubblicabile ? 1 : 0 },
       async (d, hlc) => {
         if (nuovo) {
           await d.runAsync(
             `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
-            [id, titolo || null, testo, pubblicabile ? 1 : 0, dataOra().toISOString(), hlc]
+            [id, c.titolo || null, c.testo, c.pubblicabile ? 1 : 0, dataOra().toISOString(), hlc]
           );
         } else {
-          await d.runAsync(
+          const r = await d.runAsync(
             `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
-            [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]
+            [c.titolo || null, c.testo, c.pubblicabile ? 1 : 0, hlc, id]
           );
+          if (!r.changes) throw new Error("note: la nota da aggiornare non è sul disco");
         }
       }
     );
-    salvato.current = { titolo, testo, pubblicabile };
-    setApertaId(id);
+    idDiSessione.current.set(s, id);
+    if (s === sessione.current) { salvato.current = c; setApertaId(id); }
     await ricarica();
   }
 
   // Cambio di scheda e tasto indietro di sistema: la schermata si smonta senza
   // passare da nessun pulsante, e il salvataggio parte lo stesso.
-  const salvaUscendo = useRif(async () => {});
+  const salvaUscendo = useRif(async () => true);
   useEffetto(() => {
     salvaUscendo.current = async () => {
-      if (daSalvare()) await salva();
+      try {
+        if (daSalvare()) await salva();
+        return true;
+      } catch {
+        return false;
+      }
     };
   });
   useEffetto(() => () => {
@@ -1601,7 +1627,10 @@ ok("F10 nessun riscontro visivo del salvataggio riuscito: nessun avviso", avvisi
 //       misura piu' un difetto ma la sua correzione (F11, F12);
 //   (b) secondo tocco sul pulsante del disegno PRECEDENTE, cioe' prima che
 //       React abbia mostrato il nuovo stato (setApertaId sta dopo l'await).
-//       Questo e' un difetto della SCHERMATA, non del registro, e resta (F12b).
+//       Era un difetto della SCHERMATA (F12b). Chiuso quando l'id della nota
+//       aperta e' passato in un ref fissato prima dell'await: il secondo
+//       salvataggio legge l'id del primo e diventa un 'aggiorna'. La stessa
+//       correzione fa di (a) UNA nota con 'crea' e 'aggiorna', non due note.
 await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
 await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Nota scritta con due dita."));
 const primaDelDoppio = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
@@ -1627,10 +1656,11 @@ for (const n of notaScrittaDueDita) {
 }
 corretto(
   "NOT-03b",
-  "F12 dopo il doppio tocco nessuna nota resta senza il suo evento: ogni riga scritta ha il suo 'crea' nel registro (invariante 1)",
-  dopoIlDoppio > primaDelDoppio &&
-    notaScrittaDueDita.length === dopoIlDoppio - primaDelDoppio &&
-    eventiDelleNoteDueDita.every((e) => e.length === 1 && e[0].tipo === "crea"),
+  "F12 il doppio tocco scrive UNA sola nota, con il suo 'crea' seguito da un 'aggiorna' nel registro (invariante 1, nessun doppione)",
+  dopoIlDoppio === primaDelDoppio + 1 &&
+    notaScrittaDueDita.length === 1 &&
+    eventiDelleNoteDueDita.length === 1 &&
+    eventiDelleNoteDueDita[0].map((e) => e.tipo).sort().join(",") === "aggiorna,crea",
   `note ${primaDelDoppio}->${dopoIlDoppio}, righe con quel testo ${notaScrittaDueDita.length}, eventi per riga: ${
     eventiDelleNoteDueDita.map((e) => e.length).join("/") || "nessuna riga"
   }`
@@ -1645,7 +1675,66 @@ await tocca(noteSchermata, () => salvaVecchio());
 await tocca(noteSchermata, () => salvaVecchio());
 const dopoIlTardivo = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
 const duplicate = await base.getAllAsync("SELECT id FROM note WHERE testo = 'Secondo tocco sul pulsante vecchio.'");
-difetto("NOT-03c", "F12b un secondo tocco sul pulsante del disegno precedente crea una SECONDA nota: apertaId e' ancora 'nuova' in quella chiusura", dopoIlTardivo === primaDelTardivo + 2 && duplicate.length === 2 && duplicate[0].id !== duplicate[1].id, `note ${primaDelTardivo}->${dopoIlTardivo}`);
+corretto("NOT-03c", "F12b un secondo tocco sul pulsante del disegno precedente NON crea una seconda nota: l'id si legge dal ref, non dallo stato ancora 'nuova'", dopoIlTardivo === primaDelTardivo + 1 && duplicate.length === 1, `note ${primaDelTardivo}->${dopoIlTardivo}`);
+
+// (c) il gestore di un disegno vecchio scrive nella nota della SUA sessione,
+// non in quella aperta dopo. Con l'id preso da un ref «della nota aperta»
+// il testo di Z finiva dentro Y.
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTitolo("Nota Y"));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Testo di Y."));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.salva());
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTitolo("Nota Z"));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Testo di Z, seconda stesura."));
+const salvaDiZ = noteSchermata.schermo.editor.salva;
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.voci.find((v) => v.titolo === "Nota Y").premi());
+await tocca(noteSchermata, () => salvaDiZ());
+const righeY = await base.getAllAsync("SELECT testo FROM note WHERE titolo = 'Nota Y'");
+const righeZ = await base.getAllAsync("SELECT testo FROM note WHERE titolo = 'Nota Z'");
+corretto("NOT-03d", "F12c un Salva rimasto dal disegno di Z, toccato dopo aver aperto Y, scrive in Z e lascia Y com'era",
+  righeY.length === 1 && righeY[0].testo === "Testo di Y." && righeZ.length === 1 &&
+    righeZ[0].testo === "Testo di Z, seconda stesura." && noteSchermata.schermo.editor.testo === "Testo di Y.",
+  JSON.stringify({ righeY, righeZ, editor: noteSchermata.schermo.editor.testo }));
+
+// (d) una scrittura che fallisce (disco pieno) non perde il testo e non
+// lascia doppioni: resta da salvare, e il salvataggio dopo crea UNA nota.
+await base.execAsync("CREATE TEMP TRIGGER disco_pieno BEFORE INSERT ON note BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;");
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Risposta scritta a disco pieno."));
+const rigettoDisco = await tocca(noteSchermata, () => noteSchermata.schermo.editor.salva());
+const dueFalliti = await toccaDueVolte(noteSchermata, () => noteSchermata.schermo.editor.salva());
+await base.execAsync("DROP TRIGGER disco_pieno;");
+const primaDelRecupero = (await base.getAllAsync("SELECT id FROM note WHERE testo = 'Risposta scritta a disco pieno.'")).length;
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.salva());
+const dopoIlRecupero = await base.getAllAsync("SELECT id FROM note WHERE testo = 'Risposta scritta a disco pieno.'");
+corretto("NOT-08", "F12d a disco pieno Salva fallisce senza scrivere, il testo resta nell'editor, e liberato il disco si salva UNA nota",
+  String(rigettoDisco?.message ?? rigettoDisco).includes("disk is full") &&
+    dueFalliti.every((e) => e.status === "rejected") && primaDelRecupero === 0 &&
+    noteSchermata.schermo.editor.testo === "Risposta scritta a disco pieno." && dopoIlRecupero.length === 1,
+  JSON.stringify({ primaDelRecupero, dopo: dopoIlRecupero.length, dueFalliti: dueFalliti.map((e) => e.status) }));
+
+// (e) una sincronizzazione tiene ferma la coda delle scritture: l'uscita
+// aspetta, l'editor resta scrivibile, e ciò che si scrive intanto non deve
+// sparire quando l'uscita finalmente apre la nota nuova.
+let liberaCoda = null;
+const codaTenuta = DB.inTransazione(() => new Promise((r) => { liberaCoda = r; }));
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Prima parte."));
+const salvataggioInCoda = noteSchermata.schermo.editor.salva();
+const uscitaInCoda = noteSchermata.schermo.elenco.nuova();
+await noteSchermata.stabilizza();
+const editorDuranteAttesa = noteSchermata.schermo.editor.testo;
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Prima parte. Scritta durante l'attesa."));
+liberaCoda();
+await codaTenuta;
+await Promise.allSettled([salvataggioInCoda, uscitaInCoda]);
+await noteSchermata.stabilizza();
+const righeAttesa = await base.getAllAsync("SELECT testo FROM note WHERE testo LIKE 'Prima parte.%'");
+corretto("NOT-09", "F12e scritto mentre l'uscita aspetta la coda: si salva nella stessa nota prima di cambiare, senza doppioni",
+  editorDuranteAttesa === "Prima parte." && righeAttesa.length === 1 &&
+    righeAttesa[0].testo === "Prima parte. Scritta durante l'attesa." && noteSchermata.schermo.editor.testo === "",
+  JSON.stringify({ editorDuranteAttesa, righeAttesa, dopo: noteSchermata.schermo.editor.testo }));
 
 // --- salvataggio di una nota ESISTENTE
 const notaEsistente = noteSchermata.schermo.elenco.voci.find((v) => v.titolo === "Kleppmann cap. 5");
@@ -1856,12 +1945,12 @@ difetto("PRF-01b", "G13 se la lettura solleva le sezioni restano al testo di rip
 ancora("ESE coda", "app/esercizi.tsx", "AND (t.esito IS NULL OR t.esito <> 'corretto') ORDER BY e.livello, e.id LIMIT 40");
 ancora("ESE indice bloccato", "app/esercizi.tsx", "setIndice((i) => Math.min(i + 1, coda.length - 1));");
 ancora("ESE pulsante disabilitato", "app/esercizi.tsx", "disabled={inCorso || !risposta.trim()}");
-ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? "#18181B" : "#D4D4D8"');
+ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? C.primario : C.disattivo');
 ancora("ESE stato vuoto", "app/esercizi.tsx", "Nessun esercizio in coda.");
 ancora("ESE nota sul confronto", "app/esercizi.tsx", '{!esito.corretto && esito.motivo !== "errore_sql" ? (');
 ancora("ESE durata", "app/esercizi.tsx", "const durata = Math.round((Date.now() - iniziato) / 1000);");
 ancora("ESE esito prima della scrittura", "app/esercizi.tsx", "setEsito(r);");
-ancora("ESE altezza della consegna", "app/esercizi.tsx", "<View style={{ maxHeight: 220 }}>{Consegna}</View>");
+ancora("ESE altezza della consegna: tetto di 220 dp, relativo alla finestra, stretto quanto serve con la tastiera", "app/esercizi.tsx", "<View style={{ maxHeight: tettoRiquadro(height, tastiera, 220, 0.3, 280) }}>{Consegna}</View>");
 
 /** Copia della macchina a stati di app/esercizi.tsx. */
 function ModelloEsercizi(p) {

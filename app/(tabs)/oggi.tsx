@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View, Text, ScrollView, Pressable, ActivityIndicator, useWindowDimensions } from "react-native";
+import { View, ScrollView, Pressable, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
 import { database, derivaSospetta } from "../../lib/db";
 import { versioneMotore, supportaWindowFunctions } from "../../lib/palestra";
@@ -7,9 +7,12 @@ import { divergenzaCorrente } from "../../lib/sync/stato";
 import { Divergenza } from "../../lib/sync/auto";
 import Cronometro from "../../components/Cronometro";
 import Aggiornamento from "../../components/Aggiornamento";
+import ProssimoPasso from "../../components/ProssimoPasso";
 import { riepilogoSettimana, Sessione } from "../../lib/sessioni";
 import { contaNovita } from "../../lib/nuvola/articoli";
 import { statoNuvola, sincronizzaNuvola, StatoNuvola } from "../../lib/nuvola/sincronia";
+import { Text, ActivityIndicator } from "../../components/Base";
+import { C } from "../../lib/tema";
 
 export default function Oggi() {
   const { width } = useWindowDimensions();
@@ -43,7 +46,7 @@ export default function Oggi() {
   }, [versione]);
 
   const Scheda = ({ titolo, valore, nota }: { titolo: string; valore: string; nota?: string }) => (
-    <View style={{ flex: 1, minWidth: 140, backgroundColor: "#F4F4F5", borderRadius: 11, padding: 13 }}>
+    <View style={{ flex: 1, minWidth: 140, backgroundColor: C.superficie, borderRadius: 11, padding: 13 }}>
       <Text style={{ fontSize: 12, opacity: 0.6 }}>{titolo}</Text>
       <Text style={{ fontSize: 24, fontWeight: "500", marginTop: 2 }}>{valore}</Text>
       {nota ? <Text style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>{nota}</Text> : null}
@@ -59,9 +62,9 @@ export default function Oggi() {
 
       {div && div.livello !== "allineati" ? (
         <View style={{ padding: 12, borderRadius: 10, marginTop: 4,
-                       backgroundColor: div.livello === "marcata" ? "#FDECEC" : "#FDF0D5" }}>
+                       backgroundColor: div.livello === "marcata" ? C.rossoFondo : C.ambraFondo }}>
           <Text style={{ fontSize: 13, lineHeight: 19,
-                         color: div.livello === "marcata" ? "#A12B2B" : "#854F0B" }}>
+                         color: div.livello === "marcata" ? C.rosso : C.ambra }}>
             {div.messaggio}
           </Text>
         </View>
@@ -70,6 +73,9 @@ export default function Oggi() {
       {/* Compare solo quando c'è una build nuova da installare. */}
       <Aggiornamento compatto />
 
+      {/* Prima di tutto il resto: è la domanda con cui si apre l'app. */}
+      <ProssimoPasso />
+
       {/*
         Il riquadro della rassegna. Sta sopra al cronometro di proposito: è la
         prima cosa che cambia da un giorno all'altro, e l'unica che arriva da
@@ -77,8 +83,8 @@ export default function Oggi() {
       */}
       <Pressable onPress={() => router.push("/rassegna")}
         style={{ padding: 13, borderRadius: 11, borderWidth: 1,
-                 borderColor: novita.daLeggere ? "#0F6E56" : "#E4E4E7",
-                 backgroundColor: novita.daLeggere ? "#F2FAF6" : "transparent" }}>
+                 borderColor: novita.daLeggere ? C.verde : C.bordo,
+                 backgroundColor: novita.daLeggere ? C.verdeFondo : "transparent" }}>
         <Text style={{ fontSize: 12, opacity: 0.6 }}>Rassegna quotidiana</Text>
         <Text style={{ fontSize: 20, fontWeight: "500", marginTop: 2 }}>
           {novita.daLeggere ? `${novita.daLeggere} da leggere` : "Tutto letto"}
@@ -93,7 +99,7 @@ export default function Oggi() {
         </Text>
       </Pressable>
 
-      <View style={{ padding: 12, borderRadius: 11, borderWidth: 1, borderColor: "#E4E4E7" }}>
+      <View style={{ padding: 12, borderRadius: 11, borderWidth: 1, borderColor: C.bordo }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 12, opacity: 0.6 }}>Copia remota</Text>
@@ -118,7 +124,7 @@ export default function Oggi() {
                   setVersione((v) => v + 1);
                 }
               }}
-              style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: "#F4F4F5" }}>
+              style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 9, backgroundColor: C.superficie }}>
               <Text style={{ fontSize: 13, fontWeight: "600" }}>Ora</Text>
             </Pressable>
           )}
@@ -136,7 +142,7 @@ export default function Oggi() {
         <Scheda titolo="Libreria" valore={String(s.volumi)} nota="volumi" />
       </View>
 
-      <View style={{ marginTop: 10, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#E4E4E7" }}>
+      <View style={{ marginTop: 10, padding: 12, borderRadius: 10, borderWidth: 1, borderColor: C.bordo }}>
         <Text style={{ fontSize: 12, opacity: 0.6 }}>Motore SQL del dispositivo</Text>
         <Text style={{ fontSize: 14, marginTop: 2 }}>
           SQLite {versioneMotore()} · window functions {supportaWindowFunctions() ? "disponibili" : "NON disponibili"}
@@ -144,7 +150,7 @@ export default function Oggi() {
         <Text style={{ fontSize: 12, opacity: 0.6, marginTop: 8 }}>Schermo</Text>
         <Text style={{ fontSize: 14 }}>{Math.round(width)} dp · {width >= 600 ? "layout tablet" : "layout telefono"}</Text>
         {derivaSospetta() ? (
-          <Text style={{ fontSize: 12, color: "#854F0B", marginTop: 8 }}>
+          <Text style={{ fontSize: 12, color: C.ambra, marginTop: 8 }}>
             Deriva oraria rilevata fra i dispositivi: la fusione resta corretta, ma verifica il fuso.
           </Text>
         ) : null}

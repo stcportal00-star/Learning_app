@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView, Alert, useWindowDimensions } from "react-native";
+import { View, Pressable, ScrollView, Alert, useWindowDimensions } from "react-native";
 import * as Crypto from "expo-crypto";
 import * as Sharing from "expo-sharing";
 import { File, Paths } from "expo-file-system";
 import { database, registra } from "../lib/db";
+import { Text, TextInput } from "../components/Base";
+import { useTastiera } from "../lib/useTastiera";
+import { tettoRiquadro } from "../lib/tetto";
+import { C } from "../lib/tema";
 
 type Esercizio = {
   id: string; livello: number; consegna: string;
@@ -17,8 +21,9 @@ type Esercizio = {
  * saltare il primo passo trasforma l'esercizio in lettura passiva e lo annulla.
  */
 export default function Codice() {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const affiancato = width >= 600;
+  const tastiera = useTastiera();
 
   const [coda, setCoda] = useState<Esercizio[]>([]);
   const [i, setI] = useState(0);
@@ -82,21 +87,28 @@ export default function Codice() {
   }
 
   const Codice = (
-    <ScrollView style={{ flex: 1 }} horizontal={false}>
+    // Stessa ragione della consegna in app/esercizi.tsx: con flex:1 dentro un
+    // contenitore che ha solo maxHeight, sul telefono il codice era alto zero.
+    // La chiave fa ripartire ogni modulo dall'inizio dello scorrimento.
+    <ScrollView key={e.id} style={affiancato ? { flex: 1 } : { flexGrow: 0, flexShrink: 1 }} horizontal={false}>
       <Text style={{ fontSize: 12, opacity: 0.6, padding: 12, paddingBottom: 4 }}>
         {e.id} · livello {e.livello} {extra.categoria && fase === "confronto" ? `· ${extra.categoria}` : ""}
       </Text>
       <Text style={{ fontSize: 15, paddingHorizontal: 12, lineHeight: 21 }}>{titoloEconsegna}</Text>
-      <ScrollView horizontal style={{ margin: 12, backgroundColor: "#18181B", borderRadius: 9 }}>
-        <Text selectable style={{ fontFamily: "monospace", fontSize: 12, color: "#E4E4E7", padding: 12, lineHeight: 18 }}>
+      <ScrollView horizontal style={{ margin: 12, backgroundColor: C.superficie, borderRadius: 9 }}>
+        <Text selectable style={{ fontFamily: "monospace", fontSize: 12, color: C.testo, padding: 12, lineHeight: 18 }}>
           {codiceDifettoso}
         </Text>
       </ScrollView>
     </ScrollView>
   );
 
+  // "handled": con la tastiera aperta il primo tocco su «Mostra il test»
+  // la chiudeva soltanto, il riquadro del codice tornava alto e il pulsante
+  // scivolava giù sotto il dito — il secondo tocco andava a vuoto.
   const Pannello = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, gap: 12 }}
+      keyboardShouldPersistTaps="handled">
       <View>
         <Text style={{ fontSize: 13, fontWeight: "600", marginBottom: 6 }}>
           1 · La tua ipotesi, prima di guardare oltre
@@ -105,9 +117,9 @@ export default function Codice() {
           value={ipotesi} onChangeText={setIpotesi} multiline
           editable={fase === "ipotesi"}
           placeholder="Dove sta il difetto, e in quale caso si manifesta?"
-          style={{ borderWidth: 1, borderColor: "#E4E4E7", borderRadius: 9, padding: 11,
+          style={{ borderWidth: 1, borderColor: C.bordo, borderRadius: 9, padding: 11,
                    minHeight: 92, textAlignVertical: "top", fontSize: 14,
-                   backgroundColor: fase === "ipotesi" ? "#fff" : "#FAFAFA" }} />
+                   backgroundColor: fase === "ipotesi" ? C.sfondo : C.superficie }} />
       </View>
 
       {fase === "ipotesi" ? (
@@ -116,9 +128,9 @@ export default function Codice() {
             ? Alert.alert("Scrivi prima l'ipotesi",
                 "Anche sbagliata. Saltare questo passo rende l'esercizio lettura passiva e ne annulla il valore.")
             : setFase("test")}
-          style={{ backgroundColor: ipotesi.trim().length >= 15 ? "#18181B" : "#D4D4D8",
+          style={{ backgroundColor: ipotesi.trim().length >= 15 ? C.primario : C.disattivo,
                    padding: 14, borderRadius: 10, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Mostra il test</Text>
+          <Text style={{ color: ipotesi.trim().length >= 15 ? C.suPrimario : C.suDisattivo, fontWeight: "600" }}>Mostra il test</Text>
         </Pressable>
       ) : null}
 
@@ -127,13 +139,13 @@ export default function Codice() {
           <Text style={{ fontSize: 13, fontWeight: "600", marginBottom: 6 }}>
             2 · Il test che dimostra il difetto
           </Text>
-          <ScrollView horizontal style={{ backgroundColor: "#18181B", borderRadius: 9 }}>
-            <Text selectable style={{ fontFamily: "monospace", fontSize: 11, color: "#E4E4E7", padding: 11, lineHeight: 17 }}>
+          <ScrollView horizontal style={{ backgroundColor: C.superficie, borderRadius: 9 }}>
+            <Text selectable style={{ fontFamily: "monospace", fontSize: 11, color: C.testo, padding: 11, lineHeight: 17 }}>
               {extra.test}
             </Text>
           </ScrollView>
           <Pressable onPress={esportaPerIlPc} style={{ marginTop: 8, padding: 10, borderRadius: 9,
-                     borderWidth: 1, borderColor: "#E4E4E7", alignItems: "center" }}>
+                     borderWidth: 1, borderColor: C.bordo, alignItems: "center" }}>
             <Text style={{ fontSize: 13, fontWeight: "600" }}>Esporta modulo e test per il computer</Text>
           </Pressable>
           <Text style={{ fontSize: 11, opacity: 0.55, marginTop: 6, lineHeight: 16 }}>
@@ -145,32 +157,32 @@ export default function Codice() {
 
       {fase === "test" ? (
         <Pressable onPress={() => setFase("confronto")}
-          style={{ backgroundColor: "#18181B", padding: 14, borderRadius: 10, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "600" }}>Mostra il difetto e la correzione</Text>
+          style={{ backgroundColor: C.primario, padding: 14, borderRadius: 10, alignItems: "center" }}>
+          <Text style={{ color: C.suPrimario, fontWeight: "600" }}>Mostra il difetto e la correzione</Text>
         </Pressable>
       ) : null}
 
       {fase === "confronto" ? (
         <>
-          <View style={{ padding: 12, backgroundColor: "#FDF0D5", borderRadius: 9 }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#854F0B", marginBottom: 4 }}>3 · Il difetto</Text>
+          <View style={{ padding: 12, backgroundColor: C.ambraFondo, borderRadius: 9 }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: C.ambra, marginBottom: 4 }}>3 · Il difetto</Text>
             <Text style={{ fontSize: 14, lineHeight: 21 }}>{e.soluzione_riferimento}</Text>
           </View>
           <View>
             <Text style={{ fontSize: 13, fontWeight: "600", marginBottom: 6 }}>4 · La correzione</Text>
-            <ScrollView horizontal style={{ backgroundColor: "#0F2A1F", borderRadius: 9 }}>
-              <Text selectable style={{ fontFamily: "monospace", fontSize: 11, color: "#D7F0E4", padding: 11, lineHeight: 17 }}>
+            <ScrollView horizontal style={{ backgroundColor: C.codiceFondo, borderRadius: 9 }}>
+              <Text selectable style={{ fontFamily: "monospace", fontSize: 11, color: C.codiceTesto, padding: 11, lineHeight: 17 }}>
                 {extra.corretto}
               </Text>
             </ScrollView>
           </View>
           <View style={{ flexDirection: "row", gap: 9 }}>
             <Pressable onPress={() => registraEsito(false)}
-              style={{ flex: 1, padding: 13, borderRadius: 9, alignItems: "center", backgroundColor: "#FDECEC" }}>
+              style={{ flex: 1, padding: 13, borderRadius: 9, alignItems: "center", backgroundColor: C.rossoFondo }}>
               <Text style={{ fontWeight: "600", fontSize: 13 }}>Non l'avevo visto</Text>
             </Pressable>
             <Pressable onPress={() => registraEsito(true)}
-              style={{ flex: 1, padding: 13, borderRadius: 9, alignItems: "center", backgroundColor: "#E8F5EE" }}>
+              style={{ flex: 1, padding: 13, borderRadius: 9, alignItems: "center", backgroundColor: C.verdeFondo }}>
               <Text style={{ fontWeight: "600", fontSize: 13 }}>L'avevo individuato</Text>
             </Pressable>
           </View>
@@ -185,12 +197,15 @@ export default function Codice() {
 
   return affiancato ? (
     <View style={{ flex: 1, flexDirection: "row" }}>
-      <View style={{ flex: 1, borderRightWidth: 1, borderColor: "#E4E4E7" }}>{Codice}</View>
+      <View style={{ flex: 1, borderRightWidth: 1, borderColor: C.bordo }}>{Codice}</View>
       <View style={{ flex: 1 }}>{Pannello}</View>
     </View>
   ) : (
     <View style={{ flex: 1 }}>
-      <View style={{ maxHeight: 300 }}>{Codice}</View>
+      {/* Come in app/esercizi.tsx: il tetto segue la finestra e si stringe
+          mentre si scrive l'ipotesi, quanto basta a tenere visibili campo e
+          pulsante, che altrimenti finiscono sotto la tastiera. */}
+      <View style={{ maxHeight: tettoRiquadro(height, tastiera, 300, 0.35, 260) }}>{Codice}</View>
       {Pannello}
     </View>
   );
