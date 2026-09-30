@@ -39,6 +39,7 @@ export default function Unita() {
 
   useFocusEffect(useCallback(() => {
     let vivo = true;
+    inCreazione.current = false;
     (async () => {
       const [tutte, v, s] = await Promise.all([leggiPercorso(), leggiVolumi(slug), leggiScenari(slug)]);
       if (!vivo) return;
@@ -49,15 +50,32 @@ export default function Unita() {
   }, [slug]));
 
   /**
+   * Note e Libreria sono SCHEDE, e questa schermata sta sopra di loro nella
+   * pila. `navigate` e `push` da qui aggiungerebbero una seconda barra delle
+   * schede con un secondo editor delle note: due copie della stessa nota in
+   * memoria, e l'ultima a uscire sovrascrive l'altra. `dismissTo` torna alle
+   * schede che esistono già e ci passa il parametro.
+   */
+  function apriScheda(href: string) {
+    router.dismissTo(href as never);
+  }
+
+  /**
    * Lo scenario si svolge in Note. La nota nasce qui, con consegna e rubrica,
    * e porta `origine_url = scenario:<id>`: è così che l'unità la ritrova e sa
    * se lo scenario è svolto. Se esiste già, si riapre quella: due note per
    * lo stesso scenario sarebbero due risposte a metà.
+   *
+   * La guardia resta alzata dopo una creazione riuscita, fino al prossimo
+   * ritorno in primo piano: un secondo tocco mentre la schermata se ne va
+   * creerebbe una seconda nota.
    */
   async function svolgi(s: ScenarioDiUnita) {
-    if (s.notaId) { router.navigate(`/note?nota=${encodeURIComponent(s.notaId)}`); return; }
-    if (!u || inCreazione.current) return;
+    if (inCreazione.current) return;
+    if (s.notaId) { apriScheda(`/note?nota=${encodeURIComponent(s.notaId)}`); return; }
+    if (!u) return;
     inCreazione.current = true;
+    let creata = false;
     try {
       const id = Crypto.randomUUID();
       const m = modelloScenario(s, u.tema.nome);
@@ -71,9 +89,11 @@ export default function Unita() {
              VALUES (?,?,?,?,0,?,?,?)`,
             [id, slug, m.titolo, m.testo, origine, creato, hlc]);
         });
-      router.navigate(`/note?nota=${encodeURIComponent(id)}`);
+      creata = true;
+      setScenari((p) => p.map((x) => (x.id === s.id ? { ...x, notaId: id } : x)));
+      apriScheda(`/note?nota=${encodeURIComponent(id)}`);
     } finally {
-      inCreazione.current = false;
+      if (!creata) inCreazione.current = false;
     }
   }
 
@@ -102,7 +122,10 @@ export default function Unita() {
     </Text>
   );
 
-  const vaiA = (p: Passo) => router.push(destinazione(slug, p, volumeDaAprire(volumi)) as never);
+  const vaiA = (p: Passo) => {
+    const d = destinazione(slug, p, volumeDaAprire(volumi));
+    if (d === "/libreria") apriScheda(d); else router.push(d as never);
+  };
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
@@ -138,7 +161,9 @@ export default function Unita() {
 
             {p.tipo === "leggi" ? volumi.map((v) => (
               <Pressable key={v.id}
-                onPress={() => router.push((v.file_locale ? `/lettore?id=${encodeURIComponent(v.id)}` : "/libreria") as never)}
+                onPress={() => v.file_locale
+                  ? router.push(`/lettore?id=${encodeURIComponent(v.id)}` as never)
+                  : apriScheda("/libreria")}
                 style={{ marginTop: 8, padding: 10, borderRadius: 9, backgroundColor: C.superficie }}>
                 <Text style={{ fontSize: 14, fontWeight: "500" }} numberOfLines={2}>{v.titolo}</Text>
                 <Text style={{ fontSize: 12, marginTop: 2, color: v.file_locale ? C.testoSecondario : C.ambra }}>

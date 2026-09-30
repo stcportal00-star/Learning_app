@@ -356,6 +356,20 @@ if (!conWindow) {
 
 uguale("S8 nessun tentativo di rete", reteTentata, []);
 
+// ============================================================ SORGENTI
+// Tre difetti trovati in revisione che nessun banco può esercitare, perché
+// vivono nella navigazione e nell'impaginazione: qui si guarda che la forma
+// corretta resti nel sorgente.
+const { readFileSync } = await import("node:fs");
+const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
+{
+  const unita = sorgente("app/unita.tsx");
+  ok("S9 dall'unità Note e Libreria si raggiungono con dismissTo, mai aggiungendo schede alla pila",
+    unita.includes("router.dismissTo(") &&
+    !/router\.(navigate|push)\(\s*[`"(]\/(note|libreria)/.test(unita) &&
+    !/router\.navigate\(/.test(unita));
+}
+
 console.log(`\nsimulazione percorso (lib/percorso.ts, lib/avanzamento.ts)`);
 for (const f of falliti) console.log("  ✗ " + f);
 console.log(`passati ${passate}, falliti ${falliti.length}`);

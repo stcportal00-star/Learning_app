@@ -329,6 +329,11 @@ materiale non è un'unità.
   non è più il modello con cui è nata. Se la nota esiste già, si riapre quella.
 - Esercizi, Ripasso e Rassegna accettano `?tema=`: dall'unità si arriva già
   filtrati. Senza parametro fanno quello che facevano prima.
+- **Da una schermata impilata a una scheda si va con `router.dismissTo`**, mai
+  con `navigate` o `push`. In expo-router 6 NAVIGATE riusa una schermata della
+  pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
+  SECONDO gruppo di schede, con un secondo editor delle note che può
+  sovrascrivere il primo. `dismissTo` torna alle schede che esistono già.
 - Le prove sono in `test/simulazione/percorso.mjs`, sul codice vero e sui
   contenuti veri.
 
