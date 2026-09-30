@@ -6,6 +6,8 @@ import { database, registra } from "../../lib/db";
 import { Text, TextInput } from "../../components/Base";
 import { C } from "../../lib/tema";
 
+type Copia = { titolo: string; testo: string; pubblicabile: boolean };
+
 type Nota = {
   id: string; tema_slug: string | null; titolo: string | null;
   testo: string; pubblicabile: number; creato_a: string;
@@ -37,15 +39,26 @@ export default function Note() {
   const salvato = useRef({ titolo: "", testo: "", pubblicabile: false });
 
   /**
-   * L'id della nota aperta, subito: lo stato `apertaId` diventa l'id vero
-   * solo dopo che la scrittura è finita e React ha ridisegnato. Due
-   * salvataggi della stessa nota nuova che si sovrappongono — un tocco su
-   * Salva mentre è in coda quello partito uscendo dalla scheda, o due tocchi
-   * di fila — leggerebbero entrambi "nuova" e creerebbero due note con due
-   * id. Letto e fissato qui prima dell'await, il secondo diventa un
-   * «aggiorna» della stessa nota, in fila dietro il primo.
+   * Chi scrive dove. Aprire una nota o cominciarne una nuova apre una
+   * SESSIONE di modifica, e ogni disegno ricorda la sua: un salvataggio
+   * porta con sé la sessione del disegno da cui parte e scrive nella nota di
+   * quella sessione. Così un gestore rimasto indietro di un disegno non
+   * scrive nella nota aperta dopo, e una nota nuova ha un solo id per quanti
+   * salvataggi riceva.
+   *
+   * I salvataggi passano uno alla volta (`catena`), e ognuno legge l'id della
+   * sua sessione solo quando tocca a lui, cioè dopo che il precedente l'ha
+   * scritto. Da quando Note salva anche uscendo — perdita del fuoco,
+   * background, smontaggio — oltre che con i pulsanti, i salvataggi possono
+   * sovrapporsi, e due della stessa nota nuova creavano due note.
+   *
+   * L'id e la copia salvata si aggiornano solo a scrittura riuscita: se
+   * fallisce, il testo resta da salvare e non c'è niente da rimettere a posto.
    */
-  const idAperto = useRef<string | null>(null);
+  const sessione = useRef(0);
+  const sessioneDisegno = sessione.current;
+  const idDiSessione = useRef(new Map<number, string>());
+  const catena = useRef<Promise<unknown>>(Promise.resolve());
 
   const ricarica = useCallback(async () => {
     const d = database();
@@ -69,7 +82,9 @@ export default function Note() {
     (async () => {
       await ricarica();
       const n = await database().getFirstAsync<Nota>("SELECT * FROM note WHERE id = ?", [id]);
-      if (!n || idAperto.current === n.id) return;
+      // Lo stato di questo disegno dice che cosa mostra l'editor: dopo
+      // «← Tutte le note» è null, e la stessa nota si deve poter riaprire.
+      if (!n || apertaId === n.id) return;
       // salvaUscendo.current è la chiusura dell'ULTIMO disegno: salva anche
       // ciò che si è scritto mentre la lettura qui sopra era in corso. Se
       // il salvataggio non riesce si resta sulla nota com'è, invece di
@@ -79,14 +94,15 @@ export default function Note() {
   }, [daAprire]);
 
   function apri(n: Nota) {
-    idAperto.current = n.id;
+    sessione.current += 1;
+    idDiSessione.current.set(sessione.current, n.id);
     setApertaId(n.id); setTitolo(n.titolo ?? ""); setTesto(n.testo);
     setPubblicabile(n.pubblicabile === 1);
     salvato.current = { titolo: n.titolo ?? "", testo: n.testo, pubblicabile: n.pubblicabile === 1 };
   }
 
   function nuova() {
-    idAperto.current = "nuova";
+    sessione.current += 1;
     setApertaId("nuova"); setTitolo(""); setTesto(""); setPubblicabile(false);
     salvato.current = { titolo: "", testo: "", pubblicabile: false };
   }
@@ -105,35 +121,35 @@ export default function Note() {
 
   async function salva() {
     if (!testo.trim() && !titolo.trim()) return;
-    const corrente = idAperto.current;
-    const nuovo = corrente === "nuova" || !corrente;
-    const id = nuovo || !corrente ? Crypto.randomUUID() : corrente;
-    idAperto.current = id;
-    // Anche la copia salvata si aggiorna prima dell'await: un'uscita che
-    // arriva mentre questa scrittura è in coda non trova niente da salvare.
-    // Se la scrittura fallisce, si torna indietro e il testo resta da salvare.
-    const prima = salvato.current;
-    salvato.current = { titolo, testo, pubblicabile };
-    try {
-      await registra("note", id, nuovo ? "crea" : "aggiorna",
-        { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
-        async (d, hlc) => {
-          if (nuovo) {
-            await d.runAsync(
-              `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
-              [id, titolo || null, testo, pubblicabile ? 1 : 0, new Date().toISOString(), hlc]);
-          } else {
-            await d.runAsync(
-              `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
-              [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]);
-          }
-        });
-    } catch (e) {
-      salvato.current = prima;
-      if (nuovo) idAperto.current = corrente;
-      throw e;
-    }
-    setApertaId(id);
+    const s = sessioneDisegno;
+    const c: Copia = { titolo, testo, pubblicabile };
+    const turno = catena.current.catch(() => {}).then(() => scrivi(s, c));
+    catena.current = turno;
+    await turno;
+  }
+
+  async function scrivi(s: number, c: Copia) {
+    const noto = idDiSessione.current.get(s);
+    const nuovo = !noto;
+    const id = noto ?? Crypto.randomUUID();
+    await registra("note", id, nuovo ? "crea" : "aggiorna",
+      { titolo: c.titolo, testo: c.testo, pubblicabile: c.pubblicabile ? 1 : 0 },
+      async (d, hlc) => {
+        if (nuovo) {
+          await d.runAsync(
+            `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
+            [id, c.titolo || null, c.testo, c.pubblicabile ? 1 : 0, new Date().toISOString(), hlc]);
+        } else {
+          const r = await d.runAsync(
+            `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
+            [c.titolo || null, c.testo, c.pubblicabile ? 1 : 0, hlc, id]);
+          // Una riga che non c'è: meglio un errore, che annulla la
+          // transazione, che un «aggiorna» di niente nel registro.
+          if (!r.changes) throw new Error("note: la nota da aggiornare non è sul disco");
+        }
+      });
+    idDiSessione.current.set(s, id);
+    if (s === sessione.current) { salvato.current = c; setApertaId(id); }
     await ricarica();
   }
 

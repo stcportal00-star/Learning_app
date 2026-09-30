@@ -1407,16 +1407,16 @@ libreriaPrima.smonta();
 // SEZIONE F — app/(tabs)/note.tsx: editor, salvataggio, abbandono
 // ===========================================================================
 ancora("NOT guardia del vuoto", "app/(tabs)/note.tsx", "if (!testo.trim() && !titolo.trim()) return;");
-ancora("NOT id nuovo o esistente, letto dal ref prima dell'await", "app/(tabs)/note.tsx", 'const corrente = idAperto.current; const nuovo = corrente === "nuova" || !corrente; const id = nuovo || !corrente ? Crypto.randomUUID() : corrente; idAperto.current = id;');
-ancora("NOT setApertaId dopo l'await", "app/(tabs)/note.tsx", "setApertaId(id); await ricarica();");
+ancora("NOT l'id è della sessione di modifica, deciso quando tocca a quel salvataggio", "app/(tabs)/note.tsx", "const noto = idDiSessione.current.get(s); const nuovo = !noto; const id = noto ?? Crypto.randomUUID();");
+ancora("NOT i salvataggi passano uno alla volta", "app/(tabs)/note.tsx", "const turno = catena.current.catch(() => {}).then(() => scrivi(s, c)); catena.current = turno; await turno;");
+ancora("NOT setApertaId dopo l'await, solo nella stessa sessione", "app/(tabs)/note.tsx", "{ salvato.current = c; setApertaId(id); } await ricarica();");
 ancora("NOT si esce salvando", "app/(tabs)/note.tsx",
   "async function esci(dopo: () => void) { if (daSalvare()) await salva(); dopo(); }");
 ancora("NOT la nota gia' aperta non si riapre", "app/(tabs)/note.tsx",
   "onPress={() => { if (apertaId !== item.id) void esci(() => apri(item)); }}");
 ancora("NOT salvataggio allo smontaggio", "app/(tabs)/note.tsx", "useEffect(() => () => { void salvaUscendo.current(); }, []);");
-ancora("NOT la copia salvata si aggiorna PRIMA della scrittura, e torna indietro se fallisce", "app/(tabs)/note.tsx", "salvato.current = { titolo, testo, pubblicabile }; try {");
-ancora("NOT il ref dell'id si fissa aprendo una nota", "app/(tabs)/note.tsx", "idAperto.current = n.id;");
-ancora("NOT il ref dell'id si fissa su una nota nuova", "app/(tabs)/note.tsx", 'idAperto.current = "nuova";');
+ancora("NOT id, copia salvata e apertaId si aggiornano solo a scrittura riuscita, e solo nella stessa sessione", "app/(tabs)/note.tsx", "idDiSessione.current.set(s, id); if (s === sessione.current) { salvato.current = c; setApertaId(id); } await ricarica();");
+ancora("NOT aprire una nota apre una sessione con il suo id", "app/(tabs)/note.tsx", "sessione.current += 1; idDiSessione.current.set(sessione.current, n.id);");
 ancora("NOT titolo vuoto come NULL", "app/(tabs)/note.tsx", "titolo || null");
 ancora("NOT ordine dell'elenco", "app/(tabs)/note.tsx", "SELECT * FROM note ORDER BY creato_a DESC");
 ancora("NOT filtro pubblicabili", "app/(tabs)/note.tsx", "SELECT * FROM note WHERE pubblicabile = 1 ORDER BY creato_a DESC");
@@ -1452,11 +1452,15 @@ function ModelloNote(p) {
   // Copia di cio' che sta sul disco per la nota aperta: dice se c'e' qualcosa
   // da salvare prima di uscire, senza un flag da aggiornare a ogni tasto.
   const salvato = useRif({ titolo: "", testo: "", pubblicabile: false });
-  // L'id della nota aperta, fissato prima dell'await (vedi note.tsx).
-  const idAperto = useRif(null);
+  // Sessioni di modifica e salvataggi in fila, come in note.tsx.
+  const sessione = useRif(0);
+  const sessioneDisegno = sessione.current;
+  const idDiSessione = useRif(new Map());
+  const catena = useRif(Promise.resolve());
 
   function apriNota(n) {
-    idAperto.current = n.id;
+    sessione.current += 1;
+    idDiSessione.current.set(sessione.current, n.id);
     setApertaId(n.id);
     setTitolo(n.titolo ?? "");
     setTesto(n.testo);
@@ -1465,7 +1469,7 @@ function ModelloNote(p) {
   }
 
   function nuova() {
-    idAperto.current = "nuova";
+    sessione.current += 1;
     setApertaId("nuova");
     setTitolo("");
     setTesto("");
@@ -1486,38 +1490,39 @@ function ModelloNote(p) {
 
   async function salva() {
     if (!testo.trim() && !titolo.trim()) return;
-    const corrente = idAperto.current;
-    const nuovo = corrente === "nuova" || !corrente;
-    const id = nuovo || !corrente ? p.randomUUID() : corrente;
-    idAperto.current = id;
-    const prima = salvato.current;
-    salvato.current = { titolo, testo, pubblicabile };
-    try {
-      await p.registra(
-        "note",
-        id,
-        nuovo ? "crea" : "aggiorna",
-        { titolo, testo, pubblicabile: pubblicabile ? 1 : 0 },
-        async (d, hlc) => {
-          if (nuovo) {
-            await d.runAsync(
-              `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
-              [id, titolo || null, testo, pubblicabile ? 1 : 0, dataOra().toISOString(), hlc]
-            );
-          } else {
-            await d.runAsync(
-              `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
-              [titolo || null, testo, pubblicabile ? 1 : 0, hlc, id]
-            );
-          }
+    const s = sessioneDisegno;
+    const c = { titolo, testo, pubblicabile };
+    const turno = catena.current.catch(() => {}).then(() => scrivi(s, c));
+    catena.current = turno;
+    await turno;
+  }
+
+  async function scrivi(s, c) {
+    const noto = idDiSessione.current.get(s);
+    const nuovo = !noto;
+    const id = noto ?? p.randomUUID();
+    await p.registra(
+      "note",
+      id,
+      nuovo ? "crea" : "aggiorna",
+      { titolo: c.titolo, testo: c.testo, pubblicabile: c.pubblicabile ? 1 : 0 },
+      async (d, hlc) => {
+        if (nuovo) {
+          await d.runAsync(
+            `INSERT INTO note (id, titolo, testo, pubblicabile, creato_a, hlc) VALUES (?,?,?,?,?,?)`,
+            [id, c.titolo || null, c.testo, c.pubblicabile ? 1 : 0, dataOra().toISOString(), hlc]
+          );
+        } else {
+          const r = await d.runAsync(
+            `UPDATE note SET titolo = ?, testo = ?, pubblicabile = ?, hlc = ? WHERE id = ?`,
+            [c.titolo || null, c.testo, c.pubblicabile ? 1 : 0, hlc, id]
+          );
+          if (!r.changes) throw new Error("note: la nota da aggiornare non è sul disco");
         }
-      );
-    } catch (e) {
-      salvato.current = prima;
-      if (nuovo) idAperto.current = corrente;
-      throw e;
-    }
-    setApertaId(id);
+      }
+    );
+    idDiSessione.current.set(s, id);
+    if (s === sessione.current) { salvato.current = c; setApertaId(id); }
     await ricarica();
   }
 
@@ -1665,6 +1670,43 @@ await tocca(noteSchermata, () => salvaVecchio());
 const dopoIlTardivo = (await base.getFirstAsync("SELECT count(*) AS n FROM note")).n;
 const duplicate = await base.getAllAsync("SELECT id FROM note WHERE testo = 'Secondo tocco sul pulsante vecchio.'");
 corretto("NOT-03c", "F12b un secondo tocco sul pulsante del disegno precedente NON crea una seconda nota: l'id si legge dal ref, non dallo stato ancora 'nuova'", dopoIlTardivo === primaDelTardivo + 1 && duplicate.length === 1, `note ${primaDelTardivo}->${dopoIlTardivo}`);
+
+// (c) il gestore di un disegno vecchio scrive nella nota della SUA sessione,
+// non in quella aperta dopo. Con l'id preso da un ref «della nota aperta»
+// il testo di Z finiva dentro Y.
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTitolo("Nota Y"));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Testo di Y."));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.salva());
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTitolo("Nota Z"));
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Testo di Z, seconda stesura."));
+const salvaDiZ = noteSchermata.schermo.editor.salva;
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.voci.find((v) => v.titolo === "Nota Y").premi());
+await tocca(noteSchermata, () => salvaDiZ());
+const righeY = await base.getAllAsync("SELECT testo FROM note WHERE titolo = 'Nota Y'");
+const righeZ = await base.getAllAsync("SELECT testo FROM note WHERE titolo = 'Nota Z'");
+corretto("NOT-03d", "F12c un Salva rimasto dal disegno di Z, toccato dopo aver aperto Y, scrive in Z e lascia Y com'era",
+  righeY.length === 1 && righeY[0].testo === "Testo di Y." && righeZ.length === 1 &&
+    righeZ[0].testo === "Testo di Z, seconda stesura." && noteSchermata.schermo.editor.testo === "Testo di Y.",
+  JSON.stringify({ righeY, righeZ, editor: noteSchermata.schermo.editor.testo }));
+
+// (d) una scrittura che fallisce (disco pieno) non perde il testo e non
+// lascia doppioni: resta da salvare, e il salvataggio dopo crea UNA nota.
+await base.execAsync("CREATE TEMP TRIGGER disco_pieno BEFORE INSERT ON note BEGIN SELECT RAISE(ABORT, 'database or disk is full'); END;");
+await tocca(noteSchermata, () => noteSchermata.schermo.elenco.nuova());
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.scriviTesto("Risposta scritta a disco pieno."));
+const rigettoDisco = await tocca(noteSchermata, () => noteSchermata.schermo.editor.salva());
+const dueFalliti = await toccaDueVolte(noteSchermata, () => noteSchermata.schermo.editor.salva());
+await base.execAsync("DROP TRIGGER disco_pieno;");
+const primaDelRecupero = (await base.getAllAsync("SELECT id FROM note WHERE testo = 'Risposta scritta a disco pieno.'")).length;
+await tocca(noteSchermata, () => noteSchermata.schermo.editor.salva());
+const dopoIlRecupero = await base.getAllAsync("SELECT id FROM note WHERE testo = 'Risposta scritta a disco pieno.'");
+corretto("NOT-08", "F12d a disco pieno Salva fallisce senza scrivere, il testo resta nell'editor, e liberato il disco si salva UNA nota",
+  String(rigettoDisco?.message ?? rigettoDisco).includes("disk is full") &&
+    dueFalliti.every((e) => e.status === "rejected") && primaDelRecupero === 0 &&
+    noteSchermata.schermo.editor.testo === "Risposta scritta a disco pieno." && dopoIlRecupero.length === 1,
+  JSON.stringify({ primaDelRecupero, dopo: dopoIlRecupero.length, dueFalliti: dueFalliti.map((e) => e.status) }));
 
 // --- salvataggio di una nota ESISTENTE
 const notaEsistente = noteSchermata.schermo.elenco.voci.find((v) => v.titolo === "Kleppmann cap. 5");

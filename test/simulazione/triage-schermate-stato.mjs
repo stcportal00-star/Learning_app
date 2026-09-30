@@ -445,13 +445,16 @@ console.log("\nH. Oggi, Studio, Profilo, Libreria");
 // ============================================================== I. NOTE
 console.log("\nI. app/(tabs)/note.tsx");
 {
-  ok("I1 NOT-03c setApertaId(id) sta dopo l'await", contiene("app/(tabs)/note.tsx", "setApertaId(id);\n    await ricarica();"));
-  // La prova guarda il corpo di salva(): la guardia di salvaUscendo (uscita
-  // per perdita del fuoco e smontaggio nello stesso istante) non protegge il
-  // doppio tocco su Salva, che chiama salva() direttamente.
+  // NOT-03b/c corretti: le due prove qui erano le premesse del difetto
+  // (setApertaId dopo l'await, nessuna protezione dalla riesecuzione). Ora
+  // guardano la correzione: l'id viene dalla sessione di modifica, non dallo
+  // stato, e i salvataggi passano uno alla volta dalla catena.
   const corpoSalva = (sorgente("app/(tabs)/note.tsx").match(/async function salva\(\) \{[\s\S]*?\n  \}\n/) ?? [""])[0];
-  ok("I2 NOT-03b/c salva() non ha nessuna guardia di riesecuzione",
-    corpoSalva.includes("Crypto.randomUUID()") && !/inCorso|InCorso|guardia/.test(corpoSalva) &&
+  const corpoScrivi = (sorgente("app/(tabs)/note.tsx").match(/async function scrivi\([^)]*\) \{[\s\S]*?\n  \}\n/) ?? [""])[0];
+  ok("I1 NOT-03c (corretto) l'id si legge dalla sessione quando tocca a quel salvataggio, non dallo stato apertaId",
+    corpoScrivi.includes("idDiSessione.current.get(s)") && !/apertaId ===|!apertaId/.test(corpoScrivi + corpoSalva));
+  ok("I2 NOT-03b/c (corretto) salva() mette in fila: un salvataggio alla volta",
+    corpoSalva.includes("catena.current.catch(() => {}).then(() => scrivi(s, c))") &&
     contiene("app/(tabs)/note.tsx", "onPress={salva}"));
   // NOT-07 corretto dopo questo triage: le tre vie di uscita passano tutte da
   // esci(), che salva se c'e' qualcosa da salvare. Le righe restano, con il
