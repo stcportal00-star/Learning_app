@@ -311,7 +311,10 @@ Studio non è un elenco di strumenti: è il **percorso**. `lib/percorso.ts`
 l'ordine di `TEMI` in `lib/contenuti.ts` —, e dentro ogni unità i passi del
 ciclo: leggere la fonte, esercitarsi, fissare i concetti con le schede,
 applicarli a uno scenario, restare aggiornati con la rassegna. Un tema senza
-materiale non è un'unità.
+materiale non è un'unità. **Si numerano solo le unità con verifiche**: un tema
+con soli volumi o articoli è un'unità di sola lettura, al suo posto
+nell'elenco ma senza numero, perché nasce e sparisce con ciò che la
+conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
 
 - **Si supera all'80%** (`SOGLIA_PERCENTO`) degli esercizi e delle schede, più
   uno scenario svolto (`SCENARI_RICHIESTI`), dove ci sono. Leggere e la rassegna

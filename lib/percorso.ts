@@ -65,8 +65,15 @@ export type StatoUnita = "completa" | "in_corso" | "da_iniziare" | "senza_verifi
 
 export type Unita = {
   tema: Tema;
-  /** 1, 2, 3… nell'ordine del percorso. */
-  posizione: number;
+  /**
+   * 1, 2, 3… fra le sole unità con verifiche; null per quelle di sola
+   * lettura. Queste nascono e spariscono con i volumi e gli articoli che la
+   * conduttura porta ogni mattina: contate, spostavano il numero di tutte le
+   * unità dopo di loro — SQL — fondamenti passava da «unità 1» a «unità 2»
+   * senza che nello studio fosse cambiato niente, e il numero non stava più
+   * dentro il «di N» di Oggi, che le unità di sola lettura non le conta.
+   */
+  posizione: number | null;
   passi: Passo[];
   stato: StatoUnita;
   /** Fra 0 e 1, sui soli passi che contano. */
@@ -156,12 +163,23 @@ export function costruisciPercorso(
     a.slug.localeCompare(b.slug));
 
   const unita: Unita[] = [];
+  let numero = 0;
   for (const tema of ordinati) {
     const passi = passiDi(materiali[tema.slug] ?? MATERIALE_VUOTO);
     if (!passi.length) continue;
-    unita.push({ tema, posizione: unita.length + 1, passi, ...statoDi(passi) });
+    const s = statoDi(passi);
+    unita.push({ tema, posizione: s.stato === "senza_verifiche" ? null : ++numero, passi, ...s });
   }
   return unita;
+}
+
+/**
+ * Il «di N» di Oggi. Sta qui, accanto alla numerazione, e non nella
+ * schermata: quando le due cose si contavano in due posti diversi, il numero
+ * di un'unità è arrivato a superare N.
+ */
+export function unitaConVerifiche(unita: Unita[]): number {
+  return unita.filter((u) => u.stato !== "senza_verifiche").length;
 }
 
 export type Indicazione = { unita: Unita; passo: Passo };

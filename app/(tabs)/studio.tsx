@@ -82,7 +82,7 @@ export default function Studio() {
                  borderColor: qui ? C.bluBordo : C.bordo, backgroundColor: qui ? C.bluFondo : "transparent" }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <Text style={{ fontSize: 13, fontWeight: "600", color: colore, width: 22 }}>
-            {u.stato === "completa" ? "✓" : u.posizione}
+            {u.stato === "completa" ? "✓" : u.posizione ?? "·"}
           </Text>
           <Text style={{ fontSize: 15, fontWeight: "500", flex: 1 }} numberOfLines={1}>{u.tema.nome}</Text>
           <Text style={{ fontSize: 12, color: colore }}>{qui ? "adesso" : ETICHETTA_STATO[u.stato]}</Text>
