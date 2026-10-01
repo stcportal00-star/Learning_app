@@ -1737,6 +1737,31 @@ await scenario("B23 all'arrivo del wifi parte un giro, una volta sola per arrivo
   Rete.azzeraRete();
 });
 
+await scenario("B24 un giro per volta: chi chiede durante un giro riceve quello", async () => {
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  const nuvola = new tab.Cliente.Nuvola(BASE_FINTA, CHIAVE_FINTA);
+  const primo = tab.Sincronia.sincronizzaNuvola({ nuvola });
+  const secondo = tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("la seconda chiamata riceve lo stesso giro", primo === secondo);
+  const [a, b] = await Promise.all([primo, secondo]);
+  ok("con lo stesso esito", a === b && a.riuscito, a.motivo);
+
+  const terzo = tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("finito il giro, la chiamata dopo ne fa uno nuovo", terzo !== primo);
+  await terzo;
+
+  const muto = servitoreNuovo();
+  muto.programma({ rete: true, volte: Infinity });
+  servitoreInUso = muto;
+  const fallito = await tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("un giro fallito finisce come prima", !fallito.riuscito, fallito.motivo);
+  servitoreInUso = s;
+  const dopo = await tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("e non lascia il giro bloccato: quello dopo riesce", dopo.riuscito, dopo.motivo);
+  servitoreInUso = servitore;
+});
+
 // =========================================================================
 // PARTE C — cliente: tentativi, attese misurate, blocchi, intestazioni
 // =========================================================================

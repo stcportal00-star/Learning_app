@@ -236,15 +236,34 @@ export function prossimaSoglia(fine: boolean, ultimoArrivo: number, oraDelServer
   return Number.isNaN(ms) ? "" : new Date(ms).toISOString();
 }
 
+type OpzioniNuvola = { scaricaVolumi?: boolean; nuvola?: Nuvola };
+
+/** Il giro in corso, se ce n'è uno. */
+let inVolo: Promise<EsitoNuvola> | null = null;
+
 /**
+ * Un giro per volta: chi chiede mentre uno è in corso riceve quello.
+ *
+ * Col wifi un giro scarica tutto, e può durare minuti. Nel frattempo il
+ * bottone «Ora» di Oggi, il ritorno in primo piano e l'arrivo del wifi
+ * chiamano di nuovo: due giri insieme scaricherebbero gli stessi file nello
+ * stesso posto e caricherebbero due volte gli stessi PDF aggiunti a mano.
+ *
  * Non prende il dispositivo, e non è una dimenticanza: l'identità del mittente
  * viaggia dentro ogni evento, nel campo `dispositivo` che `registra()` ci ha
  * scritto quando l'evento è nato. Un parametro qui prometterebbe che il
  * chiamante possa cambiarla, e non può.
  */
-export async function sincronizzaNuvola(
-  opzioni: { scaricaVolumi?: boolean; nuvola?: Nuvola } = {}
-): Promise<EsitoNuvola> {
+export function sincronizzaNuvola(opzioni: OpzioniNuvola = {}): Promise<EsitoNuvola> {
+  if (!inVolo) {
+    inVolo = unGiro(opzioni).finally(() => {
+      inVolo = null;
+    });
+  }
+  return inVolo;
+}
+
+async function unGiro(opzioni: OpzioniNuvola): Promise<EsitoNuvola> {
   const esito: EsitoNuvola = {
     riuscito: false,
     motivo: "",
