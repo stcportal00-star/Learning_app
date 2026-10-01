@@ -213,11 +213,12 @@ const GIORNI: Giorno[] = ["Oggi", "Ieri", "Questa settimana", "Prima"];
  * arrivano.
  *
  * I giorni si riempiono e poi si scrivono nel loro ordine, invece di aprire
- * un giorno nuovo a ogni cambio: la query ordina per l'ora UTC, i giorni sono
- * quelli del telefono, e una data nuda vale il giorno scritto. A Città del
- * Messico un articolo delle 21 di ieri (le 3 UTC di oggi) viene prima di un
- * articolo di arXiv datato oggi, e si avevano «Ieri», «Oggi», «Ieri», con
- * due intestazioni dalla stessa chiave.
+ * un giorno nuovo a ogni cambio: la query ordina per il giorno UTC della data
+ * (poi per corsa e rilevanza, vedi PER_DATA), i giorni sono quelli del
+ * telefono, e una data nuda vale il giorno scritto. A Città del Messico un
+ * articolo delle 21 di ieri (le 3 UTC di oggi) e un articolo di arXiv datato
+ * oggi cadono nello stesso giorno UTC, la query li può alternare, e si
+ * avevano «Ieri», «Oggi», «Ieri», con due intestazioni dalla stessa chiave.
  */
 export function righePerGiorno(notizie: Notizia[], adesso: Date): Riga[] {
   const perGiorno = new Map<Giorno, Notizia[]>(GIORNI.map((g) => [g, []]));

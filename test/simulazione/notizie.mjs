@@ -269,7 +269,8 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   ok("D1 il testo non viaggia nell'elenco", r.every((x) => !("testo" in x)));
   const tutti = await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 50 });
   // g2 e g3 escono lo stesso giorno, nella stessa corsa: conta il giorno, non
-  // l'ora (le date vere sono nude), e fra loro decide la rilevanza.
+  // l'ora (le date vere sono nude). Qui non hanno HLC né eventi, e a parità
+  // decide il titolo: la rilevanza la provano i casi D0.
   uguale("D2 «Tutti» comprende i già letti, sempre per giorno d'uscita", tutti.map((x) => x.id), ["g2", "g3", "g1", "cr"]);
   uguale("D2 il limite vale", (await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 1 })).map((x) => x.id), ["g2"]);
   uguale("D2 un elenco di temi vuoto non trova niente", await N.leggiNotizie({ temi: [], soloDaLeggere: false, limite: 9 }), []);
