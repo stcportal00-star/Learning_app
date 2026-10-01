@@ -17,6 +17,12 @@ type Voce = {
   volume: string | null;
   /** Il tema scelto, quando l'unità è il suo seguito. */
   dopo: string | null;
+  /**
+   * Viene dal piano e non da un progetto: succede anche con dei temi seguiti,
+   * quando le loro aree sono finite, e allora non va presentato come «il tuo
+   * progetto», né con la scritta dei progetti.
+   */
+  dalPiano: boolean;
 };
 
 type Stato = {
@@ -58,6 +64,7 @@ export default function ProssimoPasso() {
         unita: v.unita,
         passo: v.passo,
         dopo: v.progetto?.subentrata ? v.progetto.seguito : null,
+        dalPiano: v.progetto === null,
         volume: v.passo.tipo === "leggi" ? volumeDaAprire(await leggiVolumi(v.unita.tema.slug)) : null,
       })));
       if (vivo) {
@@ -103,9 +110,9 @@ export default function ProssimoPasso() {
     return (
       <View style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: C.bluBordo, backgroundColor: C.bluFondo }}>
         <Text style={{ fontSize: 12, color: C.blu }}>
-          {s.seguiti
-            ? `Unità ${v.unita.posizione}${area ? ` · ${area}` : ""}`
-            : `Prossimo passo · unità ${v.unita.posizione} · ${s.superate} di ${s.conVerifiche} superate`}
+          {v.dalPiano
+            ? `Prossimo passo · unità ${v.unita.posizione} · ${s.superate} di ${s.conVerifiche} superate`
+            : `Unità ${v.unita.posizione}${area ? ` · ${area}` : ""}`}
         </Text>
         {v.dopo ? (
           <Text style={{ fontSize: 12, color: C.verde, marginTop: 2 }}>
@@ -129,11 +136,12 @@ export default function ProssimoPasso() {
     );
   };
 
+  const aperti = s.voci.filter((v) => !v.dalPiano).length;
   return (
     <View style={{ gap: 10 }}>
-      {s.seguiti ? (
+      {aperti ? (
         <Text style={{ fontSize: 12, fontWeight: "600", opacity: 0.6 }}>
-          {s.seguiti === 1 ? "Il tuo progetto" : `I tuoi ${s.seguiti} progetti`} · {s.superate} di {s.conVerifiche} unità superate
+          {aperti === 1 ? "Il tuo progetto" : `I tuoi ${aperti} progetti`} · {s.superate} di {s.conVerifiche} unità superate
         </Text>
       ) : null}
       {s.voci.map((v) => <Riquadro key={v.unita.tema.slug} v={v} />)}

@@ -552,6 +552,9 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     !/Unità \{u\.posizione\}/.test(sorgente("app/unita.tsx")));
   // I progetti vivono in tre schermate che il banco non disegna.
   const pp = sorgente("components/ProssimoPasso.tsx");
+  ok("S14 il passo del piano si presenta come piano anche con dei temi seguiti, e l'intestazione conta solo i progetti aperti",
+    pp.includes("dalPiano: v.progetto === null,") && pp.includes("{v.dalPiano\n") &&
+    pp.includes("const aperti = s.voci.filter((v) => !v.dalPiano).length;") && !pp.includes("{s.seguiti\n"));
   ok("S14 Oggi, Studio e le Notizie decidono che cosa fare con la stessa regola, daFare()",
     pp.includes("daFare(unita, seguiti).map(") &&
     sorgente("app/(tabs)/studio.tsx").includes("const correnti = new Set(daFare(unita, seguiti).map((v) => v.unita.tema.slug));") &&
