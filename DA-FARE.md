@@ -29,7 +29,7 @@ Queste le ho ricontrollate io sul codice, perche' cambiano cosa conviene fare:
 
 | Voce | Verifica | Esito |
 |---|---|---|
-| 1 | `lib/contenuti.ts:69-73` | **vera** — se `esercizi` ha righe, `caricaContenuti()` esce e non ricarica mai piu' |
+| 1 | `lib/contenuti.ts:90-98` | **vera** — se `esercizi` ha righe, `caricaContenuti()` esce e non ricarica mai piu' |
 | 82 | conteggio su `biblioteca.json` | **vera** — T1: 7 voci, tutte `html`, zero PDF |
 | 12 | `AndroidManifest.xml:21` + `app.json` | **vera** — `android:allowBackup="true"`, nessuna regola di esclusione |
 | 32 | `app.json` | **vera** — nessun `versionCode`: tutti i build sono 1 |
@@ -54,7 +54,7 @@ scartata dalla critica: quella copia e' stata riallineata con `f8b141d`.
 ## Prima del 2 ottobre
 
 1. **Il contenuto si congela al PRIMO avvio: dopo, nessuna correzione ai JSON raggiunge più il dispositivo**
-Non esiste versione del contenuto né rinfresco: se `esercizi` ha righe, `caricaContenuti()` esce subito e i sette `INSERT OR IGNORE` non girano mai più. Costo: ogni correzione di contenuto (indirizzi PDF, consegne, flashcard, `ordine_rilevante`) deve essere dentro l'APK che installi la prima volta, o non arriverà mai. (`lib/contenuti.ts:69-73`, unico chiamante `app/_layout.tsx:26`)
+Non esiste versione del contenuto né rinfresco: se `esercizi` ha righe, `caricaContenuti()` esce subito e i sette `INSERT OR IGNORE` non girano mai più. Costo: ogni correzione di contenuto (indirizzi PDF, consegne, flashcard, `ordine_rilevante`) deve essere dentro l'APK che installi la prima volta, o non arriverà mai. (`lib/contenuti.ts:90-98`, unico chiamante `app/_layout.tsx:26`)
 
 2. **SYN-01 — la sincronizzazione scrive nel registro e non proietta: quello che arriva dall'altro dispositivo non compare da nessuna parte**
 `useAutoSync` fa solo `INSERT OR IGNORE INTO eventi`; `proietta()` non ha un solo chiamante e `entitaToccate` non viene mai letto. Costo: telefono e tablet sono due isole, e lo scambio dichiara di aver funzionato. *Già deciso*: NOTE-BUILD.md:500-526 lo lascia aperto perché chiuderlo è un refactoring delle dieci scritture. (`lib/sync/useAutoSync.ts:60-69`; `lib/sync/fusione.ts:101`; `test/simulazione/sync-fusione.mjs:1641`)
@@ -84,7 +84,7 @@ Scala = `clientWidth × devicePixelRatio ÷ larghezza pagina`, senza massimo; `l
 Le 36 `html` e le 2 `hub` hanno un indirizzo nel catalogo, ma la schermata non legge mai il campo `url`. Costo: tocchi una scheda dopo l'altra e leggi sempre «Importa la biblioteca dalla release di GitHub», che per quelle voci non sarà mai vero. (`grep -n "url" 'app/(tabs)/libreria.tsx'` → nessun risultato; `app/(tabs)/libreria.tsx:78-80`)
 
 11. **CDC-02 — su tutti e 20 i moduli di lettura del codice la consegna non arriva mai a schermo**
-`split("\n\n")` tiene solo il primo blocco e l'ultimo: la domanda, che sta in mezzo, sparisce. Costo: uno dei cinque tipi di contenuto parte dimezzato; è una riga. (`app/codice.tsx:51-52`; `lib/contenuti.ts:106`; `test/simulazione/contenuti.mjs:1138`)
+`split("\n\n")` tiene solo il primo blocco e l'ultimo: la domanda, che sta in mezzo, sparisce. Costo: uno dei cinque tipi di contenuto parte dimezzato; è una riga. (`app/codice.tsx:51-52`; `lib/contenuti.ts:127-130`; `test/simulazione/contenuti.mjs:1138`)
 
 12. **`android:allowBackup="true"` senza regole di esclusione: il registro eventi e il segreto di accoppiamento finiscono nel backup di Google**
 Nessun `dataExtractionRules` né `fullBackupContent`, e `app.json` non imposta nulla: Auto Backup copia `files/SQLite/`, cioè `percorso.db` e il kv-store con il segreto da 160 bit da cui si deriva la chiave AES. Costo: esce in chiaro la chiave che apre i pacchetti, e sopra i 25 MB (i PDF) il backup smette in silenzio. (`android/app/src/main/AndroidManifest.xml:25`; `app.json` blocco android; `lib/sync/stato.ts:17`, `lib/sync/accoppiamento.ts:109-111`)
@@ -138,7 +138,7 @@ Copia interrotta, transazione fallita dopo la copia, manifesto non iterabile, no
 Gira su emulatore nuovo a ogni corsa: `adb install -r` è sempre una prima installazione, e il «riavvio a freddo» prova lo stesso APK. Costo: l'operazione che le istruzioni raccomandano con più insistenza — installare sopra senza disinstallare — non è mai stata eseguita, né su dispositivo né in CI. Due righe: installare due volte con dati scritti in mezzo. (`.github/fumo.sh:34,89-97`; `.github/workflows/apk.yml:186-196`)
 
 29. **Il cancello di logcat cerca solo `FATAL EXCEPTION`: un ANR passa il test di fumo e non arriva nemmeno nel rapporto**
-Un ANR non è un'eccezione fatale: il processo resta vivo, `vivo` resta vero, il test stampa SUPERATO, e l'estratto allegato all'issue è solo le ultime 40 righe ReactNativeJS. Costo: l'ANR è proprio il modo in cui questa app fallirà — pdf.js sul thread principale, copie da 2 MB sincrone, 654 righe in una sola transazione al primo avvio. (`.github/fumo.sh:99-102`; `lib/palestra.ts:41,91`; `lib/contenuti.ts:83-152`)
+Un ANR non è un'eccezione fatale: il processo resta vivo, `vivo` resta vero, il test stampa SUPERATO, e l'estratto allegato all'issue è solo le ultime 40 righe ReactNativeJS. Costo: l'ANR è proprio il modo in cui questa app fallirà — pdf.js sul thread principale, copie da 2 MB sincrone, 654 righe in una sola transazione al primo avvio. (`.github/fumo.sh:99-102`; `lib/palestra.ts:41,91`; `lib/contenuti.ts:106-176`)
 
 30. **Sei schermate su quattordici non vengono mai aperte da nessun controllo, né in CI né in locale**
 `fumo.sh` percorre studio, libreria, note, notizie, profilo, esercizi e il lettore: restano fuori `codice`, `ripasso`, `promemoria`, `sync` — l'unica che monta `useAutoSync` e l'unica che tocca i permessi delle notifiche —, `unita`, cioè i passi e «Segui», e `articolo`. Costo: un crash all'apertura di /ripasso si manifesterebbe per la prima volta in viaggio, senza PC e senza logcat. (`.github/fumo.sh:59,70`; `app/sync.tsx:18`; `app/promemoria.tsx:42-51`)
@@ -186,7 +186,7 @@ Costo: un PDF sostituito passa inosservato e la riga dichiara una dimensione che
 `codiceMostrato` è stato del componente e non viene reinizializzato dall'accoppiamento salvato, che pure contiene il codice. Costo: trascriveresti sull'altro dispositivo un segreto che questo non possiede, e l'unico modo di rivedere il codice è «Dimentica l'accoppiamento», cioè la voce 16. (`test/simulazione/schermate-stato.mjs:3315`; `app/sync.tsx:13,23,101-105,127-136`)
 
 45. **CDC-01 — una rubrica illeggibile fa cadere l'albero durante il disegno: in release l'app si chiude**
-Il `JSON.parse` è dentro il render, senza try/catch e senza validazione della forma dopo il parse. Costo: chiusura senza traccia — ma la rubrica la scrive l'app stessa al primo avvio e non arriva mai dall'esterno, quindi serve una riga di database corrotta, non un tuo gesto. Un try/catch fuori dal render. (`test/simulazione/schermate-stato.mjs:2464,2472`; `lib/contenuti.ts:106-107`)
+Il `JSON.parse` è dentro il render, senza try/catch e senza validazione della forma dopo il parse. Costo: chiusura senza traccia — ma la rubrica la scrive l'app stessa al primo avvio e non arriva mai dall'esterno, quindi serve una riga di database corrotta, non un tuo gesto. Un try/catch fuori dal render. (`test/simulazione/schermate-stato.mjs:2464,2472`; `lib/contenuti.ts:127-130`)
 
 46. **Il ramo di errore della sincronizzazione inghiotte tutto, e la schermata può continuare a dire «Sincronizzato»**
 `} catch { await registraScambio(false); }`: nessuna variabile catturata, nessuna voce nel diario, nessuna stampa — e il diario è già stato pubblicato prima di `assorbiRemoto`, `fondi` e la transazione. Costo: senza PC logcat è l'unica traccia leggibile, e in tutta l'app c'è un solo `console.` (`lib/sync/useAutoSync.ts:44,73-75`; `grep -rn "console\." app lib components` → `app/lettore.tsx:57`)
@@ -275,7 +275,7 @@ Solo il messaggio «errore» è confrontato con l'HTML vero; «pronto» e «pagi
 La destinazione è inchiodata a `/mnt/user-data/outputs/percorso-contenuti`, che su questa macchina è vuota; `verifica_esercizi.py` e `verifica_codice.py` non sono chiamati né da `verifica.sh` né da alcun workflow, malgrado il loro README dica che «si prestano a essere messi in CI». Costo: il giro di rigenerazione non si chiude, e una modifica a `esercizi_sql_*.py` non diventa rossa da nessuna parte. (`strumenti/contenuti/impacchetta.py:10,61`; `grep -rn 'python' .github/workflows/`; `verifica.sh` senza righe python)
 
 74. **`fonti.json` e `repository.json` sono contenuti che nessuno legge**
-`lib/contenuti.ts` carica cinque file; questi due non compaiono in nessun `.ts`, `.tsx`, `.mjs` o `.py` all'infuori di `impacchetta.py`, e `repository.json` non è nemmeno nella tabella del README. Costo: o si collegano, o si dichiara che sono materiale di riferimento. (`lib/contenuti.ts:75-79`; `strumenti/contenuti/impacchetta.py:58`)
+`lib/contenuti.ts` carica cinque file; questi due non compaiono in nessun `.ts`, `.tsx`, `.mjs` o `.py` all'infuori di `impacchetta.py`, e `repository.json` non è nemmeno nella tabella del README. Costo: o si collegano, o si dichiara che sono materiale di riferimento. (`lib/contenuti.ts:100-104`; `strumenti/contenuti/impacchetta.py:58`)
 
 75. **I numeri dei documenti sono indietro, e HANDOFF.md doveva essere archiviato dopo la prima sessione**
 Il diario dice 92 test (sono 136 + 10), 481 e 1614 verifiche (sono 483 e 1616), «otto siti di chiamata» a `registra()` (sono dieci — proprio il numero che misura quanto costa SYN-01), 41 esercizi con window functions (sono 23 nel tema, 24 in tutto, e l'app ne annuncia 21). HANDOFF.md dichiara alla prima riga «poi si archivia» ed è ancora in radice con 92 test e 859 pacchetti. (`NOTE-BUILD.md:606,362,617,520,585-586,320`; `HANDOFF.md:3,13,51,78`; `app/_layout.tsx:31`; `grep -rnE "(await|void|return) +registra\(" app lib components` → 10)
