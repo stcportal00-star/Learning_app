@@ -30,10 +30,20 @@ import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
 import { liberaVisti } from "./media";
 
-/** Quanti eventi per viaggio. Oltre, il corpo della risposta diventa scomodo. */
+/** Quanti eventi per viaggio in invio. Oltre, il corpo diventa scomodo. */
 const PAGINA = 500;
 /** Quante pagine al massimo in una sola sincronizzazione. */
 const PAGINE_MASSIME = 20;
+/**
+ * In lettura, cento: gli eventi degli articoli portano il testo, e sul
+ * registro vero cento consecutivi pesano fino a 2 MB, cinquecento fino a
+ * 8,2. In React Native `fetch` risolve a corpo scaricato, quindi la pagina
+ * intera deve arrivare dentro TIMEOUT_MS (20 s): 8,2 MB chiedono 3,3 Mbit/s,
+ * e sotto quella rete la prima pagina cadeva a ogni scambio, per sempre.
+ */
+const PAGINA_LETTURA = 100;
+/** 3000 eventi a scambio: il registro intero (2354 oggi) si rilegge in uno. */
+const PAGINE_LETTURA = 30;
 
 export type EsitoNuvola = {
   riuscito: boolean;
@@ -253,14 +263,14 @@ export async function sincronizzaNuvola(
     const soglia = await segnaposto();
     let oraDelServer = NaN;
     let ultimoArrivo = NaN;
-    for (let giro = 0; giro < PAGINE_MASSIME; giro++) {
+    for (let giro = 0; giro < PAGINE_LETTURA; giro++) {
       const query =
         `select=id,hlc,dispositivo_id,entita,entita_id,tipo,payload,creato_a` +
         (soglia ? `&creato_a=gte.${encodeURIComponent(soglia)}` : "") +
-        `&order=creato_a.asc,id.asc&limit=${PAGINA}&offset=${giro * PAGINA}`;
+        `&order=creato_a.asc,id.asc&limit=${PAGINA_LETTURA}&offset=${giro * PAGINA_LETTURA}`;
       const { righe: remoti, ora } = await n.selezionaConOra<RigaRicevuta>("eventi", query);
       if (giro === 0) oraDelServer = istanteHttp(ora);
-      const fine = remoti.length < PAGINA;
+      const fine = remoti.length < PAGINA_LETTURA;
       if (remoti.length) ultimoArrivo = istanteDelServer(remoti[remoti.length - 1].creato_a);
       const prossima = prossimaSoglia(fine, ultimoArrivo, oraDelServer);
       if (!remoti.length) {

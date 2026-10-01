@@ -1043,7 +1043,7 @@ await scenario("B3 gli eventi remoti scendono, si deduplicano per id, entrano e 
   ok("e il testo e' arrivato per intero",
      art.testo === "Testo integrale depositato dalla conduttura.", String(art.testo));
   ok("la lettura ha chiesto la pagina con il limite di sincronia.ts",
-     servitore.versoEventi("GET")[0].parametri.get("limit") === "500",
+     servitore.versoEventi("GET")[0].parametri.get("limit") === "100",
      servitore.versoEventi("GET")[0].url);
 });
 
@@ -1197,12 +1197,12 @@ await scenario("B8 un 400 in invio interrompe, non segna nulla, e riporta il cor
 });
 
 await scenario("B9 paginazione: con piu' eventi del limite di pagina si fanno piu' giri", async () => {
-  // PAGINA in lib/nuvola/sincronia.ts vale 500: 501 eventi devono costare due
-  // giri e arrivare tutti. Se il ciclo si fermasse alla prima pagina, l'ultimo
-  // articolo di ogni rassegna abbondante non arriverebbe mai.
+  // PAGINA_LETTURA in lib/nuvola/sincronia.ts vale 100: 101 eventi devono
+  // costare due giri e arrivare tutti. Se il ciclo si fermasse alla prima
+  // pagina, l'ultimo articolo di ogni rassegna abbondante non arriverebbe mai.
   const tanti = servitoreNuovo();
   const righe = [];
-  for (let i = 0; i < 501; i++) {
+  for (let i = 0; i < 101; i++) {
     righe.push({
       id: `ev-pag-${String(i).padStart(4, "0")}`,
       hlc: hlcRemoto(900000 + i, "rassegna"),
@@ -1218,17 +1218,18 @@ await scenario("B9 paginazione: con piu' eventi del limite di pagina si fanno pi
 
   const esito = await sincronizza(tab, tanti);
   uguali("arrivano tutti, e tutti nuovi",
-    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi }, { riuscito: true, ricevuti: 501, nuovi: 501 });
+    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi }, { riuscito: true, ricevuti: 101, nuovi: 101 });
   const letture = tanti.versoEventi("GET");
   ok("in due giri, non in uno", letture.length === 2, String(letture.length));
   ok("il primo giro parte dall'inizio",
      letture[0].parametri.get("creato_a") === null && letture[0].parametri.get("offset") === "0", letture[0].url);
-  ok("il secondo e' la pagina dopo della stessa lettura",
-     letture[1].parametri.get("creato_a") === null && letture[1].parametri.get("offset") === "500", letture[1].url);
+  ok("il secondo e' la pagina dopo della stessa lettura, da cento",
+     letture[1].parametri.get("creato_a") === null && letture[1].parametri.get("offset") === "100" &&
+     letture.every((l) => l.parametri.get("limit") === "100"), letture[1].url);
   const quante = await tab.Db.database().getFirstAsync(
     "SELECT count(*) AS n FROM note WHERE id LIKE 'b-pag-%'");
-  ok("e 501 righe operative sono state scritte", quante.n === 501, String(quante.n));
-  ok("la proiezione le conta tutte", esito.proiezione.scritte === 501, String(esito.proiezione.scritte));
+  ok("e 101 righe operative sono state scritte", quante.n === 101, String(quante.n));
+  ok("la proiezione le conta tutte", esito.proiezione.scritte === 101, String(esito.proiezione.scritte));
   servitoreInUso = servitore;
 });
 
