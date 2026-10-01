@@ -272,7 +272,9 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
     s.includes("<View style={COLONNA}>") && s.includes("contentContainerStyle={[COLONNA,") &&
     s.indexOf("<View style={COLONNA}>") < s.indexOf("<ScrollView ref={barra} horizontal"));
   ok("S7 la categoria scelta da fuori viene in vista anche se la barra non era ancora misurata",
-    s.includes("if (attiva) barra.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });"));
+    s.includes("if (attiva) inVista(c.chiave, false);") && s.includes("inVista(categoria, false); }}"));
+  ok("S7 la linguetta scelta va al centro, e vicino all'inizio la barra resta all'inizio (non a filo del bordo)",
+    s.includes("Math.max(0, p.x + p.w / 2 - larghezzaBarra.current / 2)") && !s.includes("x - 16"));
   ok("S1 la barra delle categorie sta fuori dalla lista, ferma",
     s.indexOf("<ScrollView ref={barra} horizontal") > 0 && s.indexOf("<ScrollView ref={barra} horizontal") < s.indexOf("<FlatList\n"));
 }

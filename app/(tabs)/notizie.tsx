@@ -166,13 +166,19 @@ export default function Notizie() {
   useEffect(() => { lista.current?.scrollToOffset({ offset: 0, animated: false }); }, [vista]);
 
   // La barra scorre in orizzontale: la categoria scelta da fuori (un'area
-  // aperta dall'unità, «Tutto su…» in primo piano) deve venire in vista.
+  // aperta dall'unità, «Tutto ›» in primo piano) deve venire in vista. Si
+  // porta al centro, e vicino all'inizio la barra resta all'inizio: a filo
+  // del bordo, all'apertura su In primo piano «Per te» restava tagliata a
+  // sinistra, e se ne vedeva solo il numero.
   const barra = useRef<ScrollView>(null);
-  const posizioni = useRef(new Map<string, number>());
-  useEffect(() => {
-    const x = posizioni.current.get(categoria);
-    if (x !== undefined) barra.current?.scrollTo({ x: Math.max(0, x - 16), animated: true });
-  }, [categoria]);
+  const larghezzaBarra = useRef(0);
+  const posizioni = useRef(new Map<string, { x: number; w: number }>());
+  const inVista = (chiave: string, animated: boolean) => {
+    const p = posizioni.current.get(chiave);
+    if (!p || !larghezzaBarra.current) return;
+    barra.current?.scrollTo({ x: Math.max(0, p.x + p.w / 2 - larghezzaBarra.current / 2), animated });
+  };
+  useEffect(() => { inVista(categoria, true); }, [categoria]);
 
   const numeroDi = (c: Categoria): number | null => {
     if (c.tipo === "area" || c.tipo === "esplorazione") return perCategoria.get(c.chiave) ?? 0;
@@ -318,6 +324,7 @@ export default function Notizie() {
         </View>
 
         <ScrollView ref={barra} horizontal showsHorizontalScrollIndicator={false}
+          onLayout={(e) => { larghezzaBarra.current = e.nativeEvent.layout.width; inVista(categoria, false); }}
           style={{ flexGrow: 0, borderBottomWidth: 1, borderColor: C.bordo, marginTop: 8 }}
           contentContainerStyle={{ paddingHorizontal: 10 }}>
           {CATEGORIE.map((c) => {
@@ -326,14 +333,14 @@ export default function Notizie() {
             return (
               <Pressable key={c.chiave} onPress={() => scegli(c.chiave)}
                 onLayout={(e) => {
-                const x = e.nativeEvent.layout.x;
-                posizioni.current.set(c.chiave, x);
-                // Al primo arrivo dall'unità la categoria si sceglie prima
-                // che la barra sia misurata, e l'effetto qui sopra non trova
-                // dove scorrere; e i numeri, quando arrivano, allargano le
-                // linguette prima di questa. Si riprova quando la misura c'è.
-                if (attiva) barra.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });
-              }}
+                  const { x, width } = e.nativeEvent.layout;
+                  posizioni.current.set(c.chiave, { x, w: width });
+                  // Al primo arrivo dall'unità la categoria si sceglie prima
+                  // che la barra sia misurata, e l'effetto qui sopra non trova
+                  // dove scorrere; e i numeri, quando arrivano, allargano le
+                  // linguette prima di questa. Si riprova quando la misura c'è.
+                  if (attiva) inVista(c.chiave, false);
+                }}
                 style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 8,
                          borderBottomWidth: 2, borderColor: attiva ? C.blu : "transparent" }}>
                 <Text style={{ fontSize: 14, fontWeight: attiva ? "600" : "400",
