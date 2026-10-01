@@ -177,6 +177,30 @@ jobs:
             --solo-senza-testo --massimo 25 --minuti 10 \
             --uscita rassegna/trovati.json
 
+      # Il pacchetto dei manuali aperti, dall'ultima release «biblioteca-…»:
+      # `pubblica.py` carica nel deposito quelli che non ci sono ancora, e il
+      # telefono li scarica da solo al primo wifi. Si scarica ogni mattina
+      # anche quando sono già tutti su: sono settanta megabyte fra due server
+      # di GitHub, e saperlo prima vorrebbe dire chiederlo a Supabase da qui.
+      # Senza pacchetto la pubblicazione va avanti lo stesso.
+      - name: Manuali della biblioteca aperta
+        if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+                  --jq '[.[].tagName | select(startswith("biblioteca-"))] | first // ""')
+          if [ -z "$tag" ]; then
+            echo "Nessuna release biblioteca-…: i manuali aperti si saltano."
+            exit 0
+          fi
+          mkdir -p manuali
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" \
+            --pattern biblioteca.zip --dir manuali --clobber
+          echo "Pacchetto $tag: $(du -h manuali/biblioteca.zip | cut -f1)"
+
       - name: Pubblicazione su Supabase
         if: steps.orario.outputs.esegui == 'si' && steps.orario.outputs.solo != 'si'
         env:
@@ -189,7 +213,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 strumenti/nuvola/pubblica.py \
-            --cartella rassegna --manuale biblioteca-manuale
+            --cartella rassegna --manuale biblioteca-manuale \
+            --biblioteca manuali/biblioteca.zip
 
       # Si salva appena il catalogo è stato costruito, ANCHE se Supabase non ha
       # risposto. È il motivo per cui i due workflow sono separati (vedi in

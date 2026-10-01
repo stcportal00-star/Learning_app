@@ -990,11 +990,12 @@ FRASE_PDF = "La triage delle segnalazioni decide chi passa prima e con quale cri
 
 
 def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_scarica):
-    """Il testo dai PDF.
+    """I dieci manuali dal pacchetto della release, e il testo dai PDF.
 
-    L'utente ha chiesto che un articolo letto lasci il testo e tolga il PDF.
-    Sul telefono funziona solo se il testo c'è, e fino a oggi degli articoli
-    con il PDF non ce l'aveva nessuno.
+    Due richieste dell'utente prima del viaggio: col wifi scende tutto da solo,
+    manuali compresi; e un articolo letto lascia il testo e toglie il PDF. La
+    seconda sul telefono funziona solo se il testo c'è, e fino a oggi degli
+    articoli con il PDF non ce l'aveva nessuno.
     """
     import zipfile
     import hashlib
@@ -1063,11 +1064,37 @@ def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_sc
         biblioteca.append({"utente_id": cliente.UTENTE, "codice": codice, "titolo": chiave,
                            "pdf_path": "rassegna/%s.pdf" % codice})
         RICEVUTO["deposito"]["%s/rassegna/%s.pdf" % (cliente.DEPOSITO, codice)] = dati
+    # Un manuale già nel deposito da una corsa precedente.
+    biblioteca.append({"utente_id": cliente.UTENTE, "codice": "BIB-94", "titolo": "Già su",
+                       "pdf_path": "manuale/BIB-94.pdf"})
+
+    # --- il pacchetto della release
+    manuale_buono = pdf_con_testo(cartella, "bib90.pdf", ["Un manuale aperto."])
+    pacchetto = os.path.join(cartella, "biblioteca.zip")
+    voci = [
+        {"codice": "BIB-90", "titolo": "Manuale buono", "autore": "Autrice",
+         "tema_slug": "hardware", "trimestre": "T0", "licenza": "CC BY 4.0",
+         "url": "https://esempio.invalid/bib90.pdf", "formato": "pdf",
+         "file": "BIB-90_Manuale_2ª_ed.pdf",
+         "sha256": hashlib.sha256(manuale_buono).hexdigest()},
+        {"codice": "BIB-91", "titolo": "Impronta sbagliata", "formato": "pdf",
+         "file": "BIB-91.pdf", "sha256": "0" * 64},
+        {"codice": "BIB-92", "titolo": "Non un PDF", "formato": "pdf", "file": "BIB-92.pdf"},
+        {"codice": "BIB-93", "titolo": "File mancante", "formato": "pdf", "file": "BIB-93.pdf"},
+        {"codice": "BIB-94", "titolo": "Già su", "formato": "pdf", "file": "BIB-94.pdf"},
+    ]
+    with zipfile.ZipFile(pacchetto, "w") as z:
+        z.writestr("manifesto.json", json.dumps(voci, ensure_ascii=False))
+        z.writestr("BIB-90_Manuale_2ª_ed.pdf", manuale_buono)
+        z.writestr("BIB-91.pdf", manuale_buono)
+        z.writestr("BIB-92.pdf", b"<html>403</html>")
+        z.writestr("BIB-94.pdf", manuale_buono)
+
     def corsa():
         r = dict(rapporto_base, articoli=0, volumi=0, eventi=0, falliti=[],
                  gia_in_archivio=0, candidate=0, manuali=0, pdf=0, con_testo=0,
                  feed_letti=0, voci_da_feed=0, rumore_feed=0, url_ripetuti=0,
-                 testi_da_pdf=0, tempo_scaduto=False)
+                 manuali_aperti=0, testi_da_pdf=0, tempo_scaduto=False)
         prima = len(RICEVUTO["tabelle"].get("eventi", []))
         depositi = len(RICEVUTO["deposito"])
         RICEVUTO["richieste"].clear()
@@ -1075,7 +1102,8 @@ def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_sc
         try:
             pubblica.pubblica(os.path.join(cartella, "rassegna"), manuale,
                               cliente.Nuvola(base=base),
-                              {"articoli": 80, "pdf": 8, "minuti": 20}, r)
+                              {"articoli": 80, "pdf": 8, "minuti": 20}, r,
+                              zip_biblioteca=pacchetto)
         finally:
             pubblica.scarica = vero_scarica
         return r, RICEVUTO["tabelle"]["eventi"][prima:], depositi
@@ -1083,15 +1111,43 @@ def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_sc
     r3, nuovi, _ = corsa()
     riga = {a["chiave"]: a for a in RICEVUTO["tabelle"]["articoli"] if a["chiave"].startswith("ras:")}
 
+    # --- i manuali
+    prova("un manuale aperto caricato: BIB-90", r3.get("manuali_aperti"), 1)
+    prova("con i suoi byte, sotto manuale/",
+          RICEVUTO["deposito"].get("%s/manuale/BIB-90.pdf" % cliente.DEPOSITO), manuale_buono)
+    ev90 = [e for e in nuovi if e["entita"] == "biblioteca" and e["entita_id"] == "BIB-90"]
+    prova("e un evento «aggiorna» con le sole tre colonne del file",
+          [(e["tipo"], sorted(e["payload"])) for e in ev90],
+          [("aggiorna", ["byte", "pdf_path", "sha256"])])
+    prova("che dicono il vero sul file",
+          ev90[0]["payload"] if ev90 else None,
+          {"pdf_path": "manuale/BIB-90.pdf", "byte": len(manuale_buono),
+           "sha256": hashlib.sha256(manuale_buono).hexdigest()})
+    riga90 = [v for v in RICEVUTO["tabelle"]["biblioteca"] if v.get("codice") == "BIB-90"]
+    prova_vero("la riga remota c'è, aperta e con pdf_path",
+               len(riga90) == 1 and riga90[0]["origine"] == "aperta"
+               and riga90[0]["pdf_path"] == "manuale/BIB-90.pdf", repr(riga90))
+    prova_vero("l'impronta diversa dal manifesto ferma il file",
+               "%s/manuale/BIB-91.pdf" % cliente.DEPOSITO not in RICEVUTO["deposito"]
+               and any("BIB-91" in f and "impronta" in f for f in r3["falliti"]),
+               repr(r3["falliti"]))
+    prova_vero("un file che non è un PDF non sale",
+               "%s/manuale/BIB-92.pdf" % cliente.DEPOSITO not in RICEVUTO["deposito"]
+               and any("BIB-92" in f for f in r3["falliti"]), repr(r3["falliti"]))
+    prova_vero("un manuale già nel deposito non si ricarica",
+               not any("BIB-94" in q["percorso"] for q in RICEVUTO["richieste"])
+               and not any(e["entita_id"] == "BIB-94" for e in nuovi))
+
     # --- il testo dai PDF
     if leggibili:
         testi_dai_pdf_veri(riga, nuovi, r3, cartella)
 
-    # --- la corsa dopo non rilegge niente
+    # --- la corsa dopo non rifà niente
     r4, nuovi4, depositi4 = corsa()
+    prova("la corsa dopo non ricarica manuali", r4.get("manuali_aperti"), 0)
     prova("né rilegge PDF già letti", r4.get("testi_da_pdf"), 0)
     prova_vero("e non manda eventi per loro",
-               not any(e["entita_id"] in ("ras:testo", "ras:muto") for e in nuovi4),
+               not any(e["entita_id"] in ("BIB-90", "ras:testo", "ras:muto") for e in nuovi4),
                repr([e["entita_id"] for e in nuovi4]))
 
     # --- senza pypdf: la conduttura gira come prima, e lo dice

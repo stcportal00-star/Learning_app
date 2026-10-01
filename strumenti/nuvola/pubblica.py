@@ -28,6 +28,7 @@ import re
 import sys
 import time
 import hashlib
+import zipfile
 from datetime import datetime, timezone
 
 QUI = os.path.dirname(os.path.abspath(__file__))
@@ -478,7 +479,7 @@ def testo_della_voce(v, vie, rapporto, scadenza):
 # ------------------------------------------------------------------ corsa
 
 
-def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
+def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto, zip_biblioteca=None):
     catalogo = carica_json(os.path.join(cartella, "catalogo.json"), [])
     trovati = carica_json(os.path.join(cartella, "trovati.json"), [])
     vie = {}
@@ -619,8 +620,15 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
 
     rapporto["articoli"] = len(righe_articoli)
 
-    # Il testo degli articoli arrivati col solo PDF. In fondo perché costa
-    # tempo, e il tetto di tempo lo ferma prima della rassegna nuova.
+    # I dieci manuali della biblioteca aperta, dal pacchetto della release:
+    # stessa strada dei PDF della rassegna, così il telefono li scarica da
+    # solo al primo wifi invece di passare da «Importa biblioteca».
+    nuovi_volumi, eventi_volumi = manuali_aperti(zip_biblioteca, nuvola, orologio, rapporto)
+    righe_volumi += nuovi_volumi
+    eventi += eventi_volumi
+
+    # Il testo degli articoli arrivati col solo PDF. Dopo i manuali perché
+    # costa più tempo, e il tetto di tempo lo ferma prima di loro.
     con_testo, eventi_testo = testi_dai_pdf(nuvola, orologio, rapporto, scadenza)
     righe_articoli += con_testo
     eventi += eventi_testo
@@ -636,6 +644,92 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     # non ha bisogno di UPDATE sul registro (strumenti/db/009).
     nuvola.innesta("eventi", eventi, "id", doppioni="ignora")
     rapporto["eventi"] = len(eventi)
+
+
+def manuali_aperti(percorso_zip, nuvola, orologio, rapporto):
+    """
+    I PDF del pacchetto `biblioteca.zip` (release «biblioteca-…») nel deposito.
+
+    L'app ha già le righe BIB-xx, dal catalogo che porta con sé
+    (lib/contenuti.ts), ma senza `pdf_path`: finora il PDF entrava solo
+    estraendo il pacchetto a mano e usando «Importa biblioteca». L'utente ha
+    chiesto che col wifi scenda tutto da solo, manuali compresi.
+
+    L'evento è un «aggiorna» con le sole tre colonne del file, non un «crea»:
+    sul telefono la riga c'è già, e titoli e note restano quelli del catalogo
+    dell'app. Si salta ciò che nella copia remota ha già `pdf_path`, quindi
+    dalla seconda corsa in poi il pacchetto si apre e si richiude.
+
+    Restituisce (righe di `biblioteca`, eventi).
+    """
+    righe, eventi = [], []
+    if not percorso_zip or not os.path.isfile(percorso_zip):
+        return righe, eventi
+    try:
+        pacchetto = zipfile.ZipFile(percorso_zip)
+    except (OSError, zipfile.BadZipFile) as e:
+        rapporto["falliti"].append("biblioteca.zip: %s" % str(e)[:140])
+        return righe, eventi
+    with pacchetto:
+        nomi = set(pacchetto.namelist())
+        try:
+            manifesto = json.loads(pacchetto.read("manifesto.json").decode("utf-8"))
+        except (KeyError, ValueError) as e:
+            rapporto["falliti"].append("biblioteca.zip: manifesto illeggibile (%s)" % str(e)[:100])
+            return righe, eventi
+        gia = {
+            r["codice"]
+            for r in nuvola.seleziona("biblioteca", "select=codice,pdf_path&order=codice.asc",
+                                      massimo=20000)
+            if r.get("pdf_path") and str(r.get("codice") or "").startswith("BIB-")
+        }
+        for v in manifesto if isinstance(manifesto, list) else []:
+            codice = str(v.get("codice") or "")
+            nome = v.get("file")
+            if not codice.startswith("BIB-") or codice in gia:
+                continue
+            if (v.get("formato") or "pdf") != "pdf" or nome not in nomi:
+                continue
+            if pacchetto.getinfo(nome).file_size > BYTE_PER_FILE:
+                rapporto["falliti"].append("%s: oltre il tetto di %d byte" % (codice, BYTE_PER_FILE))
+                continue
+            dati = pacchetto.read(nome)
+            if not e_pdf(dati):
+                rapporto["falliti"].append("%s: nel pacchetto non è un PDF" % codice)
+                continue
+            sha = impronta(dati)
+            # Il manifesto è stato scritto quando il file è stato scaricato:
+            # un'impronta diversa vuol dire un pacchetto rovinato, e un PDF
+            # rovinato si scoprirebbe solo aprendolo, in viaggio.
+            if v.get("sha256") and v["sha256"] != sha:
+                rapporto["falliti"].append("%s: impronta diversa da quella del manifesto" % codice)
+                continue
+            percorso = "manuale/%s.pdf" % codice
+            try:
+                nuvola.carica_file(percorso, dati, "application/pdf")
+            except ErroreNuvola as e:
+                rapporto["falliti"].append("deposito %s: %s" % (codice, str(e)[:140]))
+                continue
+            righe.append({
+                "codice": codice,
+                "titolo": (v.get("titolo") or codice)[:2000],
+                "autore": v.get("autore"),
+                "tema_slug": v.get("tema_slug"),
+                "trimestre": v.get("trimestre"),
+                "origine": "aperta",
+                "licenza": v.get("licenza"),
+                "url": v.get("url"),
+                "formato": "pdf",
+                "byte": len(dati),
+                "sha256": sha,
+                "pdf_path": percorso,
+                "nota": v.get("nota"),
+                "aggiunto_a": rapporto["adesso"],
+            })
+            eventi.append(evento(orologio, "biblioteca", codice, "aggiorna",
+                                 {"pdf_path": percorso, "byte": len(dati), "sha256": sha}))
+            rapporto["manuali_aperti"] = rapporto.get("manuali_aperti", 0) + 1
+    return righe, eventi
 
 
 def testi_dai_pdf(nuvola, orologio, rapporto, scadenza, massimo=MASSIMO_TESTI_PDF):
@@ -774,6 +868,7 @@ def scrivi_rapporto(cartella, rapporto):
         "  con testo      : %d" % rapporto["con_testo"],
         "PDF depositati   : %d" % rapporto["pdf"],
         "File a mano      : %d" % rapporto["manuali"],
+        "Manuali aperti   : %d" % rapporto.get("manuali_aperti", 0),
         "Testi dai PDF    : %d" % rapporto.get("testi_da_pdf", 0),
         "Volumi scritti   : %d" % rapporto["volumi"],
         "Eventi scritti   : %d" % rapporto["eventi"],
@@ -796,6 +891,9 @@ def principale(argv=None):
     p = argparse.ArgumentParser(description="Porta la rassegna su Supabase.")
     p.add_argument("--cartella", default="rassegna")
     p.add_argument("--manuale", default="biblioteca-manuale")
+    # Il pacchetto della release «biblioteca-…», scaricato dal workflow. Se
+    # manca, i manuali aperti si saltano e il resto della corsa va avanti.
+    p.add_argument("--biblioteca", default="")
     p.add_argument("--massimo-articoli", type=int, default=MASSIMO_ARTICOLI)
     p.add_argument("--massimo-pdf", type=int, default=MASSIMO_PDF)
     p.add_argument("--minuti", type=int, default=MINUTI)
@@ -820,6 +918,7 @@ def principale(argv=None):
         "con_testo": 0,
         "pdf": 0,
         "manuali": 0,
+        "manuali_aperti": 0,
         "testi_da_pdf": 0,
         "volumi": 0,
         "eventi": 0,
@@ -847,7 +946,7 @@ def principale(argv=None):
             "articoli": a.massimo_articoli, "pdf": a.massimo_pdf, "minuti": a.minuti,
             "minuti_feed": a.minuti_feed, "per_fonte": a.per_fonte,
         "esplorazione": a.esplorazione,
-        }, rapporto)
+        }, rapporto, zip_biblioteca=a.biblioteca)
     except ErroreNuvola as e:
         print(scrivi_rapporto(a.cartella, rapporto))
         print("Scrittura interrotta: %s" % e, file=sys.stderr)
