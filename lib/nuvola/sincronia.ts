@@ -29,6 +29,7 @@ import { Nuvola, ErroreNuvola } from "./cliente";
 import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
 import { liberaVisti, scaricaMediaMancanti } from "./media";
+import { liberaPdfLetti, volumiLetti } from "./letti";
 import { suWifi } from "./rete";
 
 /** Quanti eventi per viaggio in invio. Oltre, il corpo diventa scomodo. */
@@ -398,6 +399,14 @@ export async function sincronizzaNuvola(
     // Un file che non si lascia cancellare non deve far fallire una
     // sincronizzazione riuscita: si riprova alla prossima.
   }
+  // Lo stesso per i PDF degli articoli letti, anche sull'altro dispositivo:
+  // il «letto» può essere appena arrivato da lì.
+  try {
+    const tolti = await liberaPdfLetti();
+    if (tolti) esito.motivo += ` ${tolti} PDF già letti tolti dal telefono (resta il testo).`;
+  } catch {
+    // Come sopra: si riprova alla prossima.
+  }
 
   // I file vengono DOPO, e fuori da ogni transazione: un PDF da venti mega
   // tenuto dentro una transazione SQLite bloccherebbe ogni altra scrittura
@@ -498,14 +507,19 @@ export async function scaricaVolume(volumeId: string, nuvola?: Nuvola): Promise<
 
 export async function scaricaVolumiMancanti(n: Nuvola, massimo = 5): Promise<number> {
   // Il limite si applica qui e non in SQL: col wifi è Infinity, che SQLite
-  // non accetta come LIMIT.
+  // non accetta come LIMIT. I PDF di articoli già letti non si riscaricano: il
+  // testo è già qui, ed è proprio per lasciarlo al posto del file che sono
+  // stati tolti (letti.ts).
+  const letti = await volumiLetti();
   const mancanti = (
     await database().getAllAsync<{ id: string }>(
       `SELECT id FROM biblioteca
        WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')
        ORDER BY aggiunto_a DESC`
     )
-  ).slice(0, massimo);
+  )
+    .filter((v) => !letti.has(v.id))
+    .slice(0, massimo);
   let fatti = 0;
   for (const v of mancanti) {
     try {

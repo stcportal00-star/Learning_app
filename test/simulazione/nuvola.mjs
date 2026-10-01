@@ -1656,6 +1656,49 @@ await scenario("B20 sui dati mobili non si scarica niente da solo; col wifi tutt
   servitoreInUso = servitore;
 });
 
+await scenario("B21 segnato «letto», il PDF se ne va e resta il testo; senza testo il PDF resta", async () => {
+  const conTesto = await articoloConPdf("b21-lungo", { fileQui: true });
+  const senzaTesto = await articoloConPdf("b21-corto", { fileQui: true, testo: "Solo il sommario." });
+  const fileLungo = await fileDi(conTesto);
+  await tab.Articoli.segnaLetto("b21-lungo", true);
+  await tab.Articoli.segnaLetto("b21-corto", true);
+  ok("il PDF dell'articolo con il testo non c'è più", (await fileDi(conTesto)) === null && !new FS.File(fileLungo).exists,
+     String(await fileDi(conTesto)));
+  ok("e il testo resta", ((await riga(tab, "articoli", "id", "b21-lungo")).testo ?? "").length >= 1000);
+  ok("quello con il solo sommario tiene il PDF", Boolean(await fileDi(senzaTesto)));
+
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  await conFile(s);
+  ok("col wifi il PDF già letto non si riscarica", (await fileDi(conTesto)) === null, String(await fileDi(conTesto)));
+  const novita = await tab.Articoli.contaNovita();
+  const mancanti = await tab.Db.database().getAllAsync(
+    "SELECT id FROM biblioteca WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')");
+  ok("e Oggi non lo conta fra quelli da scaricare",
+     novita.volumiDaScaricare === mancanti.filter((m) => m.id !== conTesto).length,
+     `${novita.volumiDaScaricare} contro ${mancanti.length}`);
+  Rete.azzeraRete();
+  servitoreInUso = servitore;
+});
+
+await scenario("B22 un «letto» arrivato dall'altro dispositivo libera il PDF anche qui", async () => {
+  const codice = await articoloConPdf("b22-art", { fileQui: true });
+  const s = servitoreNuovo();
+  s.semina("eventi", [{
+    id: "ev-b22-letto", hlc: hlcRemoto(95_000, "telefono"), dispositivo_id: "telefono",
+    entita: "articoli", entita_id: "b22-art", tipo: "aggiorna", payload: { letto: 1 }, utente_id: UTENTE_ATTESO,
+  }]);
+  await fissaSegnaposto(tab, "");
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  const esito = await conFile(s);
+  ok("lo scambio riesce, anche sui dati mobili", esito.riuscito, esito.motivo);
+  ok("e il PDF già letto sull'altro dispositivo non è più qui", (await fileDi(codice)) === null, String(await fileDi(codice)));
+  ok("il motivo lo dice", /PDF già letti tolti/.test(esito.motivo.normalize("NFC")), esito.motivo);
+  Rete.azzeraRete();
+  servitoreInUso = servitore;
+});
+
 await scenario("B23 all'arrivo del wifi parte un giro, una volta sola per arrivo", async () => {
   const { quandoArrivaIlWifi } = await import("../../lib/nuvola/rete.ts");
   Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });

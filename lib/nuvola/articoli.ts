@@ -6,6 +6,7 @@
  * collegamenti sarebbe inutile proprio nei due mesi in cui serve.
  */
 import { database, registra } from "../db";
+import { liberaPdfLetti, volumiLetti } from "./letti";
 
 export type Articolo = {
   id: string;
@@ -63,6 +64,15 @@ export async function segnaLetto(id: string, letto: boolean): Promise<void> {
   await registra("articoli", id, "aggiorna", { letto: letto ? 1 : 0 }, async (d, hlc) => {
     await d.runAsync("UPDATE articoli SET letto = ?, hlc = ? WHERE id = ?", [letto ? 1 : 0, hlc, id]);
   });
+  // Letto vuol dire che il PDF non serve più, se il testo c'è: si toglie
+  // subito, non alla prossima sincronizzazione (lib/nuvola/letti.ts).
+  if (letto) {
+    try {
+      await liberaPdfLetti(id);
+    } catch {
+      // Resta per ora: lo toglie la prossima sincronizzazione.
+    }
+  }
 }
 
 export async function segnaSalvato(id: string, salvato: boolean): Promise<void> {
@@ -74,12 +84,15 @@ export async function segnaSalvato(id: string, salvato: boolean): Promise<void> 
 
 export async function contaNovita(): Promise<{ daLeggere: number; conTesto: number; volumiDaScaricare: number }> {
   const d = database();
-  const [a, t, v] = await Promise.all([
+  const [a, t, v, letti] = await Promise.all([
     d.getFirstAsync<{ n: number }>("SELECT count(*) AS n FROM articoli WHERE letto = 0"),
     d.getFirstAsync<{ n: number }>(
       "SELECT count(*) AS n FROM articoli WHERE letto = 0 AND testo IS NOT NULL AND testo <> ''"),
-    d.getFirstAsync<{ n: number }>(
-      "SELECT count(*) AS n FROM biblioteca WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')"),
+    d.getAllAsync<{ id: string }>(
+      "SELECT id FROM biblioteca WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')"),
+    volumiLetti(),
   ]);
-  return { daLeggere: a?.n ?? 0, conTesto: t?.n ?? 0, volumiDaScaricare: v?.n ?? 0 };
+  // I PDF di articoli già letti non si riscaricano (letti.ts): non sono «da scaricare».
+  const volumiDaScaricare = v.filter((r) => !letti.has(r.id)).length;
+  return { daLeggere: a?.n ?? 0, conTesto: t?.n ?? 0, volumiDaScaricare };
 }
