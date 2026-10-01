@@ -632,7 +632,8 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     un.includes("if (giro.current === g) setSeguiti(seg);") && un.includes("giro.current += 1;") && !un.includes("setTuttiProgetti("));
   ok("S14 Oggi e Studio ricordano chi ha quale seguito, e tutte le schermate ne tengono conto",
     pp.includes("void ricordaSubentrate(subentrate(tutti, precedenti));") && pp.includes("progetti(unita, seguiti, precedenti)") &&
-    un.includes("leggiSubentrate()]);") && un.includes("setPrecedenti(prec);"));
+    un.includes("leggiSubentrate()]);") && un.includes("setPrecedenti(prec);") &&
+    un.includes("if (tutte.length) void ricordaSubentrate(subentrate(tuttiProgetti, precedenti));"));
   ok("S14 su un'unità subentrata si nomina il tema scelto che la tiene, e «Smetti» toglie quello",
     un.includes("`«${nomeDi(progettoQui.seguito)}» è superato: il progetto continua qui.`") && un.includes("Smetti di seguirlo"));
   ok("S14 dall'unità si segue e si smette di seguire",

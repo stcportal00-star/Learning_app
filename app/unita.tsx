@@ -1,12 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Pressable, ScrollView } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { registra } from "../lib/db";
 import {
-  Unita as UnitaPercorso, Passo, descriviPasso, destinazione, modelloScenario, progetti,
+  Unita as UnitaPercorso, Passo, descriviPasso, destinazione, modelloScenario, progetti, subentrate,
 } from "../lib/percorso";
-import { leggiSeguiti, leggiSubentrate, segui, smettiDiSeguire } from "../lib/progetti";
+import { leggiSeguiti, leggiSubentrate, ricordaSubentrate, segui, smettiDiSeguire } from "../lib/progetti";
 import {
   leggiPercorso, leggiScenari, leggiVolumi, volumeDaAprire, ScenarioDiUnita, VolumeDiUnita,
 } from "../lib/avanzamento";
@@ -46,6 +46,15 @@ export default function Unita() {
   // il percorso di prima dell'esercizio mostrava «Lo stai seguendo» sotto
   // un'unità appena superata.
   const tuttiProgetti = useMemo(() => progetti(tutte, seguiti, precedenti), [tutte, seguiti, precedenti]);
+  // Anche da qui si ricorda chi ha quale seguito, come in Oggi e Studio:
+  // l'unità lo mostra («il progetto continua con…»), e se ne può uscire verso
+  // Note, Libreria o Notizie senza ripassare da Oggi; senza ricordo, la volta
+  // dopo Oggi poteva assegnare quell'unità a un altro progetto. Finché il
+  // percorso non è letto non si scrive: un ricordo vuoto cancellerebbe quello
+  // vero.
+  useEffect(() => {
+    if (tutte.length) void ricordaSubentrate(subentrate(tuttiProgetti, precedenti));
+  }, [tuttiProgetti, tutte.length, precedenti]);
   // Ogni «Segui» o «Smetti» fa avanzare il giro: una lettura del fuoco
   // partita prima non deve rimettere l'elenco di prima sopra quello nuovo.
   const giro = useRef(0);
