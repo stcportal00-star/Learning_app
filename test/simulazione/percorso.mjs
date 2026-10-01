@@ -247,6 +247,12 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     pr({ d3: fatto }, ["d3"]), [["d3", "d1", "esercizi", true]]);
   uguale("P8 area tutta superata: il progetto resta, senza passo",
     pr({ d1: fatto, d2: fatto, d3: fatto }, ["d2"]), [["d2", "d2", null, false]]);
+  const finita = (mat, seguiti) => P.progetti(P.costruisciPercorso(temi, { ...base, ...mat }, ordine), seguiti)
+    .map((x) => [x.seguito, x.passo !== null, x.areaFinita]);
+  uguale("P8 senza passo perché il resto dell'area è di un altro progetto: l'area NON è finita",
+    finita({ d1: fatto, d3: fatto }, ["d1", "d2"]), [["d1", false, false], ["d2", true, false]]);
+  uguale("P8 senza passo perché l'area è finita: lo si dice",
+    finita({ d1: fatto, d2: fatto, d3: fatto }, ["d2"]), [["d2", false, true]]);
   uguale("P8 un tema senza area, superato, non ha un seguito",
     pr({ orfano: fatto }, ["orfano"]), [["orfano", "orfano", null, false]]);
   uguale("P8 temi di sola lettura, sconosciuti o ripetuti non fanno progetti",

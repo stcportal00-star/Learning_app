@@ -70,7 +70,7 @@ export default function ProssimoPasso() {
       if (vivo) {
         setS({
           voci,
-          finiti: tutti.filter((p) => !p.passo).map((p) => p.seguito),
+          finiti: tutti.filter((p) => !p.passo && p.areaFinita).map((p) => p.seguito),
           seguiti: tutti.length,
           superate: unita.filter((u) => u.stato === "completa").length,
           conVerifiche: unitaConVerifiche(unita),

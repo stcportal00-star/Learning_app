@@ -227,10 +227,17 @@ export type Progetto = {
   seguito: string;
   /** L'unità su cui si lavora adesso: il tema scelto, o chi ne ha preso il posto. */
   unita: Unita;
-  /** null quando nell'area non resta niente da fare. */
+  /** null quando non resta niente da fare per questo progetto: vedi `areaFinita`. */
   passo: Passo | null;
   /** Il tema scelto è superato (o è già di un altro progetto) e questa unità è il suo seguito. */
   subentrata: boolean;
+  /**
+   * Nell'area del tema scelto non resta niente da fare. Un progetto senza
+   * passo con l'area non finita è un tema superato il cui resto d'area è già
+   * negli altri progetti (si segue lettura del codice e AI engineering, che
+   * stanno nella stessa area): dirgli «area tutta superata» sarebbe falso.
+   */
+  areaFinita: boolean;
 };
 
 /**
@@ -273,7 +280,11 @@ export function progetti(unita: Unita[], seguiti: string[]): Progetto[] {
 
   return scelti.map(({ s, i }) => {
     const u = assegnate.get(s) ?? unita[i];
-    return { seguito: s, unita: u, passo: passoDaFare(u), subentrata: u !== unita[i] };
+    const area = unita[i].tema.pista;
+    const areaFinita = area
+      ? !unita.some((x) => x.tema.pista === area && passoDaFare(x) !== null)
+      : passoDaFare(unita[i]) === null;
+    return { seguito: s, unita: u, passo: passoDaFare(u), subentrata: u !== unita[i], areaFinita };
   });
 }
 

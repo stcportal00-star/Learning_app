@@ -160,7 +160,9 @@ export default function Unita() {
   ) : natoQui ? (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
       <Text style={{ fontSize: 13, color: C.verde, flex: 1, lineHeight: 18 }}>
-        {natoQui.passo ? `Superato: il progetto continua con «${natoQui.unita.tema.nome}».` : "Superato, e con lui tutta l'area."}
+        {natoQui.passo ? `Superato: il progetto continua con «${natoQui.unita.tema.nome}».`
+          : natoQui.areaFinita ? "Superato, e con lui tutta l'area."
+            : "Superato: il resto dell'area è già negli altri tuoi progetti."}
       </Text>
       <Pressable onPress={() => { void cambiaSeguito(() => smettiDiSeguire(slug)); }}
         style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: C.superficieAlta }}>
