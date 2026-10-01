@@ -119,8 +119,8 @@ Oggi: due sessioni registrate, due eventi di ripasso con una scheda saltata, un 
 22. **RIP-04 — il ripasso si ferma a 30 schede e annuncia che non ce n'è più**
 La coda è `LIMIT 30`, non viene mai ricaricata e, esaurita, ricade sul testo dello stato vuoto. Costo: al primo avvio tutte e 199 le flashcard sono scadute; ne fai 30, leggi che hai finito, e 169 restano ferme per settimane. (`app/ripasso.tsx:26`; `lib/contenuti.ts:139-142`; `test/simulazione/schermate-stato.mjs:2667`)
 
-23. **OGG-05 / STU-02 / PRF-02 — i contatori di Oggi, Studio e Profilo restano fermi fino al riavvio dell'app**
-`useEffect` al montaggio, nessun `useFocusEffect`. Costo: risolto un esercizio i numeri non cambiano — ed è l'unico riscontro quotidiano che hai in viaggio. Il meccanismo esiste già e non è collegato al focus: `setVersione` di Oggi. (`app/(tabs)/oggi.tsx:15,17,61`; `app/(tabs)/studio.tsx:12`; `test/simulazione/schermate-stato.mjs:908,1043,1816`)
+23. **OGG-05 / STU-02 / PRF-02 — i contatori di Oggi e Studio restano fermi fino al riavvio dell'app; quelli di Profilo al ritorno da Promemoria e Sincronizzazione**
+`useEffect` al montaggio, nessun `useFocusEffect`. Profilo non è più una scheda: impilato da Oggi, si rimonta e si rilegge a ogni apertura, e resta fermo solo tornando da /promemoria o /sync, che gli si impilano sopra. Costo: risolto un esercizio i numeri non cambiano — ed è l'unico riscontro quotidiano che hai in viaggio. Il meccanismo esiste già e non è collegato al focus: `setVersione` di Oggi. (`app/(tabs)/oggi.tsx:15,17,61`; `app/(tabs)/studio.tsx:12`; `test/simulazione/schermate-stato.mjs:908,1043,1816`)
 
 24. **LET-04 — uscendo entro 1,5 secondi dal cambio pagina la posizione non viene salvata**
 Il salvataggio è rinviato con un `setTimeout` e la pulizia fa solo `clearTimeout`, senza svuotare il rinvio allo smontaggio. Costo: su un libro di centinaia di pagine letto ogni sera per 52 giorni, il segno si perde regolarmente; è già stato fatto per le note. (`app/lettore.tsx:63-64,46`; `test/simulazione/schermate-stato.mjs:2833`)

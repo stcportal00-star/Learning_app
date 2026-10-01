@@ -1916,7 +1916,7 @@ await NotificheApp.salvaPromemoria({ attivo: true, ora: 7, minuto: 30, tipo: "le
 await profilo.stabilizza();
 difetto("PRF-02", "G7 tornando dal promemoria il sottotitolo resta quello di prima: l'effetto non si riesegue", profilo.schermo.promemoria.sottotitolo === "Nessun avviso. Notifica locale, funziona anche in aereo.");
 const profiloRimontato = await monta("ProfiloRimontato", ModelloProfilo, { ...ambienteProfilo });
-ok("G8 rimontando la scheda il sottotitolo dice il blocco e l'ora", profiloRimontato.schermo.promemoria.sottotitolo === "Blocco lettura alle 07:30, ogni giorno.", profiloRimontato.schermo.promemoria.sottotitolo);
+ok("G8 rimontando il Profilo il sottotitolo dice il blocco e l'ora", profiloRimontato.schermo.promemoria.sottotitolo === "Blocco lettura alle 07:30, ogni giorno.", profiloRimontato.schermo.promemoria.sottotitolo);
 await KV.removeItem("promemoria");
 
 // --- artefatti e credenziali popolati, compreso l'anno nullo e il costo mancante
