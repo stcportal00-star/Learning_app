@@ -15,6 +15,13 @@ import { Text } from "../../components/Base";
 import { C } from "../../lib/tema";
 
 const CATEGORIE = categorie();
+/**
+ * Quante notizie per volta. La tabella non si sfoltisce e ogni corsa porta
+ * fino a ottanta articoli: a metà viaggio un'area ne ha centinaia. Con un
+ * tetto fisso la lista finiva in silenzio mentre la barra ne contava di più;
+ * a pagine, le altre arrivano scorrendo.
+ */
+const PAGINA = 100;
 const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
 const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
   "settembre", "ottobre", "novembre", "dicembre"];
@@ -39,7 +46,7 @@ export default function Notizie() {
   const [tema, setTema] = useState<string | null>(null);
   const [soloDaLeggere, setSoloDaLeggere] = useState(true);
   // Le righe con la vista per cui si sono lette: vedi `righe` più sotto.
-  const [caricato, setCaricato] = useState<{ vista: string; righe: Riga[] } | null>(null);
+  const [caricato, setCaricato] = useState<{ vista: string; righe: Riga[]; quante: number; pieno: boolean } | null>(null);
   const [conti, setConti] = useState<Conti>([]);
   const [perTe, setPerTe] = useState<string[]>([]);
   const [adesso, setAdesso] = useState(() => new Date());
@@ -61,6 +68,9 @@ export default function Notizie() {
   // La vista che si guarda: cambia con la categoria, il tema e «Da leggere»,
   // non con un ritorno alla scheda.
   const vista = `${categoria}|${tema ?? ""}|${soloDaLeggere ? "1" : "0"}`;
+  // Le pagine valgono per la vista: cambiandola si riparte dalla prima.
+  const [pagine, setPagine] = useState({ vista: "", n: 1 });
+  const quante = (pagine.vista === vista ? pagine.n : 1) * PAGINA;
 
   useFocusEffect(useCallback(() => {
     let vivo = true;
@@ -74,7 +84,13 @@ export default function Notizie() {
         const piano = prossimoPasso(unita)?.unita.tema.slug;
         return areePerTe(attivi.length ? attivi : piano ? [piano] : []);
       });
-      const righeDellaVista = (async (): Promise<Riga[]> => {
+      // `pieno`: la query ha dato tutte quelle chieste, quindi ce ne possono
+      // essere altre.
+      const perGiorno = async (f: Parameters<typeof leggiNotizie>[0]) => {
+        const n = await leggiNotizie(f);
+        return { righe: righePerGiorno(n, ora), pieno: n.length >= f.limite };
+      };
+      const righeDellaVista = (async (): Promise<{ righe: Riga[]; pieno: boolean }> => {
         if (cat.tipo === "titoli") {
           const sezioni = await Promise.all(
             CATEGORIE.filter((x) => x.tipo === "area" || x.tipo === "esplorazione").map(async (x) => ({
@@ -84,28 +100,35 @@ export default function Notizie() {
                 soloDaLeggere, limite: 4,
               }),
             })));
-          return righeTitoli(sezioni);
+          return { righe: righeTitoli(sezioni), pieno: false };
         }
         if (cat.tipo === "perte") {
-          return righePerGiorno(await leggiNotizie({
-            temi: (await aree).flatMap(temiDellArea), soloDaLeggere, limite: 150 }), ora);
+          return perGiorno({ temi: (await aree).flatMap(temiDellArea), soloDaLeggere, limite: quante });
         }
         if (cat.tipo === "area") {
-          return righePerGiorno(await leggiNotizie({
-            temi: tema && cat.temi.includes(tema) ? [tema] : cat.temi, soloDaLeggere, limite: 200 }), ora);
+          return perGiorno({ temi: tema && cat.temi.includes(tema) ? [tema] : cat.temi, soloDaLeggere, limite: quante });
         }
         if (cat.tipo === "esplorazione") {
-          return righePerGiorno(await leggiNotizie({ temi: null, fuoriDalPiano: true, soloDaLeggere, limite: 200 }), ora);
+          return perGiorno({ temi: null, fuoriDalPiano: true, soloDaLeggere, limite: quante });
         }
         // I salvati sono quelli da tenere: letti o no, si vedono tutti.
-        return righePerGiorno(await leggiNotizie({ temi: null, soloDaLeggere: false, soloSalvati: true, limite: 300 }), ora);
+        return perGiorno({ temi: null, soloDaLeggere: false, soloSalvati: true, limite: quante });
       })();
       const [c, a, r] = await Promise.all([contaPerTema(), aree, righeDellaVista]);
       if (!vivo) return;
-      setConti(c); setPerTe(a); setAdesso(ora); setCaricato({ vista, righe: r });
+      setConti(c); setPerTe(a); setAdesso(ora); setCaricato({ vista, righe: r.righe, quante, pieno: r.pieno });
     })();
     return () => { vivo = false; };
-  }, [vista, categoria, tema, soloDaLeggere]));
+  }, [vista, categoria, tema, soloDaLeggere, quante]));
+
+  // Arrivati in fondo, la pagina dopo. Solo se l'ultima lettura è di questa
+  // pagina ed era piena: FlatList chiama più volte mentre la lettura è in
+  // corso, e ogni chiamata in più sarebbe una pagina in più.
+  function altre() {
+    if (caricato && caricato.vista === vista && caricato.quante === quante && caricato.pieno) {
+      setPagine({ vista, n: quante / PAGINA + 1 });
+    }
+  }
 
   // Le righe valgono solo per la vista da cui sono state lette. Cambiando
   // categoria, sotto la linguetta nuova restavano per un momento le righe di
@@ -309,6 +332,11 @@ export default function Notizie() {
         ListHeaderComponent={Intestazione}
         ListEmptyComponent={righe ? (
           <Text style={{ opacity: 0.6, paddingVertical: 16, lineHeight: 20 }}>{vuota}</Text>
+        ) : null}
+        onEndReached={altre}
+        onEndReachedThreshold={0.6}
+        ListFooterComponent={righe && caricato?.pieno ? (
+          <Text style={{ fontSize: 12, color: C.testoTenue, paddingVertical: 14 }}>Arrivano i più vecchi…</Text>
         ) : null}
         contentContainerStyle={{ padding: 16, paddingBottom: 32, width: "100%", maxWidth: 820, alignSelf: "center" }}
       />
