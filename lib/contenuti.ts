@@ -61,8 +61,9 @@ export const TEMI: Array<[string, string, string, string]> = [
 
 /**
  * Il nome delle aree (la terza colonna di `TEMI`), come lo leggono le
- * schermate: nei progetti, dove il seguito di un tema superato è il tema dopo
- * nella stessa area, e nelle Notizie, dove sono le categorie. Nell'ordine in
+ * schermate: nei progetti, dove il seguito di un tema superato è un altro
+ * tema della stessa area (il successivo, o il primo rimasto indietro), e
+ * nelle Notizie, dove sono le categorie. Nell'ordine in
  * cui le aree compaiono in `TEMI`, cioè nel piano.
  */
 export const AREE: Array<[string, string]> = [
