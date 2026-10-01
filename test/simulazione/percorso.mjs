@@ -243,6 +243,10 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     pr({ d1: fatto }, ["d1"]), [["d1", "d2", "esercizi", true]]);
   uguale("P8 il successivo salta le unità già di un altro progetto (join e aggregazione, non due volte join)",
     pr({ d1: fatto }, ["d1", "d2"]), [["d1", "d3", "esercizi", true], ["d2", "d2", "esercizi", false]]);
+  uguale("P8 prima: D2 aperto, D1 superato prende D3",
+    pr({ d1: fatto }, ["d2", "d1"]), [["d2", "d2", "esercizi", false], ["d1", "d3", "esercizi", true]]);
+  uguale("P8 superato anche D2, D3 resta a D1: un'unità non cambia progetto da un giorno all'altro",
+    pr({ d1: fatto, d2: fatto }, ["d2", "d1"]), [["d2", "d2", null, false], ["d1", "d3", "esercizi", true]]);
   uguale("P8 dopo l'ultimo dell'area si torna al primo rimasto indietro",
     pr({ d3: fatto }, ["d3"]), [["d3", "d1", "esercizi", true]]);
   uguale("P8 area tutta superata: il progetto resta, senza passo",

@@ -253,7 +253,10 @@ export type Progetto = {
  * Due progetti non finiscono mai sulla stessa unità. Prima si assegnano le
  * unità scelte che hanno ancora qualcosa da fare, poi i seguiti: chi segue SQL
  * — fondamenti e SQL — join, finite le fondamenta, si trova join e aggregazione,
- * non due volte join.
+ * non due volte join. I seguiti si assegnano nell'ordine del piano dei temi
+ * scelti, non in quello in cui si sono scelti: così un'unità resta al
+ * progetto che l'aveva quando un altro tema scelto viene superato, e il suo
+ * riquadro non passa da un progetto all'altro da un giorno all'altro.
  *
  * Un tema che su questo dispositivo non è un'unità (sql_window senza window
  * functions, un tema senza materiale) si salta: la scelta resta, e vale dove
@@ -270,7 +273,7 @@ export function progetti(unita: Unita[], seguiti: string[]): Progetto[] {
   for (const { s, i } of scelti) {
     if (libera(unita[i])) { assegnate.set(s, unita[i]); presi.add(unita[i].tema.slug); }
   }
-  for (const { s, i } of scelti) {
+  for (const { s, i } of [...scelti].sort((a, b) => a.i - b.i)) {
     if (assegnate.has(s)) continue;
     const area = unita[i].tema.pista;
     const nellArea = (u: Unita) => Boolean(area) && u.tema.pista === area && libera(u);
