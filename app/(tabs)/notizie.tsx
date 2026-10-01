@@ -9,7 +9,7 @@ import {
 import { descriviByte } from "../../lib/nuvola/media";
 import { leggiPercorso } from "../../lib/avanzamento";
 import { leggiSeguiti } from "../../lib/progetti";
-import { progetti, prossimoPasso } from "../../lib/percorso";
+import { daFare } from "../../lib/percorso";
 import { nomeArea } from "../../lib/contenuti";
 import { Text } from "../../components/Base";
 import { C } from "../../lib/tema";
@@ -92,9 +92,7 @@ export default function Notizie() {
       // Il percorso serve a «Per te» prima della sua query; le altre viste
       // partono subito, insieme ai conteggi.
       const aree = Promise.all([leggiPercorso(), leggiSeguiti()]).then(([unita, seguiti]) => {
-        const attivi = progetti(unita, seguiti).filter((p) => p.passo).map((p) => p.unita.tema.slug);
-        const piano = prossimoPasso(unita)?.unita.tema.slug;
-        return areePerTe(attivi.length ? attivi : piano ? [piano] : []);
+        return areePerTe(daFare(unita, seguiti).map((v) => v.unita.tema.slug));
       });
       // `pieno`: la query ha dato tutte quelle chieste, quindi ce ne possono
       // essere altre.

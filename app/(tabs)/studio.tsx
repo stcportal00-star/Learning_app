@@ -4,7 +4,7 @@ import { Link, router, useFocusEffect } from "expo-router";
 import { database } from "../../lib/db";
 import { supportaWindowFunctions } from "../../lib/palestra";
 import { leggiPercorso } from "../../lib/avanzamento";
-import { Unita, progetti, prossimoPasso } from "../../lib/percorso";
+import { Unita, daFare } from "../../lib/percorso";
 import { leggiSeguiti } from "../../lib/progetti";
 import ProssimoPasso from "../../components/ProssimoPasso";
 import { Text } from "../../components/Base";
@@ -62,8 +62,7 @@ export default function Studio() {
   }, []));
 
   // «Adesso» sono le unità dei progetti; senza progetti, quella del piano.
-  const attivi = progetti(unita, seguiti).filter((p) => p.passo).map((p) => p.unita.tema.slug);
-  const correnti = new Set(attivi.length ? attivi : [prossimoPasso(unita)?.unita.tema.slug ?? ""]);
+  const correnti = new Set(daFare(unita, seguiti).map((v) => v.unita.tema.slug));
 
   const Voce = ({ href, titolo, nota, n }: { href: string; titolo: string; nota: string; n: number }) => (
     <Link href={href as never} asChild>

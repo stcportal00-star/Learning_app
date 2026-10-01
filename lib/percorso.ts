@@ -291,6 +291,23 @@ export function progetti(unita: Unita[], seguiti: string[]): Progetto[] {
   });
 }
 
+/** Una cosa da fare adesso: il passo di un progetto, o quello del piano (`progetto` null). */
+export type DaFare = { unita: Unita; passo: Passo; progetto: Progetto | null };
+
+/**
+ * Che cosa fare adesso: i passi dei progetti, e se nessun progetto ne ha uno
+ * (nessun tema seguito, o le loro aree tutte finite) il prossimo passo del
+ * piano. Una regola sola per Oggi, Studio e le Notizie: copiata in tre
+ * schermate, una avrebbe potuto smettere di tornare al piano, e Oggi avrebbe
+ * detto «tutte le unità sono superate» con decine ancora da fare.
+ */
+export function daFare(unita: Unita[], seguiti: string[]): DaFare[] {
+  const conPasso = progetti(unita, seguiti).filter((p) => p.passo);
+  if (conPasso.length) return conPasso.map((p) => ({ unita: p.unita, passo: p.passo!, progetto: p }));
+  const piano = prossimoPasso(unita);
+  return piano ? [{ unita: piano.unita, passo: piano.passo, progetto: null }] : [];
+}
+
 /** Il titolo e la riga di spiegazione di un passo, come li mostra lo schermo. */
 export function descriviPasso(p: Passo): { titolo: string; dettaglio: string } {
   switch (p.tipo) {

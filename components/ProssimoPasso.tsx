@@ -4,9 +4,8 @@ import { router, useFocusEffect } from "expo-router";
 import { leggiPercorso, leggiVolumi, volumeDaAprire } from "../lib/avanzamento";
 import { leggiSeguiti } from "../lib/progetti";
 import { TEMI, nomeArea } from "../lib/contenuti";
-// Rinominata: il componente si chiama come la funzione.
 import {
-  Passo, Unita, descriviPasso, destinazione, progetti, prossimoPasso as prossimoPassoDi, unitaConVerifiche,
+  Passo, Unita, daFare, descriviPasso, destinazione, progetti, unitaConVerifiche,
 } from "../lib/percorso";
 import { Text } from "./Base";
 import { C } from "../lib/tema";
@@ -55,16 +54,10 @@ export default function ProssimoPasso() {
     (async () => {
       const [unita, seguiti] = await Promise.all([leggiPercorso(), leggiSeguiti()]);
       const tutti = progetti(unita, seguiti);
-      const scelte: Array<Omit<Voce, "volume">> = [];
-      for (const p of tutti) {
-        if (p.passo) scelte.push({ unita: p.unita, passo: p.passo, dopo: p.subentrata ? p.seguito : null });
-      }
-      if (!scelte.length) {
-        const piano = prossimoPassoDi(unita);
-        if (piano) scelte.push({ unita: piano.unita, passo: piano.passo, dopo: null });
-      }
-      const voci = await Promise.all(scelte.map(async (v) => ({
-        ...v,
+      const voci = await Promise.all(daFare(unita, seguiti).map(async (v) => ({
+        unita: v.unita,
+        passo: v.passo,
+        dopo: v.progetto?.subentrata ? v.progetto.seguito : null,
         volume: v.passo.tipo === "leggi" ? volumeDaAprire(await leggiVolumi(v.unita.tema.slug)) : null,
       })));
       if (vivo) {

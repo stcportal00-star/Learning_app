@@ -261,6 +261,16 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     pr({ orfano: fatto }, ["orfano"]), [["orfano", "orfano", null, false]]);
   uguale("P8 temi di sola lettura, sconosciuti o ripetuti non fanno progetti",
     pr({}, ["lett", "zzz", "i", "i"]), [["i", "i", "esercizi", false]]);
+  const fare = (mat, seguiti) => P.daFare(P.costruisciPercorso(temi, { ...base, ...mat }, ordine), seguiti)
+    .map((x) => [x.unita.tema.slug, x.progetto ? x.progetto.seguito : "piano"]);
+  uguale("P8 daFare: i passi dei progetti", fare({}, ["h", "i"]), [["h", "h"], ["i", "i"]]);
+  uguale("P8 daFare: senza temi seguiti, il prossimo passo del piano", fare({}, []), [["d1", "piano"]]);
+  uguale("P8 daFare: con l'area del solo progetto finita, torna il piano (non «tutte superate»)",
+    fare({ h: fatto }, ["h"]), [["d1", "piano"]]);
+  uguale("P8 daFare: con un progetto finito e uno aperto, solo quello aperto",
+    fare({ h: fatto }, ["h", "i"]), [["i", "i"]]);
+  uguale("P8 daFare: tutto superato, niente da fare",
+    fare(Object.fromEntries(ordine.map((s) => [s, s === "lett" ? base.lett : fatto])), ["h"]), []);
   uguale("P8 senza progetti il piano resta quello di prima",
     P.prossimoPasso(P.costruisciPercorso(temi, base, ordine)).unita.tema.slug, "d1");
 }
@@ -542,10 +552,11 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     !/Unità \{u\.posizione\}/.test(sorgente("app/unita.tsx")));
   // I progetti vivono in tre schermate che il banco non disegna.
   const pp = sorgente("components/ProssimoPasso.tsx");
-  ok("S14 Oggi e Studio mostrano un riquadro per progetto, e il piano quando non ce n'è",
-    pp.includes("const tutti = progetti(unita, seguiti);") && pp.includes("const piano = prossimoPassoDi(unita);"));
-  ok("S14 Studio evidenzia le unità dei progetti, non solo quella del piano",
-    sorgente("app/(tabs)/studio.tsx").includes("const attivi = progetti(unita, seguiti).filter((p) => p.passo)"));
+  ok("S14 Oggi, Studio e le Notizie decidono che cosa fare con la stessa regola, daFare()",
+    pp.includes("daFare(unita, seguiti).map(") &&
+    sorgente("app/(tabs)/studio.tsx").includes("const correnti = new Set(daFare(unita, seguiti).map((v) => v.unita.tema.slug));") &&
+    sorgente("app/(tabs)/notizie.tsx").includes("return areePerTe(daFare(unita, seguiti).map((v) => v.unita.tema.slug));") &&
+    ![pp, sorgente("app/(tabs)/studio.tsx"), sorgente("app/(tabs)/notizie.tsx")].some((t) => /prossimoPasso(Di)?\(unita\)/.test(t)));
   const un = sorgente("app/unita.tsx");
   // Notizie è la quinta scheda, Profilo si apre da Oggi.
   const schede = sorgente("app/(tabs)/_layout.tsx");
