@@ -122,18 +122,64 @@ async function ripulisci() {
  * nota estranea sul telefono.
  */
 async function lapide(id) {
+  const nome = "la nota di prova se ne va con un evento «elimina» nel registro remoto";
   try {
     await Db.registra("note", id, "elimina", {}, async (d) => {
       await d.runAsync("DELETE FROM note WHERE id = ?", [id]);
     });
-    const su = await Sincronia.sincronizzaNuvola({ scaricaVolumi: false });
-    const remoti = await nuvola.seleziona("eventi",
-      `select=tipo&entita_id=eq.${encodeURIComponent(id)}`);
-    ok("la nota di prova se ne va con un evento «elimina» nel registro remoto",
-       su.riuscito && remoti.some((r) => r.tipo === "elimina"),
-       `${su.motivo} · ${JSON.stringify(remoti)}`);
   } catch (e) {
-    ok("la nota di prova se ne va con un evento «elimina» nel registro remoto", false, String(e));
+    ok(nome, false, String(e));
+    return;
+  }
+  // Più tentativi, distanziati: finita la prova la cartella temporanea
+  // sparisce, e con lei l'unica copia dell'«elimina» non ancora salita.
+  let guasto = "";
+  for (const attesa of [0, 2000, 4000, 8000]) {
+    if (attesa) await new Promise((r) => setTimeout(r, attesa));
+    try {
+      const su = await Sincronia.sincronizzaNuvola({ scaricaVolumi: false });
+      const remoti = await nuvola.seleziona("eventi",
+        `select=tipo&entita_id=eq.${encodeURIComponent(id)}`);
+      if (su.riuscito && remoti.some((r) => r.tipo === "elimina")) {
+        ok(nome, true);
+        return;
+      }
+      guasto = `${su.motivo} · ${JSON.stringify(remoti)}`;
+    } catch (e) {
+      guasto = String(e);
+    }
+  }
+  ok(nome, false, guasto);
+}
+
+/**
+ * Le note di prova rimaste senza «elimina» da corse passate (una corsa
+ * annullata, la rete caduta proprio alla lapide) si annullano qui, con
+ * l'«elimina» che sale insieme alla nota di questa corsa. Con DELETE non si
+ * poteva: il «crea» restava, e nessuna corsa dopo lo guardava. Solo quelle
+ * più vecchie di un quarto d'ora: una corsa che gira adesso, in parallelo
+ * (push e pull request ne avviano due), la propria lapide la manda da sé.
+ */
+async function riparaOrfane() {
+  try {
+    const righe = await nuvola.seleziona("eventi",
+      "select=entita_id,tipo,creato_a&entita=eq.note&entita_id=like.prova-rete-*" +
+      "&order=creato_a.desc&limit=400");
+    const annullate = new Set(righe.filter((r) => r.tipo === "elimina").map((r) => r.entita_id));
+    const prima = Date.now() - 15 * 60_000;
+    const orfane = [...new Set(righe
+      .filter((r) => r.tipo === "crea" && !annullate.has(r.entita_id) &&
+                     Sincronia.istanteDelServer(r.creato_a) < prima)
+      .map((r) => r.entita_id))];
+    for (const id of orfane) {
+      await Db.registra("note", id, "elimina", {}, async (d) => {
+        await d.runAsync("DELETE FROM note WHERE id = ?", [id]);
+      });
+    }
+    if (orfane.length) console.log(`Note di prova orfane annullate: ${orfane.join(", ")}\n`);
+  } catch (e) {
+    // Una riparazione mancata non ferma la prova: la ritenta la corsa dopo.
+    console.log(`Riparazione delle note orfane non riuscita: ${String(e)}\n`);
   }
 }
 
@@ -168,6 +214,7 @@ try {
   // nascondono l'unico che conta.
   if (risponde) {
   await Db.apri("provarete");
+  await riparaOrfane();
 
   // ---------------------------------------------------------------- 1. scrivi
   const idNota = `${MARCHIO}-nota`;
