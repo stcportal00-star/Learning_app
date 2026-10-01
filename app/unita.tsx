@@ -155,14 +155,23 @@ export default function Unita() {
   const progettoQui = tuttiProgetti.find((p) => p.passo && p.unita.tema.slug === slug) ?? null;
   const natoQui = seguiti.includes(slug)
     ? tuttiProgetti.find((p) => p.seguito === slug) ?? null : null;
+  // Su un'unità subentrata si dice quale tema scelto la tiene, e «Smetti»
+  // toglie quello. Più temi superati della stessa area possono passarsi
+  // l'unità: tolto il primo, la prende il secondo, e senza il nome il tocco
+  // sembrava non aver fatto niente mentre spariva un altro riquadro.
+  const nomeDi = (s: string) => tutte.find((x) => x.tema.slug === s)?.tema.nome ?? s;
   const Seguito = u.stato === "senza_verifiche" ? null : progettoQui ? (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
       <Text style={{ fontSize: 13, color: C.blu, flex: 1, lineHeight: 18 }}>
-        {progettoQui.subentrata ? "Progetto: qui si continua dopo il tema che avevi scelto." : "Lo stai seguendo: è uno dei tuoi progetti."}
+        {progettoQui.subentrata
+          ? `«${nomeDi(progettoQui.seguito)}» è superato: il progetto continua qui.`
+          : "Lo stai seguendo: è uno dei tuoi progetti."}
       </Text>
       <Pressable onPress={() => { void cambiaSeguito(() => smettiDiSeguire(progettoQui.seguito)); }}
         style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, backgroundColor: C.superficieAlta }}>
-        <Text style={{ fontSize: 13, fontWeight: "600" }}>Smetti di seguire</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600" }}>
+          {progettoQui.subentrata ? "Smetti di seguirlo" : "Smetti di seguire"}
+        </Text>
       </Pressable>
     </View>
   ) : natoQui ? (

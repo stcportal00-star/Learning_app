@@ -576,6 +576,8 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     un.includes('if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d);'));
   ok("S14 seguire non rilegge la schermata dal fuoco, e non abbassa la guardia dello scenario",
     un.includes("  }, [slug]));") && !un.includes("versione") && un.includes("setTuttiProgetti(progetti(tutte, seg));"));
+  ok("S14 su un'unità subentrata si nomina il tema scelto che la tiene, e «Smetti» toglie quello",
+    un.includes("`«${nomeDi(progettoQui.seguito)}» è superato: il progetto continua qui.`") && un.includes("Smetti di seguirlo"));
   ok("S14 dall'unità si segue e si smette di seguire",
     un.includes("cambiaSeguito(() => segui(slug))") && un.includes("cambiaSeguito(() => smettiDiSeguire(progettoQui.seguito))"));
 }
