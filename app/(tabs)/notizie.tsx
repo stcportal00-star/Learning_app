@@ -22,6 +22,8 @@ const CATEGORIE = categorie();
  * a pagine, le altre arrivano scorrendo.
  */
 const PAGINA = 100;
+/** La colonna del giornale: oltre 820 dp le righe diventano troppo lunghe da leggere. */
+const COLONNA = { width: "100%", maxWidth: 820, alignSelf: "center" } as const;
 const GIORNI = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
 const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
   "settembre", "ottobre", "novembre", "dicembre"];
@@ -291,37 +293,42 @@ export default function Notizie() {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 14, gap: 2 }}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <Text style={{ fontSize: 22, fontWeight: "600" }}>Notizie</Text>
-          <Pillola testo={soloDaLeggere ? "Da leggere" : "Tutti"} attiva={soloDaLeggere}
-            premuto={() => setSoloDaLeggere((v) => !v)} />
+      {/* Intestazione e barra nella stessa colonna della lista: su un tablet
+          largo la lista sta al centro a 820 dp, e il titolo e «Da leggere»
+          a filo dei bordi non si allineavano con quello che comandano. */}
+      <View style={COLONNA}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 14, gap: 2 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <Text style={{ fontSize: 22, fontWeight: "600" }}>Notizie</Text>
+            <Pillola testo={soloDaLeggere ? "Da leggere" : "Tutti"} attiva={soloDaLeggere}
+              premuto={() => setSoloDaLeggere((v) => !v)} />
+          </View>
+          <Text style={{ fontSize: 12, color: C.testoTenue }}>
+            {GIORNI[adesso.getDay()]} {adesso.getDate()} {MESI[adesso.getMonth()]}
+            {nuovi ? ` · ${nuovi} da leggere` : ""} · il testo è già sul telefono
+          </Text>
         </View>
-        <Text style={{ fontSize: 12, color: C.testoTenue }}>
-          {GIORNI[adesso.getDay()]} {adesso.getDate()} {MESI[adesso.getMonth()]}
-          {nuovi ? ` · ${nuovi} da leggere` : ""} · il testo è già sul telefono
-        </Text>
-      </View>
 
-      <ScrollView ref={barra} horizontal showsHorizontalScrollIndicator={false}
-        style={{ flexGrow: 0, borderBottomWidth: 1, borderColor: C.bordo, marginTop: 8 }}
-        contentContainerStyle={{ paddingHorizontal: 10 }}>
-        {CATEGORIE.map((c) => {
-          const attiva = c.chiave === categoria;
-          const n = numeroDi(c);
-          return (
-            <Pressable key={c.chiave} onPress={() => scegli(c.chiave)}
-              onLayout={(e) => posizioni.current.set(c.chiave, e.nativeEvent.layout.x)}
-              style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 8,
-                       borderBottomWidth: 2, borderColor: attiva ? C.blu : "transparent" }}>
-              <Text style={{ fontSize: 14, fontWeight: attiva ? "600" : "400",
-                             color: attiva ? C.testo : C.testoSecondario }}>
-                {c.nome}{n ? <Text style={{ fontSize: 11, color: C.testoTenue }}> {n}</Text> : null}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+        <ScrollView ref={barra} horizontal showsHorizontalScrollIndicator={false}
+          style={{ flexGrow: 0, borderBottomWidth: 1, borderColor: C.bordo, marginTop: 8 }}
+          contentContainerStyle={{ paddingHorizontal: 10 }}>
+          {CATEGORIE.map((c) => {
+            const attiva = c.chiave === categoria;
+            const n = numeroDi(c);
+            return (
+              <Pressable key={c.chiave} onPress={() => scegli(c.chiave)}
+                onLayout={(e) => posizioni.current.set(c.chiave, e.nativeEvent.layout.x)}
+                style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 8,
+                         borderBottomWidth: 2, borderColor: attiva ? C.blu : "transparent" }}>
+                <Text style={{ fontSize: 14, fontWeight: attiva ? "600" : "400",
+                               color: attiva ? C.testo : C.testoSecondario }}>
+                  {c.nome}{n ? <Text style={{ fontSize: 11, color: C.testoTenue }}> {n}</Text> : null}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       <FlatList
         ref={lista}
@@ -337,7 +344,7 @@ export default function Notizie() {
         ListFooterComponent={righe && caricato?.pieno ? (
           <Text style={{ fontSize: 12, color: C.testoTenue, paddingVertical: 14 }}>Arrivano i più vecchi…</Text>
         ) : null}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32, width: "100%", maxWidth: 820, alignSelf: "center" }}
+        contentContainerStyle={[COLONNA, { padding: 16, paddingBottom: 32 }]}
       />
     </View>
   );

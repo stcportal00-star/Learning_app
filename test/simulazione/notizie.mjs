@@ -264,6 +264,9 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
     (s.match(/limite: quante/g) || []).length === 4 && !/limite: [0-9]{3}/.test(s));
   ok("S5 le righe dell'esplorazione non ripetono «Esplorazione»",
     s.includes("if (!tema && n.tema_slug !== ESPLORAZIONE) parti.push(nomeTema(n.tema_slug) ?? \"\");"));
+  ok("S6 intestazione, barra e lista stanno nella stessa colonna",
+    s.includes("<View style={COLONNA}>") && s.includes("contentContainerStyle={[COLONNA,") &&
+    s.indexOf("<View style={COLONNA}>") < s.indexOf("<ScrollView ref={barra} horizontal"));
   ok("S1 la barra delle categorie sta fuori dalla lista, ferma",
     s.indexOf("<ScrollView ref={barra} horizontal") > 0 && s.indexOf("<ScrollView ref={barra} horizontal") < s.indexOf("<FlatList\n"));
 }
