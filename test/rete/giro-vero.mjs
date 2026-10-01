@@ -26,6 +26,7 @@
  *   node --import ./test/banco/carica.mjs test/rete/giro-vero.mjs
  */
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -66,8 +67,11 @@ const { importaApp } = await import("../banco/carica.mjs");
 const CARTELLA = process.env.BANCO_SQLITE_CARTELLA;
 
 // Un marchio riconoscibile: se questa prova muore a metà, chi guarda
-// l'archivio deve capire in un colpo d'occhio cosa sono queste righe.
-const MARCHIO = `prova-rete-${process.env.GITHUB_RUN_ID ?? "locale"}-${process.pid}`;
+// l'archivio deve capire in un colpo d'occhio cosa sono queste righe. E
+// unico: le righe di prova ora restano nel registro (strumenti/db/008), e un
+// job rilanciato ha lo stesso GITHUB_RUN_ID e può avere lo stesso pid.
+const MARCHIO = `prova-rete-${process.env.GITHUB_RUN_ID ?? "locale"}-` +
+  `${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID().slice(0, 8)}`;
 
 let passate = 0;
 const guasti = [];
