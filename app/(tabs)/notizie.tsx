@@ -185,8 +185,10 @@ export default function Notizie() {
 
   const Meta = ({ n }: { n: Notizia }) => {
     const parti = [fonteLeggibile(n.fonte), quando(dataDi(n), adesso)];
-    // Il tema si dice quando la lista ne mescola più d'uno.
-    if (!tema) parti.push(nomeTema(n.tema_slug) ?? "");
+    // Il tema si dice quando la lista ne mescola più d'uno. L'esplorazione
+    // no: sta solo nella sua categoria, che lo dice già, e su un telefono la
+    // riga è una sola.
+    if (!tema && n.tema_slug !== ESPLORAZIONE) parti.push(nomeTema(n.tema_slug) ?? "");
     return (
       <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
         <Text style={{ fontSize: 11, color: C.testoTenue, flexShrink: 1 }} numberOfLines={1}>

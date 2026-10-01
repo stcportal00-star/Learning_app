@@ -262,6 +262,8 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   ok("S4 le liste arrivano a pagine, e nessuna ha un tetto fisso",
     s.includes("onEndReached={altre}") && s.includes("const quante = (pagine.vista === vista ? pagine.n : 1) * PAGINA;") &&
     (s.match(/limite: quante/g) || []).length === 4 && !/limite: [0-9]{3}/.test(s));
+  ok("S5 le righe dell'esplorazione non ripetono «Esplorazione»",
+    s.includes("if (!tema && n.tema_slug !== ESPLORAZIONE) parti.push(nomeTema(n.tema_slug) ?? \"\");"));
   ok("S1 la barra delle categorie sta fuori dalla lista, ferma",
     s.indexOf("<ScrollView ref={barra} horizontal") > 0 && s.indexOf("<ScrollView ref={barra} horizontal") < s.indexOf("<FlatList\n"));
 }
