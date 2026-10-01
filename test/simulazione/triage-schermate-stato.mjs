@@ -225,18 +225,19 @@ console.log("\nC. app/codice.tsx — la consegna sui 20 moduli veri");
   for (const m of moduli) {
     // lib/contenuti.ts:106 compone cosi' la colonna consegna.
     const consegnaDb = `${m.titolo}\n\n${m.consegna}\n\n${m.codice_difettoso}`;
-    // app/codice.tsx:51-52, ricopiate qui letteralmente e verificate sotto.
-    const [titoloEconsegna, ...restoCodice] = consegnaDb.split("\n\n");
-    const codiceDifettoso = restoCodice.slice(1).join("\n\n") || restoCodice.join("\n\n");
-    // A schermo va solo titoloEconsegna (riga 89) e codiceDifettoso (riga 92).
-    if (!`${titoloEconsegna}`.includes(m.consegna)) persi++;
+    // app/codice.tsx, ricopiate qui letteralmente e verificate sotto.
+    const [titolo, consegna = "", ...bloccoCodice] = consegnaDb.split("\n\n");
+    const codiceDifettoso = bloccoCodice.join("\n\n");
+    // A schermo vanno titolo, consegna e codiceDifettoso. Era CDC-02: la
+    // consegna si perdeva in 20 moduli su 20.
+    if (!titolo || consegna !== m.consegna) persi++;
     if (codiceDifettoso === m.codice_difettoso) codiceIntegro++;
   }
-  ok("C1 CDC-02 la consegna non arriva a schermo in 20 moduli su 20", persi === 20, `persi=${persi}`);
+  ok("C1 CDC-02 corretto: la consegna arriva a schermo in 20 moduli su 20", persi === 0, `persi=${persi}`);
   ok("C2 CDC-02 il codice arriva invece intero in tutti e 20", codiceIntegro === 20, `integri=${codiceIntegro}`);
   ok("C3 CDC-02 composizione in lib/contenuti.ts come misurata", contiene("lib/contenuti.ts", "`${c.titolo}\\n\\n${c.consegna}\\n\\n${c.codice_difettoso}`"));
-  ok("C4 CDC-02 trasformazione in app/codice.tsx come misurata", contiene("app/codice.tsx", 'const codiceDifettoso = restoCodice.slice(1).join("\\n\\n") || restoCodice.join("\\n\\n");'));
-  ok("C5 CDC-02 a schermo si stampa solo titoloEconsegna", contiene("app/codice.tsx", ">{titoloEconsegna}</Text>"));
+  ok("C4 CDC-02 trasformazione in app/codice.tsx come misurata", contiene("app/codice.tsx", 'const [titolo, consegna = "", ...bloccoCodice] = e.consegna.split("\\n\\n");') && contiene("app/codice.tsx", 'const codiceDifettoso = bloccoCodice.join("\\n\\n");'));
+  ok("C5 CDC-02 a schermo si stampano titolo e consegna", contiene("app/codice.tsx", ">{titolo}</Text>") && contiene("app/codice.tsx", ">{consegna}</Text>"));
 
   // CDC-01: la rubrica illeggibile e' costruita dal banco, non dall'app.
   ok(

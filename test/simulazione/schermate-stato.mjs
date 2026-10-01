@@ -2304,7 +2304,9 @@ esercizePrep.smonta();
 // SEZIONE I — app/codice.tsx: rubrica, fasi, esportazione, verdetto
 // ===========================================================================
 ancora("CDC rubrica nel render", "app/codice.tsx", 'const extra = JSON.parse(e.rubrica || "{}")');
-ancora("CDC taglio della consegna", "app/codice.tsx", 'const codiceDifettoso = restoCodice.slice(1).join("\\n\\n") || restoCodice.join("\\n\\n");');
+ancora("CDC taglio della consegna", "app/codice.tsx", 'const [titolo, consegna = "", ...bloccoCodice] = e.consegna.split("\\n\\n");');
+ancora("CDC codice dal terzo blocco", "app/codice.tsx", 'const codiceDifettoso = bloccoCodice.join("\\n\\n");');
+ancora("CDC consegna a schermo", "app/codice.tsx", ">{consegna}</Text>");
 ancora("CDC soglia dell'ipotesi", "app/codice.tsx", "ipotesi.trim().length < 15");
 ancora("CDC avanzamento libero", "app/codice.tsx", "setI((n) => n + 1);");
 ancora("CDC stato vuoto", "app/codice.tsx", "Nessun modulo in coda.");
@@ -2345,8 +2347,8 @@ function ModelloCodice(p) {
 
   // ATTENZIONE: nel .tsx questa riga sta nel corpo del render, senza try/catch.
   const extra = JSON.parse(e.rubrica || "{}");
-  const [titoloEconsegna, ...restoCodice] = e.consegna.split("\n\n");
-  const codiceDifettoso = restoCodice.slice(1).join("\n\n") || restoCodice.join("\n\n");
+  const [titolo, consegna = "", ...bloccoCodice] = e.consegna.split("\n\n");
+  const codiceDifettoso = bloccoCodice.join("\n\n");
 
   async function esportaPerIlPc() {
     const file = new FS.File(FS.Paths.cache, `${e.id}.py`);
@@ -2386,7 +2388,8 @@ function ModelloCodice(p) {
     indice: i,
     lunghezzaCoda: coda.length,
     intestazione: `${e.id} · livello ${e.livello} ${extra.categoria && fase === "confronto" ? `· ${extra.categoria}` : ""}`,
-    testoInAlto: titoloEconsegna,
+    testoInAlto: titolo,
+    consegna: consegna || null,
     codiceDifettoso,
     fase,
     ipotesi,
@@ -2440,8 +2443,9 @@ ok("I6 il codice difettoso e' nel blocco scuro", codice.schermo.codiceDifettoso.
 
 // --- CDC-02: il taglio della consegna, misurato su TUTTI i moduli veri
 // Il campo `consegna` nel database e' `${titolo}\n\n${consegna}\n\n${codice}`
-// (lib/contenuti.ts riga 106): il secondo blocco e' proprio la consegna, e
-// slice(1) lo butta via. Qui lo si misura su tutti e venti i moduli veri.
+// (lib/contenuti.ts): il secondo blocco e' proprio la consegna. Era
+// «DIFETTO RIPRODOTTO: slice(1) lo butta via»; ora va a schermo sotto il
+// titolo, e qui si sorveglia su tutti e venti i moduli veri.
 const codiceOriginale = new Map(
   JSON.parse(readFileSync(join(RADICE_PROGETTO, "assets/contenuti/esercizi_codice.json"), "utf8")).map((c) => [
     c.id,
@@ -2455,13 +2459,14 @@ let codiciInteri = 0;
 let conRigheVuoteNelCodice = 0;
 for (const m of moduliVeri) {
   const originale = codiceOriginale.get(m.id);
-  const [titolo, ...resto] = m.consegna.split("\n\n");
-  const mostrato = resto.slice(1).join("\n\n") || resto.join("\n\n");
-  if (!appiattisci(`${titolo} ${mostrato}`).includes(appiattisci(originale.consegna))) consegnePerse++;
+  const [, consegna = "", ...bloccoCodice] = m.consegna.split("\n\n");
+  const mostrato = bloccoCodice.join("\n\n");
+  if (appiattisci(consegna) !== appiattisci(originale.consegna)) consegnePerse++;
   if (appiattisci(mostrato) === appiattisci(originale.codice)) codiciInteri++;
-  if (resto.length > 2) conRigheVuoteNelCodice++;
+  if (bloccoCodice.length > 1) conRigheVuoteNelCodice++;
 }
-difetto("CDC-02", "I7 su tutti e 20 i moduli veri il testo della consegna (secondo blocco) non arriva a schermo: resta solo il titolo", consegnePerse === 20, `consegne perse: ${consegnePerse}`);
+corretto("CDC-02", "I7 su tutti e 20 i moduli veri il testo della consegna (secondo blocco) arriva a schermo, sotto il titolo", consegnePerse === 0, `consegne perse: ${consegnePerse}`);
+corretto("CDC-02b", "I7b e il primo modulo della coda la mostra davvero", typeof codice.schermo.consegna === "string" && codice.schermo.consegna.length > 20 && !codice.schermo.codiceDifettoso.includes(codice.schermo.consegna), JSON.stringify(codice.schermo.consegna));
 ok("I8 il codice difettoso arriva comunque intero, anche nel modulo che ha una riga vuota dentro il codice", codiciInteri === 20 && conRigheVuoteNelCodice === 1, `codici interi ${codiciInteri}, con riga vuota ${conRigheVuoteNelCodice}`);
 
 // --- CDC-03: la soglia dei 15 caratteri
