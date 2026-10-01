@@ -416,6 +416,18 @@ class FintoSupabase(BaseHTTPRequestHandler):
                 self._rispondi(400, json.dumps(
                     {"code": "23514", "message": str(e)}).encode())
                 return
+            prefer = self.headers.get("Prefer") or ""
+            # Come il database dopo la migrazione 009: sul registro la chiave
+            # pubblica non ha UPDATE, e un upsert che fonde i doppioni
+            # (ON CONFLICT DO UPDATE) viene rifiutato anche senza doppioni.
+            if tabella == "eventi" and "merge-duplicates" in prefer:
+                self._rispondi(401, json.dumps({
+                    "code": "42501",
+                    "message": "permission denied for table eventi (UPDATE non concesso: "
+                               "gli eventi si mandano con resolution=ignore-duplicates)",
+                }).encode())
+                return
+            ignora = "ignore-duplicates" in prefer
             deposito = RICEVUTO["tabelle"].setdefault(tabella, [])
             try:
                 controlla_unici(tabella, righe, deposito, chiavi)
@@ -429,7 +441,8 @@ class FintoSupabase(BaseHTTPRequestHandler):
                     firma = tuple(r.get(k) for k in chiavi)
                     for i, vecchia in enumerate(deposito):
                         if tuple(vecchia.get(k) for k in chiavi) == firma:
-                            deposito[i] = {**vecchia, **r}
+                            if not ignora:
+                                deposito[i] = {**vecchia, **r}
                             break
                     else:
                         deposito.append(r)
@@ -903,8 +916,11 @@ def principale():
     prova_vero("ogni scrittura dichiara lo schema percorso",
                all(r["testate"].get("content-profile") == "percorso" for r in scritture),
                repr([r["testate"].get("content-profile") for r in scritture]))
-    prova_vero("ogni scrittura chiede la fusione dei duplicati",
-               all("merge-duplicates" in (r["testate"].get("prefer") or "") for r in scritture))
+    prova_vero("articoli e volumi chiedono la fusione dei duplicati, gli eventi di ignorarli",
+               all(("ignore-duplicates" if "/rest/v1/eventi" in r["percorso"] else "merge-duplicates")
+                   in (r["testate"].get("prefer") or "") for r in scritture)
+               and any("/rest/v1/eventi" in r["percorso"] for r in scritture),
+               repr([(r["percorso"], r["testate"].get("prefer")) for r in scritture]))
     prova_vero("ogni scrittura porta la chiave",
                all(r["testate"].get("apikey") for r in scritture))
     letture = [r for r in RICEVUTO["richieste"]

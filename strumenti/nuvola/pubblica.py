@@ -615,7 +615,9 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     # promettono righe che non ci sono.
     nuvola.innesta("articoli", righe_articoli, "utente_id,chiave")
     nuvola.innesta("biblioteca", righe_volumi, "utente_id,codice")
-    nuvola.innesta("eventi", eventi, "id")
+    # Ignorati, non fusi: un evento non cambia mai, e cosi' la chiave pubblica
+    # non ha bisogno di UPDATE sul registro (strumenti/db/009).
+    nuvola.innesta("eventi", eventi, "id", doppioni="ignora")
     rapporto["eventi"] = len(eventi)
 
 

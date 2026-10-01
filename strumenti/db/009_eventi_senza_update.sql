@@ -1,0 +1,18 @@
+-- 009: il registro remoto non si riscrive con la chiave pubblica.
+-- NON ANCORA APPLICATA. Si applica solo quando TELEFONO E TABLET hanno la
+-- build 50 o successiva (Profilo, in alto: «build 50 · ...»).
+--
+-- Perché: la 008 ha tolto DELETE, ma con UPDATE chi legge la chiave
+-- publishable (sta nel sorgente e nell'APK) può ancora svuotare ogni evento:
+-- un PATCH su percorso.eventi con payload {} lascia i due dispositivi come
+-- sono (deduplicano per id e non rileggono), ma un dispositivo nuovo o
+-- reinstallato che si ripristina dalla nuvola riceve eventi senza campi.
+--
+-- Perché non subito: fino alla build 49 l'app manda gli eventi con
+-- resolution=merge-duplicates, cioè ON CONFLICT DO UPDATE, che senza il
+-- permesso di UPDATE viene rifiutato anche quando non c'è nessun doppione.
+-- Con la 49 ancora installata, gli eventi di quel dispositivo non
+-- salirebbero più. Dalla build 50 app e conduttura usano
+-- resolution=ignore-duplicates (un evento non cambia mai: l'id è
+-- hlc:entita_id), e basta INSERT.
+revoke update on percorso.eventi from anon, authenticated;

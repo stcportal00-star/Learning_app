@@ -279,7 +279,7 @@ export async function sincronizzaNuvola(
         // lettura successiva vedrebbe un campo solo al posto dei suoi campi.
         payload: analizza(e.payload),
       }));
-      await n.innesta("eventi", righe as unknown as Array<Record<string, unknown>>, "id");
+      await n.innesta("eventi", righe as unknown as Array<Record<string, unknown>>, "id", "ignora");
       await segnaSincronizzati(daMandare.map((e) => e.id));
       esito.inviati += daMandare.length;
       if (daMandare.length < PAGINA) break;

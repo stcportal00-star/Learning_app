@@ -92,10 +92,15 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
      rileggere.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
-     schema `percorso`, legate a un identificativo utente fisso. Chi ha la
-     chiave può scrivere e leggere il registro, ma non cancellarlo: DELETE
-     su `percorso.eventi` non è concesso (`strumenti/db/008`). Un evento si
-     annulla con un evento «elimina», anche nelle prove.
+     schema `percorso`, legate a un identificativo utente fisso. Su
+     `percorso.eventi` DELETE non è concesso (`strumenti/db/008`): un
+     evento si annulla con un evento «elimina», anche nelle prove. UPDATE
+     invece sì, ancora: fino alla build 49 l'app manda gli eventi con
+     merge-duplicates, che senza UPDATE viene rifiutato. Dalla build 50 app
+     e conduttura usano ignore-duplicates (un evento non cambia mai), e
+     quando telefono e tablet hanno la 50 si applica `strumenti/db/009`.
+     Fino ad allora chi ha la chiave può riscrivere il contenuto degli
+     eventi; con INSERT potrà sempre aggiungerne di falsi.
 
 ## La conduttura quotidiana
 

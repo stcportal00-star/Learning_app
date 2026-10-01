@@ -243,7 +243,7 @@ class Nuvola:
     def _testate_lettura(self):
         return self._testate({"Accept-Profile": SCHEMA, "Accept": "application/json"})
 
-    def _testate_scrittura(self, su_conflitto=None):
+    def _testate_scrittura(self, su_conflitto=None, doppioni="unisci"):
         testate = self._testate({
             "Content-Profile": SCHEMA,
             "Content-Type": "application/json",
@@ -253,7 +253,10 @@ class Nuvola:
             # return=representation serve a chi chiama per rileggere gli id
             # assegnati dal server; merge-duplicates e' cio' che rende l'upsert
             # un upsert invece di un inserimento che fallisce sul duplicato.
-            testate["Prefer"] = "return=representation,resolution=merge-duplicates"
+            # Gli eventi invece non cambiano mai (l'id e' hlc:entita_id): un
+            # reinvio si ignora, e cosi' basta INSERT, senza UPDATE.
+            risoluzione = "ignore" if doppioni == "ignora" else "merge"
+            testate["Prefer"] = f"return=representation,resolution={risoluzione}-duplicates"
         return testate
 
     def _testate_deposito(self, tipo=None, upsert=False):
@@ -405,8 +408,13 @@ class Nuvola:
         _, risposta = self._esegui("POST", url, corpo, self._testate_scrittura())
         return _da_json(risposta, f"chiamata a {funzione}") if risposta else None
 
-    def innesta(self, tabella, righe, su_conflitto):
+    def innesta(self, tabella, righe, su_conflitto, doppioni="unisci"):
         """Upsert. `su_conflitto` sono le colonne del vincolo, es. "utente_id,url".
+
+        `doppioni="ignora"` per le righe che non cambiano mai, cioe' gli
+        eventi: un reinvio non fa niente, e al server basta il permesso di
+        INSERT. Con "unisci" (merge-duplicates) serve anche UPDATE, e UPDATE
+        sul registro vuol dire poterlo svuotare con la chiave pubblica.
 
         Restituisce le righe come le ha scritte il server. Non modifica i
         dizionari ricevuti: chi chiama spesso li riusa per il proprio registro
@@ -431,7 +439,7 @@ class Nuvola:
 
         url = (f"{self._url_tabella(tabella)}?on_conflict="
                f"{urllib.parse.quote(su_conflitto, safe=',')}")
-        testate = self._testate_scrittura(su_conflitto)
+        testate = self._testate_scrittura(su_conflitto, doppioni)
         scritte = []
         for gruppo in _gruppi_per_chiavi(preparate):
             for blocco in _blocchi(gruppo):
@@ -577,6 +585,9 @@ if __name__ == "__main__":
     verifica("l'upsert chiede merge-duplicates e la rappresentazione",
              n._testate_scrittura("utente_id,url").get("Prefer") ==
              "return=representation,resolution=merge-duplicates")
+    verifica("gli eventi chiedono di ignorare i doppioni, non di fonderli",
+             n._testate_scrittura("id", "ignora").get("Prefer") ==
+             "return=representation,resolution=ignore-duplicates")
     verifica("senza su_conflitto non si manda Prefer",
              "Prefer" not in n._testate_scrittura())
     verifica("apikey e Authorization portano la stessa chiave",
