@@ -190,9 +190,9 @@ export function istanteHttp(s: string | null): number {
  * dopo, e la sua transazione è cominciata al più un margine prima: sta dopo la
  * soglia. Con l'ultimo arrivo al posto dell'ora, a riposo ogni scambio
  * riscaricava l'ultimo lotto della conduttura, un megabyte e mezzo di testo,
- * finché qualcuno non scriveva qualcosa di nuovo. L'ora del server si ignora
- * se è prima dell'ultimo arrivo letto: i due orologi non sono d'accordo, e
- * l'ultimo arrivo è quello che viene da Postgres.
+ * finché qualcuno non scriveva qualcosa di nuovo. Senza ora del server
+ * (`oraDelServer` NaN: vedi oraAffidabile) si parte dall'ultimo arrivo meno
+ * il margine.
  *
  * A metà lettura (una pagina piena, o le pagine dello scambio finite) si
  * riparte dall'ultimo arrivo letto SENZA margine, se è più di un margine
@@ -204,8 +204,28 @@ export function istanteHttp(s: string | null): number {
  * l'ultimo arrivo è più recente, si riparte dall'ora meno il margine: col
  * passare del tempo la finestra si svuota, e la lettura riprende.
  */
+/**
+ * L'ora della prima pagina, o NaN se non ci si può fidare: manca, o è prima
+ * dell'ultimo arrivo che quella stessa pagina ha letto (più il secondo che
+ * l'intestazione Date tronca), cioè i due orologi non sono d'accordo.
+ *
+ * Si decide sulla PRIMA pagina e basta. Confrontata con l'ultimo arrivo di
+ * una pagina dopo, scartava l'ora proprio quando la lettura è lunga e nel
+ * frattempo arriva qualcosa: è normale, non un disaccordo. E la soglia
+ * ripiegava sull'ultimo arrivo meno il margine, che può stare dopo un evento
+ * entrato dietro la prima pagina con una transazione lenta: quell'evento non
+ * si leggeva più.
+ *
+ * Un orologio HTTP AVANTI rispetto a Postgres non si vede da qui: si conta
+ * che i due stiano entro pochi secondi, come due server sincronizzati.
+ */
+export function oraAffidabile(oraHttp: string | null, ultimoArrivoPrimaPagina: number): number {
+  const ora = istanteHttp(oraHttp);
+  return ultimoArrivoPrimaPagina > ora + 1000 ? NaN : ora;
+}
+
 export function prossimaSoglia(fine: boolean, ultimoArrivo: number, oraDelServer: number): string {
-  const daOra = oraDelServer >= ultimoArrivo || Number.isNaN(ultimoArrivo) ? oraDelServer - MARGINE_MS : NaN;
+  const daOra = oraDelServer - MARGINE_MS;
   const ms = Number.isNaN(daOra)
     ? ultimoArrivo - MARGINE_MS
     : fine
@@ -281,9 +301,9 @@ export async function sincronizzaNuvola(
         (soglia ? `&creato_a=gte.${encodeURIComponent(soglia)}` : "") +
         `&order=creato_a.asc,id.asc&limit=${PAGINA_LETTURA}&offset=${giro * PAGINA_LETTURA}`;
       const { righe: remoti, ora } = await n.selezionaConOra<RigaRicevuta>("eventi", query);
-      if (giro === 0) oraDelServer = istanteHttp(ora);
       const fine = remoti.length < PAGINA_LETTURA;
       if (remoti.length) ultimoArrivo = istanteDelServer(remoti[remoti.length - 1].creato_a);
+      if (giro === 0) oraDelServer = oraAffidabile(ora, ultimoArrivo);
       const prossima = prossimaSoglia(fine, ultimoArrivo, oraDelServer);
       if (!remoti.length) {
         // Niente di nuovo, ma il tempo è passato: la soglia avanza lo stesso.

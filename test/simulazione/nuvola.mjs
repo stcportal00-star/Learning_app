@@ -305,7 +305,7 @@ function nuovoServitore() {
   }
 
   function risposta(stato, corpo) {
-    const data = new Date(adesso()).toUTCString();
+    const data = new Date(adesso() + servitore.scartoData).toUTCString();
     return {
       ok: stato >= 200 && stato < 300,
       status: stato,
@@ -341,6 +341,10 @@ function nuovoServitore() {
     },
     /** true: le risposte non portano l'intestazione Date. */
     senzaData: false,
+    /** Di quanto l'orologio HTTP e' avanti (o indietro) rispetto a Postgres. */
+    scartoData: 0,
+    /** Chiamata a ogni richiesta, prima della risposta. */
+    allaRichiesta: null,
     righe(nomeTabella) {
       return [...tabella(nomeTabella).values()];
     },
@@ -372,6 +376,9 @@ function nuovoServitore() {
         corpo: opzioni.body,
       };
       richieste.push(richiesta);
+      // Cio' che succede sul server mentre lo scambio e' a meta': altri che
+      // caricano, il tempo che passa fra una pagina e l'altra.
+      servitore.allaRichiesta?.(richiesta);
 
       for (const regola of regole) {
         if (regola.usate >= regola.volte) continue;
@@ -1408,7 +1415,7 @@ await scenario("B14 l'ora del server si legge in tutte le forme in cui Postgres 
   // Postgres toglie gli zeri in coda ai decimali e, senza decimali, il punto:
   // le tre forme escono dallo stesso server. Una che non si legge vale NaN, e
   // la soglia resta quella di prima o si rilegge tutto: costa, ma non perde.
-  const { istanteDelServer, istanteHttp, prossimaSoglia, MARGINE_MS } = tab.Sincronia;
+  const { istanteDelServer, istanteHttp, prossimaSoglia, oraAffidabile, MARGINE_MS } = tab.Sincronia;
   const iso = (ms) => (Number.isNaN(ms) ? "NaN" : new Date(ms).toISOString());
   uguali("microsecondi, millisecondi, decimi, niente, Z, altri fusi, lo spazio",
     ["2026-10-01T03:14:44.548609+00:00", "2026-10-01T03:14:44.548+00:00", "2026-10-01T03:14:44.5+00:00",
@@ -1432,9 +1439,12 @@ await scenario("B14 l'ora del server si legge in tutte le forme in cui Postgres 
     [iso(ora - MARGINE_MS), iso(ultimo)]);
   uguali("a meta', con l'ultimo arrivo dentro il margine, dall'ora meno il margine",
     prossimaSoglia(false, ora - 60_000, ora), iso(ora - MARGINE_MS));
-  uguali("senza ora del server, o con un'ora prima dell'ultimo arrivo, conta l'ultimo arrivo",
-    [prossimaSoglia(true, ultimo, NaN), prossimaSoglia(true, ultimo, ultimo - 1000)],
-    [iso(ultimo - MARGINE_MS), iso(ultimo - MARGINE_MS)]);
+  uguali("senza ora del server conta l'ultimo arrivo",
+    prossimaSoglia(true, ultimo, NaN), iso(ultimo - MARGINE_MS));
+  const http = "Thu, 01 Oct 2026 03:00:00 GMT";
+  uguali("l'ora della prima pagina vale se non e' prima del suo ultimo arrivo, secondo troncato compreso",
+    [oraAffidabile(http, NaN), oraAffidabile(http, ultimo + 999), oraAffidabile(http, ultimo + 1001), oraAffidabile(null, NaN)].map(iso),
+    [iso(ultimo), iso(ultimo), "NaN", "NaN"]);
   uguali("niente letto e niente ora: nessuna soglia nuova; niente letto ma l'ora c'e': l'ora",
     [prossimaSoglia(true, NaN, NaN), prossimaSoglia(true, NaN, ora)], ["", iso(ora - MARGINE_MS)]);
 });
@@ -1457,6 +1467,16 @@ await scenario("B15 senza l'intestazione Date si riparte dall'ultimo arrivo, com
   ok("anche un'ora dopo: senza ora del server non avanza da sola",
      (await leggiMeta(tab, "nuvola_creato")) === new Date(Date.parse(s.righe("eventi")[0].creato_a) - 10 * 60_000).toISOString(),
      String(await leggiMeta(tab, "nuvola_creato")));
+
+  // E con un orologio HTTP indietro di un'ora rispetto a Postgres: la prima
+  // pagina porta un arrivo piu' recente dell'ora che dichiara, e l'ora non vale.
+  const indietro = servitoreNuovo();
+  indietro.scartoData = -60 * 60_000;
+  await fissaSegnaposto(tab, "");
+  indietro.semina("eventi", [notaRemota("b15-due", hlcRemoto(81_000, "telefono"), "telefono")]);
+  await sincronizza(tab, indietro);
+  ok("con due orologi in disaccordo si riparte dall'ultimo arrivo meno il margine",
+     (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(indietro), String(await leggiMeta(tab, "nuvola_creato")));
   servitoreInUso = servitore;
 });
 
@@ -1484,6 +1504,42 @@ await scenario("B16 piu' eventi di quanti ne legge uno scambio, arrivati in poch
   for (let giro = 0; giro < 3; giro++) arrivati += (await sincronizza(tab, s)).nuovi;
   uguali("passati dieci minuti, arriva il resto", arrivati, 100);
   ok("e ci sono tutti e 3100", (await noteArrivate("b16-")) === 3100, String(await noteArrivate("b16-")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B17 uno scambio lungo, con un caricamento lento dietro la prima pagina e uno nuovo in fondo, li legge tutti e due", async () => {
+  // L'intreccio trovato dalla seconda revisione. La prima pagina e' piena; prima
+  // della seconda diventa visibile un caricamento cominciato nove minuti
+  // prima (finisce DIETRO la prima pagina), e mentre la seconda pagina arriva
+  // a fatica, settanta secondi, ne arriva uno nuovo. Confrontando l'ora della
+  // prima pagina con l'ultimo arrivo della seconda, l'ora si scartava, la
+  // soglia ripiegava sull'ultimo arrivo meno il margine, e quello stava dopo
+  // il caricamento lento: non si leggeva piu'.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+  s.semina("eventi", Array.from({ length: 100 }, (_, i) =>
+    notaRemota(`b17-a-${String(i).padStart(3, "0")}`, hlcRemoto(2_000_000 + i, "rassegna"), "rassegna")));
+  s.avanza(5 * 60_000);
+  const primaPagina = s.ora();
+  s.allaRichiesta = (r) => {
+    if (r.metodo !== "GET" || r.parametri.get("offset") !== "100") return;
+    s.allaRichiesta = null;
+    s.iniziaCaricamentoAlle(spostato(primaPagina, -9 * 60_000));
+    s.semina("eventi", [notaRemota("b17-lento", hlcRemoto(2_100_000, "telefono"), "telefono")]);
+    s.avanza(70_000);
+    s.semina("eventi", Array.from({ length: 50 }, (_, i) =>
+      notaRemota(`b17-d-${String(i).padStart(3, "0")}`, hlcRemoto(2_200_000 + i, "rassegna"), "rassegna")));
+  };
+  let esito = await sincronizza(tab, s);
+  ok("il primo scambio arriva in fondo", esito.riuscito && esito.nuovi === 150, JSON.stringify(esito.nuovi));
+  ok("senza il caricamento lento, che e' finito dietro la prima pagina", (await noteArrivate("b17-lento")) === 0);
+  ok("e la soglia parte dall'ora della prima pagina meno il margine",
+     (await leggiMeta(tab, "nuvola_creato")) === new Date(Date.parse(primaPagina) - 10 * 60_000).toISOString(),
+     String(await leggiMeta(tab, "nuvola_creato")));
+  esito = await sincronizza(tab, s);
+  uguali("lo scambio dopo lo prende", [esito.riuscito, esito.nuovi], [true, 1]);
+  ok("e ci sono tutti", (await noteArrivate("b17-")) === 151, String(await noteArrivate("b17-")));
   servitoreInUso = servitore;
 });
 
