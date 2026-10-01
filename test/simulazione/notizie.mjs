@@ -117,6 +117,8 @@ uguale("N5 la fonte come la scrive un giornale",
 uguale("N5 un «+» nel nome del feed non lo spezza",
   ["rss[Data + Society]", "rss[Notepad++ Weekly]", "rss[Data + Society]+openalex", "openalex+rss[Data + Society]"].map(N.fonteLeggibile),
   ["Data + Society", "Notepad++ Weekly", "Data + Society", "OpenAlex"]);
+uguale("N5 né le parentesi quadre nel nome",
+  ["rss[Data Skeptic [Audio]]", "rss[A [x]]+openalex"].map(N.fonteLeggibile), ["Data Skeptic [Audio]", "A [x]"]);
 
 // ============================================================ RIGHE
 const notizia = (id, extra = {}) => ({
