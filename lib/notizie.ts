@@ -241,9 +241,16 @@ const COLONNE = `id, titolo, autori, fonte, abstract, tema_slug, pubblicato_a, r
 /**
  * La stessa data di dataDi(), in SQL. Per data d'uscita e non d'arrivo: la
  * conduttura dà a tutti gli articoli di una corsa lo stesso raccolto_a.
+ *
+ * A parità di data, l'ordine della conduttura: le date d'uscita sono quasi
+ * tutte nude, e in un giorno ne cadono decine. pubblica.py scrive gli eventi
+ * in ordine di rilevanza, e l'HLC di ciascuno cresce: per `hlc` crescente la
+ * notizia principale di un'area è la più rilevante, non la prima in ordine
+ * alfabetico. Un articolo segnato letto prende un HLC nuovo e scende in fondo
+ * al suo giorno, dove un letto può stare.
  */
 const DATA = "MIN(COALESCE(pubblicato_a, raccolto_a), raccolto_a)";
-const PER_DATA = `ORDER BY ${DATA} DESC, titolo`;
+const PER_DATA = `ORDER BY ${DATA} DESC, hlc, titolo`;
 
 export type Filtro = {
   /** null: ogni tema. Un elenco vuoto non trova niente. */

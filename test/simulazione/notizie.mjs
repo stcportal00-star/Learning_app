@@ -174,10 +174,10 @@ const d = DB.database();
 const art = async (id, tema, extra = {}) => {
   const a = { testo: "Il testo intero.", pubblicato_a: null, raccolto_a: "2026-09-30T08:00:00+00:00", letto: 0, salvato: 0, ...extra };
   await d.runAsync(
-    `INSERT INTO articoli (id, titolo, fonte, tema_slug, testo, pubblicato_a, raccolto_a, letto, salvato, url_media, tipo_media)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-    [id, `Titolo ${id}`, "rss[Prova]", tema, a.testo, a.pubblicato_a, a.raccolto_a, a.letto, a.salvato,
-     a.url_media ?? null, a.tipo_media ?? null]);
+    `INSERT INTO articoli (id, titolo, fonte, tema_slug, testo, pubblicato_a, raccolto_a, letto, salvato, url_media, tipo_media, hlc)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, a.titolo ?? `Titolo ${id}`, "rss[Prova]", tema, a.testo, a.pubblicato_a, a.raccolto_a, a.letto, a.salvato,
+     a.url_media ?? null, a.tipo_media ?? null, a.hlc ?? null]);
 };
 await art("g1", "gdpr", { pubblicato_a: "2026-09-29T10:00:00+00:00" });
 await art("g2", "ai_act", { pubblicato_a: "2026-09-30T06:00:00+00:00", testo: "" });
@@ -189,6 +189,13 @@ await art("n1", null, { salvato: 1, letto: 1 });
 await art("h1", "hardware", { url_media: "https://esempio.org/a.mp3", tipo_media: "audio/mpeg" });
 // Dal catalogo vero: Crossref data l'articolo con il fascicolo a stampa.
 await art("cr", "ai_act", { pubblicato_a: "2121-10-01T00:00:00+00:00", raccolto_a: "2026-09-28T08:00:00+00:00" });
+
+// Stessa data nuda, come quasi tutte quelle vere: decide l'ordine della
+// conduttura (per rilevanza, HLC crescente), non l'alfabeto.
+await art("k-meno", "kpi", { titolo: "A, meno rilevante", pubblicato_a: "2026-09-29T00:00:00+00:00", hlc: "000000000002-0000-x" });
+await art("k-piu", "kpi", { titolo: "Z, più rilevante", pubblicato_a: "2026-09-29T00:00:00+00:00", hlc: "000000000001-0000-x" });
+uguale("D0 a parità di data, prima la più rilevante della corsa, non la prima in ordine alfabetico",
+  (await N.leggiNotizie({ temi: ["kpi"], soloDaLeggere: true, limite: 9 })).map((x) => x.id), ["k-piu", "k-meno"]);
 
 const gov = N.categorie().find((c) => c.chiave === "governance").temi;
 {
@@ -217,11 +224,11 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   const conti = await N.contaPerTema();
   const daLeggere = N.contaPerCategoria(conti, true);
   const tutti = N.contaPerCategoria(conti, false);
-  uguale("D5 i numeri della barra, da leggere: governance 3, dati 1, hardware 1, esplorazione 2",
-    ["governance", "dati", "hardware", "esplorazione"].map((a) => daLeggere.get(a) ?? 0), [3, 1, 1, 2]);
+  uguale("D5 i numeri della barra, da leggere: governance 3, dati 1, hardware 1, esplorazione 2, kpi 2",
+    ["governance", "dati", "hardware", "esplorazione", "kpi"].map((a) => daLeggere.get(a) ?? 0), [3, 1, 1, 2, 2]);
   uguale("D5 e in tutto: governance 4, esplorazione 3", ["governance", "esplorazione"].map((a) => tutti.get(a) ?? 0), [4, 3]);
   const somma = [...tutti.values()].reduce((s, n) => s + n, 0);
-  uguale("D5 nessun articolo si perde fra le categorie", somma, 9);
+  uguale("D5 nessun articolo si perde fra le categorie", somma, 11);
 }
 
 // ============================================================ SORGENTI
