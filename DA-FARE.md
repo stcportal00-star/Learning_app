@@ -141,7 +141,7 @@ Gira su emulatore nuovo a ogni corsa: `adb install -r` è sempre una prima insta
 Un ANR non è un'eccezione fatale: il processo resta vivo, `vivo` resta vero, il test stampa SUPERATO, e l'estratto allegato all'issue è solo le ultime 40 righe ReactNativeJS. Costo: l'ANR è proprio il modo in cui questa app fallirà — pdf.js sul thread principale, copie da 2 MB sincrone, 654 righe in una sola transazione al primo avvio. (`.github/fumo.sh:95-98`; `lib/palestra.ts:41,91`; `lib/contenuti.ts:83-152`)
 
 30. **Quattro schermate su nove non vengono mai aperte da nessun controllo, né in CI né in locale**
-`fumo.sh` percorre studio, libreria, note, profilo, esercizi e il lettore: restano fuori `codice`, `ripasso`, `promemoria` e `sync` — l'unica che monta `useAutoSync` e l'unica che tocca i permessi delle notifiche. Costo: un crash all'apertura di /ripasso si manifesterebbe per la prima volta in viaggio, senza PC e senza logcat. (`.github/fumo.sh:55,66`; `app/sync.tsx:18`; `app/promemoria.tsx:42-51`)
+`fumo.sh` percorre studio, libreria, note, notizie, profilo, esercizi e il lettore: restano fuori `codice`, `ripasso`, `promemoria` e `sync` — l'unica che monta `useAutoSync` e l'unica che tocca i permessi delle notifiche. Costo: un crash all'apertura di /ripasso si manifesterebbe per la prima volta in viaggio, senza PC e senza logcat. (`.github/fumo.sh:55,66`; `app/sync.tsx:18`; `app/promemoria.tsx:42-51`)
 
 31. **RAD-03 — se l'avvio fallisce, la schermata di errore non offre nulla da toccare**
 Due soli `<Text>`, nessun pulsante «Riprova», e l'errore passa da `String(e)` quindi un oggetto senza `toString` utile diventa `[object Object]`. Costo: in aereo quella schermata è il capolinea. (`app/_layout.tsx:40,45-51`; `test/simulazione/schermate-stato.mjs:676,685`)
