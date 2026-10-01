@@ -105,6 +105,17 @@ export default function Notizie() {
     setTema(null);
   }
 
+  // La vista che si guarda: cambia con la categoria, il tema e «Da leggere»,
+  // non con un ritorno alla scheda.
+  const vista = `${categoria}|${tema ?? ""}|${soloDaLeggere ? "1" : "0"}`;
+  const lista = useRef<FlatList<Riga>>(null);
+  // Una vista nuova si apre dall'inizio. FlatList conserva lo scorrimento
+  // quando cambiano i dati: dopo «Tutto ›» a metà di In primo piano l'area
+  // si apriva al diciottesimo articolo, con i temi e il primo giorno fuori
+  // dallo schermo. Tornando da un articolo la vista è la stessa, e si resta
+  // dove si era.
+  useEffect(() => { lista.current?.scrollToOffset({ offset: 0, animated: false }); }, [vista]);
+
   // La barra scorre in orizzontale: la categoria scelta da fuori (un'area
   // aperta dall'unità, «Tutto su…» in primo piano) deve venire in vista.
   const barra = useRef<ScrollView>(null);
@@ -274,6 +285,7 @@ export default function Notizie() {
       </ScrollView>
 
       <FlatList
+        ref={lista}
         data={righe ?? []}
         keyExtractor={(r) => r.chiave}
         renderItem={disegna}
