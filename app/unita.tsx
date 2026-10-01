@@ -1,10 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { View, Pressable, ScrollView } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import * as Crypto from "expo-crypto";
 import { registra } from "../lib/db";
 import {
-  Unita as UnitaPercorso, Passo, Progetto, descriviPasso, destinazione, modelloScenario, progetti,
+  Unita as UnitaPercorso, Passo, descriviPasso, destinazione, modelloScenario, progetti,
 } from "../lib/percorso";
 import { leggiSeguiti, leggiSubentrate, segui, smettiDiSeguire } from "../lib/progetti";
 import {
@@ -39,22 +39,31 @@ export default function Unita() {
   const [volumi, setVolumi] = useState<VolumeDiUnita[]>([]);
   const [scenari, setScenari] = useState<ScenarioDiUnita[]>([]);
   const [seguiti, setSeguiti] = useState<string[]>([]);
-  const [tuttiProgetti, setTuttiProgetti] = useState<Progetto[]>([]);
   const [tutte, setTutte] = useState<UnitaPercorso[]>([]);
   const [precedenti, setPrecedenti] = useState<Record<string, string>>({});
+  // I progetti si ricavano sempre dall'ultimo percorso e dall'ultimo elenco,
+  // invece di calcolarli dove si scrive l'uno o l'altro: un calcolo fatto con
+  // il percorso di prima dell'esercizio mostrava «Lo stai seguendo» sotto
+  // un'unità appena superata.
+  const tuttiProgetti = useMemo(() => progetti(tutte, seguiti, precedenti), [tutte, seguiti, precedenti]);
+  // Ogni «Segui» o «Smetti» fa avanzare il giro: una lettura del fuoco
+  // partita prima non deve rimettere l'elenco di prima sopra quello nuovo.
+  const giro = useRef(0);
   const inCreazione = useRef(false);
   const navigation = useNavigation();
 
   useFocusEffect(useCallback(() => {
     let vivo = true;
     inCreazione.current = false;
+    const g = giro.current;
     (async () => {
       const [percorso, v, s, seg, prec] = await Promise.all([
         leggiPercorso(), leggiVolumi(slug), leggiScenari(slug), leggiSeguiti(), leggiSubentrate()]);
       if (!vivo) return;
       const x = percorso.find((t) => t.tema.slug === slug) ?? null;
       setU(x); setTrovata(Boolean(x)); setVolumi(v); setScenari(s);
-      setTutte(percorso); setPrecedenti(prec); setSeguiti(seg); setTuttiProgetti(progetti(percorso, seg, prec));
+      setTutte(percorso); setPrecedenti(prec);
+      if (giro.current === g) setSeguiti(seg);
     })();
     return () => { vivo = false; };
   }, [slug]));
@@ -67,9 +76,8 @@ export default function Unita() {
    * «Svolgi in Note» ne creava una seconda.
    */
   async function cambiaSeguito(azione: () => Promise<string[]>) {
-    const seg = await azione();
-    setSeguiti(seg);
-    setTuttiProgetti(progetti(tutte, seg, precedenti));
+    giro.current += 1;
+    setSeguiti(await azione());
   }
 
   /**

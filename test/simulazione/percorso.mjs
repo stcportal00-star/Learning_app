@@ -600,10 +600,13 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S15 dall'unità alle Notizie si torna alla scheda, non se ne impila una seconda",
     un.includes('if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d);'));
   ok("S14 seguire non rilegge la schermata dal fuoco, e non abbassa la guardia dello scenario",
-    un.includes("  }, [slug]));") && !un.includes("versione") && un.includes("setTuttiProgetti(progetti(tutte, seg, precedenti));"));
+    un.includes("  }, [slug]));") && !un.includes("versione") &&
+    un.includes("const tuttiProgetti = useMemo(() => progetti(tutte, seguiti, precedenti), [tutte, seguiti, precedenti]);"));
+  ok("S14 una lettura del fuoco partita prima di «Segui» non rimette l'elenco di prima",
+    un.includes("if (giro.current === g) setSeguiti(seg);") && un.includes("giro.current += 1;") && !un.includes("setTuttiProgetti("));
   ok("S14 Oggi e Studio ricordano chi ha quale seguito, e tutte le schermate ne tengono conto",
     pp.includes("void ricordaSubentrate(subentrate(tutti));") && pp.includes("progetti(unita, seguiti, precedenti)") &&
-    un.includes("progetti(percorso, seg, prec)"));
+    un.includes("leggiSubentrate()]);") && un.includes("setPrecedenti(prec);"));
   ok("S14 su un'unità subentrata si nomina il tema scelto che la tiene, e «Smetti» toglie quello",
     un.includes("`«${nomeDi(progettoQui.seguito)}» è superato: il progetto continua qui.`") && un.includes("Smetti di seguirlo"));
   ok("S14 dall'unità si segue e si smette di seguire",
