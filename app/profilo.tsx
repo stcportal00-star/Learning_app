@@ -55,8 +55,10 @@ export default function Profilo() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
       {/* Non è più una scheda: la quinta è Notizie, che si apre ogni giorno,
-          mentre qui si viene per un aggiornamento o un accoppiamento. */}
-      <Pressable onPress={() => router.back()}>
+          mentre qui si viene per un aggiornamento o un accoppiamento. Aperto
+          da un collegamento ad app chiusa (percorso://profilo) non ha niente
+          sotto nella pila: indietro porta a Oggi, invece di non fare niente. */}
+      <Pressable onPress={() => (router.canGoBack() ? router.back() : router.replace("/oggi"))}>
         <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Indietro</Text>
       </Pressable>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>Profilo</Text>
