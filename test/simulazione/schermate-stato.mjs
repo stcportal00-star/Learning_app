@@ -1946,7 +1946,8 @@ difetto("PRF-01b", "G13 se la lettura solleva le sezioni restano al testo di rip
 ancora("ESE coda", "app/esercizi.tsx", "AND (t.esito IS NULL OR t.esito <> 'corretto') ORDER BY e.livello, e.id LIMIT 40");
 ancora("ESE indice oltre l'ultimo", "app/esercizi.tsx", "setIndice((i) => i + 1);");
 ancora("ESE coda finita", "app/esercizi.tsx", '{finita ? "Coda finita." : "Nessun esercizio in coda."}');
-ancora("ESE coda finita, sottotitolo", "app/esercizi.tsx", '"Quelli non ancora risolti tornano la prossima volta che apri gli esercizi."');
+ancora("ESE coda finita, condizione", "app/esercizi.tsx", "const finita = coda.length > 0;");
+ancora("ESE coda finita, sottotitolo", "app/esercizi.tsx", '{finita ? "Quelli non ancora risolti tornano la prossima volta che apri gli esercizi." : "Hai risolto tutto quello che era rimasto aperto."}');
 ancora("ESE pulsante disabilitato", "app/esercizi.tsx", "disabled={inCorso || !risposta.trim()}");
 ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? C.primario : C.disattivo');
 ancora("ESE stato vuoto", "app/esercizi.tsx", "Nessun esercizio in coda.");
