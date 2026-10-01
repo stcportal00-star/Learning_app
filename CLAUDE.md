@@ -80,7 +80,16 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
      ferma a metà riparte dall'ultimo arrivo senza margine: con il margine,
      più di 3000 eventi arrivati in dieci minuti la fermavano per sempre. Si
      legge a pagine da 100, perché ogni pagina arrivi entro il timeout. Le
-     prove sono B4 e B12–B16 in `test/simulazione/nuvola.mjs`.
+     prove sono B4 e B12–B17 in `test/simulazione/nuvola.mjs`.
+   - **La soglia non perde eventi finché reggono quattro condizioni**, e chi
+     tocca Supabase deve tenerle: ogni transazione che scrive in `eventi`
+     dura meno di dieci minuti (meno il tempo di una query); l'orologio
+     dell'intestazione Date e quello di Postgres stanno entro pochi secondi
+     (uno avanti di più non si vede dall'app); le letture vanno al
+     primario, non a una replica in ritardo; `max_rows` di PostgREST non
+     scende sotto 100 (Supabase: 1000), o ogni pagina sembra l'ultima. Da
+     `eventi` non si cancella mai: lo spostamento delle pagine fa solo
+     rileggere.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
      schema `percorso`, legate a un identificativo utente fisso.
