@@ -114,6 +114,9 @@ uguale("N4 un'uscita dopo l'arrivo (il fascicolo a stampa di Crossref) vale l'ar
 uguale("N5 la fonte come la scrive un giornale",
   ["rss[Blog dei motori]", "openalex[gdpr]", "arxiv+openalex", "zenodo", "europepmc", "sconosciuta", null].map(N.fonteLeggibile),
   ["Blog dei motori", "OpenAlex", "arXiv", "Zenodo", "Europe PMC", "sconosciuta", ""]);
+uguale("N5 un «+» nel nome del feed non lo spezza",
+  ["rss[Data + Society]", "rss[Notepad++ Weekly]", "rss[Data + Society]+openalex", "openalex+rss[Data + Society]"].map(N.fonteLeggibile),
+  ["Data + Society", "Notepad++ Weekly", "Data + Society", "OpenAlex"]);
 
 // ============================================================ RIGHE
 const notizia = (id, extra = {}) => ({

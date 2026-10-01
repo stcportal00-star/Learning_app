@@ -161,14 +161,14 @@ const ARCHIVI: Record<string, string> = {
  * La fonte come la scrive un giornale. La conduttura scrive «rss[Nome del
  * feed]» per i feed, il nome dell'archivio per gli archivi aperti (a volte con
  * il tema fra parentesi), e «a+b» quando due fonti portano lo stesso articolo:
- * se ne mostra la prima.
+ * se ne mostra la prima. Il feed si riconosce prima di dividere sul «+»: il
+ * nome di un feed viene da iTunes così com'è, e «Data + Society» esiste.
  */
 export function fonteLeggibile(fonte: string | null): string {
   if (!fonte) return "";
-  const prima = fonte.split("+")[0].trim();
-  const rss = /^rss\[(.*)\]$/.exec(prima);
+  const rss = /^rss\[([^\]]*)\]/.exec(fonte.trim());
   if (rss) return rss[1].trim();
-  const base = prima.replace(/\[.*\]$/, "");
+  const base = fonte.split("+")[0].trim().replace(/\[.*\]$/, "");
   return ARCHIVI[base] ?? base;
 }
 
