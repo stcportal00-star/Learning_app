@@ -257,7 +257,7 @@ console.log("\nC. app/codice.tsx — la consegna sui 20 moduli veri");
 // ================================================== D. CODA DEGLI ESERCIZI
 console.log("\nD. app/esercizi.tsx — fondo della coda e attribuzione del tentativo");
 {
-  ok("D1 ESE-07 l'indice e' bloccato sull'ultimo elemento", contiene("app/esercizi.tsx", "setIndice((i) => Math.min(i + 1, coda.length - 1));"));
+  ok("D1 ESE-07 corretto: l'indice va oltre l'ultimo, e la coda finita si dice", contiene("app/esercizi.tsx", "setIndice((i) => i + 1);") && contiene("app/esercizi.tsx", '"Coda finita."'));
   ok("D2 ESE-07 lo stesso passaggio in app/codice.tsx scorre oltre la fine", contiene("app/codice.tsx", "setI((n) => n + 1);"));
   ok("D3 ESE-07 avanti() svuota il campo e l'esito", contiene("app/esercizi.tsx", "setRisposta(\"\");"));
   ok("D4 ESE-01 lo stato vuoto non distingue il caricamento", contiene("app/esercizi.tsx", "Hai risolto tutto quello che era rimasto aperto."));

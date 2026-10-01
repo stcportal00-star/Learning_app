@@ -86,15 +86,21 @@ export default function Esercizi() {
     setRisposta("");
     setEsito(null);
     setIniziato(Date.now());
-    setIndice((i) => Math.min(i + 1, coda.length - 1));
+    // Dopo l'ultimo si va oltre, e la schermata dice che la coda è finita.
+    // Fermarsi sull'ultimo ripresentava la stessa scheda, svuotata, a ogni
+    // «Avanti», senza una parola.
+    setIndice((i) => i + 1);
   }
 
   if (!corrente) {
+    const finita = coda.length > 0;
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <Text style={{ fontSize: 16 }}>Nessun esercizio in coda.</Text>
+        <Text style={{ fontSize: 16 }}>{finita ? "Coda finita." : "Nessun esercizio in coda."}</Text>
         <Text style={{ opacity: 0.6, marginTop: 6, textAlign: "center" }}>
-          Hai risolto tutto quello che era rimasto aperto.
+          {finita
+            ? "Quelli non ancora risolti tornano la prossima volta che apri gli esercizi."
+            : "Hai risolto tutto quello che era rimasto aperto."}
         </Text>
       </View>
     );

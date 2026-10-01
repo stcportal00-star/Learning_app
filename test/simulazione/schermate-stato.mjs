@@ -80,7 +80,8 @@
  * Tre finte correzioni, applicate a una COPIA di questo file (il codice dell'app
  * non si tocca), rieseguendo ogni volta. Numeri veri, misurati:
  *
- *   1. ESE-07, l'indice che non avanza: nel modello e nell'ancora
+ *   1. ESE-07, l'indice che non avanza (poi corretto davvero il 1/10/2026, e
+ *      H31-H32 sono passate a corretto()): nel modello e nell'ancora
  *      `setIndice((i) => Math.min(i + 1, coda.length - 1))` diventa
  *      `setIndice((i) => i + 1)`.
  *      -> 465 su 468, uscita 1. Rossi: H31, H32 e l'ancora "ESE indice
@@ -1943,7 +1944,9 @@ difetto("PRF-01b", "G13 se la lettura solleva le sezioni restano al testo di rip
 // SEZIONE H — app/esercizi.tsx: coda, verifica, Avanti, doppio tocco
 // ===========================================================================
 ancora("ESE coda", "app/esercizi.tsx", "AND (t.esito IS NULL OR t.esito <> 'corretto') ORDER BY e.livello, e.id LIMIT 40");
-ancora("ESE indice bloccato", "app/esercizi.tsx", "setIndice((i) => Math.min(i + 1, coda.length - 1));");
+ancora("ESE indice oltre l'ultimo", "app/esercizi.tsx", "setIndice((i) => i + 1);");
+ancora("ESE coda finita", "app/esercizi.tsx", '{finita ? "Coda finita." : "Nessun esercizio in coda."}');
+ancora("ESE coda finita, sottotitolo", "app/esercizi.tsx", '"Quelli non ancora risolti tornano la prossima volta che apri gli esercizi."');
 ancora("ESE pulsante disabilitato", "app/esercizi.tsx", "disabled={inCorso || !risposta.trim()}");
 ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? C.primario : C.disattivo');
 ancora("ESE stato vuoto", "app/esercizi.tsx", "Nessun esercizio in coda.");
@@ -2021,15 +2024,21 @@ function ModelloEsercizi(p) {
     setRisposta("");
     setEsito(null);
     setIniziato(adesso());
-    setIndice((i) => Math.min(i + 1, coda.length - 1));
+    setIndice((i) => i + 1);
   }
 
   if (!corrente) {
-    return {
-      stato: "vuoto",
-      titolo: "Nessun esercizio in coda.",
-      sottotitolo: "Hai risolto tutto quello che era rimasto aperto.",
-    };
+    return coda.length > 0
+      ? {
+          stato: "finita",
+          titolo: "Coda finita.",
+          sottotitolo: "Quelli non ancora risolti tornano la prossima volta che apri gli esercizi.",
+        }
+      : {
+          stato: "vuoto",
+          titolo: "Nessun esercizio in coda.",
+          sottotitolo: "Hai risolto tutto quello che era rimasto aperto.",
+        };
   }
 
   return {
@@ -2244,12 +2253,11 @@ async function rispondiEAvanza(inst) {
 }
 for (let k = esercizi.schermo.indice; k < 39; k++) await rispondiEAvanza(esercizi);
 ok("H30 rispondendo a tutti si arriva all'ultimo esercizio della coda (indice 39)", esercizi.schermo.indice === 39, String(esercizi.schermo.indice));
-const ultimaIntestazione = esercizi.schermo.consegna.intestazione;
+// Era «DIFETTO RIPRODOTTO: Avanti non avanza oltre l'ultimo»: l'indice restava
+// a 39 e la stessa scheda si svuotava a ogni tocco. Verdetto rovesciato.
 await rispondiEAvanza(esercizi);
-difetto("ESE-07", "H31 risolto l'ULTIMO esercizio, Avanti non avanza: l'indice resta a 39 e lo stato vuoto non si raggiunge mai", esercizi.schermo.indice === 39 && esercizi.schermo.stato === "esercizio" && esercizi.schermo.consegna.intestazione === ultimaIntestazione);
-await rispondiEAvanza(esercizi);
-await rispondiEAvanza(esercizi);
-difetto("ESE-07b", "H32 insistendo si resta inchiodati sulla stessa scheda, che si svuota ogni volta senza nessuna spiegazione", esercizi.schermo.indice === 39 && esercizi.schermo.editor.risposta === "" && esercizi.schermo.riquadroEsito === null);
+corretto("ESE-07", "H31 risolto l'ULTIMO esercizio, Avanti porta oltre: la schermata dice che la coda e' finita", esercizi.schermo.stato === "finita" && esercizi.schermo.titolo === "Coda finita.", JSON.stringify(esercizi.schermo));
+corretto("ESE-07b", "H32 e non resta una scheda svuotata su cui insistere: niente editor, e una frase che dice dove tornano quelli aperti", esercizi.schermo.editor === undefined && /tornano la prossima volta/.test(esercizi.schermo.sottotitolo));
 
 // --- il punto di rottura (schermata fresca: le prove precedenti hanno
 // consumato la coda, e con una coda esaurita non ci sarebbe piu' nessun editor)
