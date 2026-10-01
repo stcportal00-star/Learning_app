@@ -3,7 +3,7 @@ import { View, Pressable, FlatList, ScrollView } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   Categoria, Notizia, Riga, ESPLORAZIONE, areaDelTema, areePerTe, categorie, contaPerCategoria,
-  contaPerTema, dataDi, fonteLeggibile, leggiNotizie, nomeTema, quando, righePerGiorno, righeTitoli,
+  contaPerTema, dataDi, fonteLeggibile, leggiNotizie, messaggioVuoto, nomeTema, quando, righePerGiorno, righeTitoli,
   temiDellArea,
 } from "../../lib/notizie";
 import { descriviByte } from "../../lib/nuvola/media";
@@ -139,7 +139,6 @@ export default function Notizie() {
   const righe = caricato && caricato.vista === vista ? caricato.righe : null;
 
   const perCategoria = contaPerCategoria(conti, soloDaLeggere);
-  const totale = conti.reduce((s, r) => s + (soloDaLeggere ? r.daLeggere : r.tutti), 0);
   const nuovi = conti.reduce((s, r) => s + r.daLeggere, 0);
   const cat = CATEGORIE.find((x) => x.chiave === categoria) ?? CATEGORIE[1];
 
@@ -253,18 +252,16 @@ export default function Notizie() {
     );
   };
 
-  const vuota =
-    conti.length === 0
-      ? "Niente ancora. La rassegna gira ogni mattina alle otto e deposita quello che trova; l'app lo ritira da sola appena c'è rete."
-      : cat.tipo === "salvati"
-        ? "Nessun articolo salvato. Nell'articolo, «Salva» lo tiene qui."
-        : cat.tipo === "perte" && !perTe.length
-          ? "Qui arrivano le notizie delle aree che studi: segui un tema da Studio."
-          : soloDaLeggere && totale === 0
-            ? "Tutto letto. «Tutti» mostra anche gli articoli già letti."
-            : soloDaLeggere
-              ? "Niente da leggere qui. «Tutti» mostra anche gli articoli già letti."
-              : "Nessun articolo in questa categoria.";
+  // Gli articoli della categoria, letti o no: decide se «Tutti» può aiutare.
+  const inTutto = contaPerCategoria(conti, false);
+  const inCategoria =
+    cat.tipo === "area" && tema ? (conti.find((r) => r.tema_slug === tema)?.tutti ?? 0)
+      : cat.tipo === "area" || cat.tipo === "esplorazione" ? (inTutto.get(cat.chiave) ?? 0)
+        : cat.tipo === "perte" ? perTe.reduce((s, a) => s + (inTutto.get(a) ?? 0), 0)
+          : conti.reduce((s, r) => s + r.tutti, 0);
+  const vuota = messaggioVuoto({
+    tipo: cat.tipo, nessunArticolo: conti.length === 0, areePerTe: perTe.length, inCategoria, soloDaLeggere,
+  });
 
   const Intestazione = (
     <View style={{ gap: 10 }}>

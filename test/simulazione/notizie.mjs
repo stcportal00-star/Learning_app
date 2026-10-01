@@ -166,6 +166,16 @@ const notizia = (id, extra = {}) => ({
   ok(`N7 [${fuso}] una sola notizia in evidenza per giorno`,
     r.filter((x) => x.tipo === "principale").length === titoli.length);
 }
+{
+  const m = (x) => N.messaggioVuoto({ tipo: "area", nessunArticolo: false, areePerTe: 1, inCategoria: 5, soloDaLeggere: true, ...x });
+  ok("N9 nessun articolo sul telefono: si dice quando arrivano", m({ nessunArticolo: true }).startsWith("Niente ancora."));
+  ok("N9 un'area con articoli già letti: «Tutti» li mostra", m({}).includes("«Tutti»"));
+  ok("N9 un'area senza nessun articolo, letto o no: niente consiglio di «Tutti», che non mostrerebbe niente",
+    !m({ inCategoria: 0 }).includes("«Tutti»") && m({ inCategoria: 0 }).startsWith("Nessun articolo"));
+  ok("N9 «Per te» senza aree vuol dire unità tutte superate: niente «Segui», che non c'è più",
+    !m({ tipo: "perte", areePerTe: 0 }).includes("Segui") && m({ tipo: "perte", areePerTe: 0 }).includes("In primo piano"));
+  ok("N9 Salvati vuoto dice come si salva", m({ tipo: "salvati" }).includes("«Salva»"));
+}
 uguale("N8 per te: le aree dei temi studiati, una volta sola, senza l'esplorazione",
   N.areePerTe(["sql_base", "hardware", "sql_join", "esplorazione"]), ["dati", "hardware"]);
 uguale("N8 senza temi studiati, nessuna area", N.areePerTe([]), []);

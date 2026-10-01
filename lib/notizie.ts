@@ -233,6 +233,35 @@ export function areePerTe(temiAttivi: string[]): string[] {
   return [...new Set(temiAttivi.map(areaDelTema).filter((a) => a !== ESPLORAZIONE))];
 }
 
+/**
+ * Che cosa dire quando una lista è vuota. Il consiglio deve potersi seguire:
+ * «Tutti» non aiuta in una categoria che non ha articoli nemmeno letti, e
+ * «segui un tema» non si può fare quando tutte le unità sono superate — che
+ * è l'unico caso in cui «Per te» resta senza aree, perché senza progetti
+ * prende quella del piano.
+ */
+export function messaggioVuoto(o: {
+  tipo: Categoria["tipo"];
+  /** Sul telefono non c'è nessun articolo. */
+  nessunArticolo: boolean;
+  /** Quante aree ha «Per te». */
+  areePerTe: number;
+  /** Gli articoli della categoria, letti o no. */
+  inCategoria: number;
+  soloDaLeggere: boolean;
+}): string {
+  if (o.nessunArticolo) {
+    return "Niente ancora. La rassegna gira ogni mattina alle otto e deposita quello che trova; l'app lo ritira da sola appena c'è rete.";
+  }
+  if (o.tipo === "salvati") return "Nessun articolo salvato. Nell'articolo, «Salva» lo tiene qui.";
+  if (o.tipo === "perte" && !o.areePerTe) {
+    return "Hai superato tutte le unità: le notizie di ogni area sono in «In primo piano».";
+  }
+  if (!o.inCategoria) return "Nessun articolo in questa categoria, per ora.";
+  if (o.soloDaLeggere) return "Niente da leggere qui. «Tutti» mostra anche gli articoli già letti.";
+  return "Nessun articolo in questa categoria.";
+}
+
 // --------------------------------------------------------------- letture
 
 const COLONNE = `id, titolo, autori, fonte, abstract, tema_slug, pubblicato_a, raccolto_a, letto, salvato,
