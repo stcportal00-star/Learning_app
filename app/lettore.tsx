@@ -18,6 +18,14 @@ type Messaggio =
  * sincronizzata fra dispositivi tramite il registro eventi.
  * Se qualcosa non va, resta sempre disponibile il visore del sistema.
  */
+// Android chiude il processo che disegna il PDF quando la memoria non basta
+// (un volume di cinquecento pagine, il tablet in orizzontale). Il WebView
+// resta morto, e senza un gestore lo schermo restava bianco senza una parola:
+// con questo compare il riquadro d'errore, con il visore del sistema.
+const PROCESSO_CHIUSO =
+  "Il lettore si è chiuso: il PDF ha chiesto più memoria di quella disponibile. " +
+  "Aprilo con il visore del sistema, oppure torna indietro e riaprilo.";
+
 export default function Lettore() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [visore, setVisore] = useState<string | null>(null);
@@ -209,6 +217,7 @@ export default function Lettore() {
         }
         onMessage={suMessaggio}
         onError={(e) => setErrore(e.nativeEvent.description)}
+        onRenderProcessGone={() => setErrore(PROCESSO_CHIUSO)}
         style={{ flex: 1, backgroundColor: C.sfondo }}
       />
       {pannello ? Pannello : null}

@@ -287,9 +287,10 @@ function nuovoServitore() {
   // Nel registro, righe nuove con l'ora del caricamento; quelle che c'erano
   // gia' la tengono, come un upsert merge-duplicates che non manda la colonna
   // (se la manda, la aggiorna). Le altre tabelle restano come arrivano.
-  function inserisci(nome, righe, chiave, istante) {
+  function inserisci(nome, righe, chiave, istante, ignora = false) {
     for (const r of righe) {
       const prima = tabella(nome).get(r[chiave]);
+      if (ignora && prima) continue;
       tabella(nome).set(r[chiave], nome === "eventi"
         ? { ...r, creato_a: r.creato_a ?? prima?.creato_a ?? istante }
         : r);
@@ -341,6 +342,8 @@ function nuovoServitore() {
     },
     /** true: le risposte non portano l'intestazione Date. */
     senzaData: false,
+    /** true: il registro non concede UPDATE, come dopo la migrazione 009. */
+    senzaUpdate: false,
     /** Di quanto l'orologio HTTP e' avanti (o indietro) rispetto a Postgres. */
     scartoData: 0,
     /** Chiamata a ogni richiesta, prima della risposta. */
@@ -447,7 +450,13 @@ function nuovoServitore() {
         return risposta(400, JSON.stringify({ message: "corpo non JSON" }));
       }
       if (!Array.isArray(righe)) return risposta(400, JSON.stringify({ message: "atteso un array" }));
-      inserisci(nome, righe, suConflitto, prossimoIstante());
+      const prefer = String(richiesta.intestazioni.Prefer ?? "");
+      // Come il database dopo la migrazione 009: senza UPDATE sul registro,
+      // un upsert che fonde i doppioni viene rifiutato anche senza doppioni.
+      if (nome === "eventi" && servitore.senzaUpdate && prefer.includes("merge-duplicates")) {
+        return risposta(401, JSON.stringify({ code: "42501", message: "permission denied for table eventi" }));
+      }
+      inserisci(nome, righe, suConflitto, prossimoIstante(), prefer.includes("ignore-duplicates"));
       // Prefer: return=minimal -> corpo vuoto, come fa PostgREST davvero.
       return risposta(201, "");
     }
@@ -980,8 +989,10 @@ await scenario("B1 gli eventi locali salgono, e il payload arriva come OGGETTO",
       entita_id: segno.id, tipo: "crea", utente_id: UTENTE_ATTESO });
 
   // Le intestazioni VERE: senza Content-Profile PostgREST scrive nello schema
-  // public invece che in `percorso`, e senza resolution=merge-duplicates un
+  // public invece che in `percorso`, e senza resolution=ignore-duplicates un
   // reinvio dello stesso evento tornerebbe 409 invece di non fare nulla.
+  // Ignore e non merge: un evento non cambia mai, e cosi' al server basta
+  // INSERT (B19).
   uguali("intestazioni dell'upsert",
     { apikey: invii[0].intestazioni.apikey,
       Authorization: invii[0].intestazioni.Authorization,
@@ -990,7 +1001,7 @@ await scenario("B1 gli eventi locali salgono, e il payload arriva come OGGETTO",
       Prefer: invii[0].intestazioni.Prefer },
     { apikey: CHIAVE_FINTA, Authorization: `Bearer ${CHIAVE_FINTA}`,
       "Content-Profile": "percorso", "Content-Type": "application/json",
-      Prefer: "return=minimal,resolution=merge-duplicates" });
+      Prefer: "return=minimal,resolution=ignore-duplicates" });
   ok("e l'upsert e' per id", invii[0].parametri.get("on_conflict") === "id", invii[0].url);
 
   const letture = servitore.versoEventi("GET");
@@ -1557,6 +1568,32 @@ await scenario("B17 uno scambio lungo, con un caricamento lento dietro la prima 
   esito = await sincronizza(tab, s);
   uguali("lo scambio dopo lo prende", [esito.riuscito, esito.nuovi], [true, 1]);
   ok("e ci sono tutti", (await noteArrivate("b17-")) === 151, String(await noteArrivate("b17-")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B19 gli eventi salgono anche senza UPDATE sul registro, e un reinvio non cambia niente", async () => {
+  // Con merge-duplicates l'upsert e' un ON CONFLICT DO UPDATE, che chiede il
+  // permesso di UPDATE anche quando non c'e' nessun doppione. E UPDATE sul
+  // registro, con la chiave pubblica, vuol dire poterne svuotare ogni evento.
+  // Gli eventi non cambiano mai: si ignorano i doppioni, e basta INSERT.
+  const s = servitoreNuovo();
+  s.senzaUpdate = true;
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+  const segno = await tab.Segni.annota("b19-vol", "nota", "sale senza UPDATE", 3, null);
+  let esito = await sincronizza(tab, s);
+  uguali("lo scambio riesce e manda il segno", [esito.riuscito, esito.inviati], [true, 1]);
+  const remoto = s.righe("eventi").find((r) => r.entita_id === segno.id);
+  ok("ed e' nel registro remoto", Boolean(remoto), JSON.stringify(s.righe("eventi").map((r) => r.entita_id)));
+  ok("chiedendo di ignorare i doppioni", s.versoEventi("POST").every((r) => String(r.intestazioni.Prefer).includes("ignore-duplicates")));
+
+  // Lo stesso evento rimandato (una conferma persa, per dire) non cambia
+  // la riga che c'e' gia'.
+  const prima = JSON.stringify(remoto);
+  await tab.Db.database().runAsync("UPDATE eventi SET sincronizzato = 0 WHERE entita_id = ?", [segno.id]);
+  esito = await sincronizza(tab, s);
+  uguali("il reinvio riesce", [esito.riuscito, esito.inviati], [true, 1]);
+  ok("e la riga remota e' quella di prima", JSON.stringify(s.righe("eventi").find((r) => r.entita_id === segno.id)) === prima);
   servitoreInUso = servitore;
 });
 

@@ -80,7 +80,8 @@
  * Tre finte correzioni, applicate a una COPIA di questo file (il codice dell'app
  * non si tocca), rieseguendo ogni volta. Numeri veri, misurati:
  *
- *   1. ESE-07, l'indice che non avanza: nel modello e nell'ancora
+ *   1. ESE-07, l'indice che non avanza (poi corretto davvero il 1/10/2026, e
+ *      H31-H32 sono passate a corretto()): nel modello e nell'ancora
  *      `setIndice((i) => Math.min(i + 1, coda.length - 1))` diventa
  *      `setIndice((i) => i + 1)`.
  *      -> 465 su 468, uscita 1. Rossi: H31, H32 e l'ancora "ESE indice
@@ -1943,7 +1944,10 @@ difetto("PRF-01b", "G13 se la lettura solleva le sezioni restano al testo di rip
 // SEZIONE H — app/esercizi.tsx: coda, verifica, Avanti, doppio tocco
 // ===========================================================================
 ancora("ESE coda", "app/esercizi.tsx", "AND (t.esito IS NULL OR t.esito <> 'corretto') ORDER BY e.livello, e.id LIMIT 40");
-ancora("ESE indice bloccato", "app/esercizi.tsx", "setIndice((i) => Math.min(i + 1, coda.length - 1));");
+ancora("ESE indice oltre l'ultimo", "app/esercizi.tsx", "setIndice((i) => i + 1);");
+ancora("ESE coda finita", "app/esercizi.tsx", '{finita ? "Coda finita." : "Nessun esercizio in coda."}');
+ancora("ESE coda finita, condizione", "app/esercizi.tsx", "const finita = coda.length > 0;");
+ancora("ESE coda finita, sottotitolo", "app/esercizi.tsx", '{finita ? "Quelli non ancora risolti tornano la prossima volta che apri gli esercizi." : "Hai risolto tutto quello che era rimasto aperto."}');
 ancora("ESE pulsante disabilitato", "app/esercizi.tsx", "disabled={inCorso || !risposta.trim()}");
 ancora("ESE colore del pulsante", "app/esercizi.tsx", 'backgroundColor: risposta.trim() ? C.primario : C.disattivo');
 ancora("ESE stato vuoto", "app/esercizi.tsx", "Nessun esercizio in coda.");
@@ -2021,15 +2025,21 @@ function ModelloEsercizi(p) {
     setRisposta("");
     setEsito(null);
     setIniziato(adesso());
-    setIndice((i) => Math.min(i + 1, coda.length - 1));
+    setIndice((i) => i + 1);
   }
 
   if (!corrente) {
-    return {
-      stato: "vuoto",
-      titolo: "Nessun esercizio in coda.",
-      sottotitolo: "Hai risolto tutto quello che era rimasto aperto.",
-    };
+    return coda.length > 0
+      ? {
+          stato: "finita",
+          titolo: "Coda finita.",
+          sottotitolo: "Quelli non ancora risolti tornano la prossima volta che apri gli esercizi.",
+        }
+      : {
+          stato: "vuoto",
+          titolo: "Nessun esercizio in coda.",
+          sottotitolo: "Hai risolto tutto quello che era rimasto aperto.",
+        };
   }
 
   return {
@@ -2244,12 +2254,11 @@ async function rispondiEAvanza(inst) {
 }
 for (let k = esercizi.schermo.indice; k < 39; k++) await rispondiEAvanza(esercizi);
 ok("H30 rispondendo a tutti si arriva all'ultimo esercizio della coda (indice 39)", esercizi.schermo.indice === 39, String(esercizi.schermo.indice));
-const ultimaIntestazione = esercizi.schermo.consegna.intestazione;
+// Era «DIFETTO RIPRODOTTO: Avanti non avanza oltre l'ultimo»: l'indice restava
+// a 39 e la stessa scheda si svuotava a ogni tocco. Verdetto rovesciato.
 await rispondiEAvanza(esercizi);
-difetto("ESE-07", "H31 risolto l'ULTIMO esercizio, Avanti non avanza: l'indice resta a 39 e lo stato vuoto non si raggiunge mai", esercizi.schermo.indice === 39 && esercizi.schermo.stato === "esercizio" && esercizi.schermo.consegna.intestazione === ultimaIntestazione);
-await rispondiEAvanza(esercizi);
-await rispondiEAvanza(esercizi);
-difetto("ESE-07b", "H32 insistendo si resta inchiodati sulla stessa scheda, che si svuota ogni volta senza nessuna spiegazione", esercizi.schermo.indice === 39 && esercizi.schermo.editor.risposta === "" && esercizi.schermo.riquadroEsito === null);
+corretto("ESE-07", "H31 risolto l'ULTIMO esercizio, Avanti porta oltre: la schermata dice che la coda e' finita", esercizi.schermo.stato === "finita" && esercizi.schermo.titolo === "Coda finita.", JSON.stringify(esercizi.schermo));
+corretto("ESE-07b", "H32 e non resta una scheda svuotata su cui insistere: niente editor, e una frase che dice dove tornano quelli aperti", esercizi.schermo.editor === undefined && /tornano la prossima volta/.test(esercizi.schermo.sottotitolo));
 
 // --- il punto di rottura (schermata fresca: le prove precedenti hanno
 // consumato la coda, e con una coda esaurita non ci sarebbe piu' nessun editor)
@@ -2304,7 +2313,9 @@ esercizePrep.smonta();
 // SEZIONE I — app/codice.tsx: rubrica, fasi, esportazione, verdetto
 // ===========================================================================
 ancora("CDC rubrica nel render", "app/codice.tsx", 'const extra = JSON.parse(e.rubrica || "{}")');
-ancora("CDC taglio della consegna", "app/codice.tsx", 'const codiceDifettoso = restoCodice.slice(1).join("\\n\\n") || restoCodice.join("\\n\\n");');
+ancora("CDC taglio della consegna", "app/codice.tsx", 'const [titolo, consegna = "", ...bloccoCodice] = e.consegna.split("\\n\\n");');
+ancora("CDC codice dal terzo blocco", "app/codice.tsx", 'const codiceDifettoso = bloccoCodice.join("\\n\\n");');
+ancora("CDC consegna a schermo", "app/codice.tsx", ">{consegna}</Text>");
 ancora("CDC soglia dell'ipotesi", "app/codice.tsx", "ipotesi.trim().length < 15");
 ancora("CDC avanzamento libero", "app/codice.tsx", "setI((n) => n + 1);");
 ancora("CDC stato vuoto", "app/codice.tsx", "Nessun modulo in coda.");
@@ -2345,8 +2356,8 @@ function ModelloCodice(p) {
 
   // ATTENZIONE: nel .tsx questa riga sta nel corpo del render, senza try/catch.
   const extra = JSON.parse(e.rubrica || "{}");
-  const [titoloEconsegna, ...restoCodice] = e.consegna.split("\n\n");
-  const codiceDifettoso = restoCodice.slice(1).join("\n\n") || restoCodice.join("\n\n");
+  const [titolo, consegna = "", ...bloccoCodice] = e.consegna.split("\n\n");
+  const codiceDifettoso = bloccoCodice.join("\n\n");
 
   async function esportaPerIlPc() {
     const file = new FS.File(FS.Paths.cache, `${e.id}.py`);
@@ -2386,7 +2397,8 @@ function ModelloCodice(p) {
     indice: i,
     lunghezzaCoda: coda.length,
     intestazione: `${e.id} · livello ${e.livello} ${extra.categoria && fase === "confronto" ? `· ${extra.categoria}` : ""}`,
-    testoInAlto: titoloEconsegna,
+    testoInAlto: titolo,
+    consegna: consegna || null,
     codiceDifettoso,
     fase,
     ipotesi,
@@ -2440,8 +2452,9 @@ ok("I6 il codice difettoso e' nel blocco scuro", codice.schermo.codiceDifettoso.
 
 // --- CDC-02: il taglio della consegna, misurato su TUTTI i moduli veri
 // Il campo `consegna` nel database e' `${titolo}\n\n${consegna}\n\n${codice}`
-// (lib/contenuti.ts riga 106): il secondo blocco e' proprio la consegna, e
-// slice(1) lo butta via. Qui lo si misura su tutti e venti i moduli veri.
+// (lib/contenuti.ts): il secondo blocco e' proprio la consegna. Era
+// «DIFETTO RIPRODOTTO: slice(1) lo butta via»; ora va a schermo sotto il
+// titolo, e qui si sorveglia su tutti e venti i moduli veri.
 const codiceOriginale = new Map(
   JSON.parse(readFileSync(join(RADICE_PROGETTO, "assets/contenuti/esercizi_codice.json"), "utf8")).map((c) => [
     c.id,
@@ -2455,13 +2468,14 @@ let codiciInteri = 0;
 let conRigheVuoteNelCodice = 0;
 for (const m of moduliVeri) {
   const originale = codiceOriginale.get(m.id);
-  const [titolo, ...resto] = m.consegna.split("\n\n");
-  const mostrato = resto.slice(1).join("\n\n") || resto.join("\n\n");
-  if (!appiattisci(`${titolo} ${mostrato}`).includes(appiattisci(originale.consegna))) consegnePerse++;
+  const [, consegna = "", ...bloccoCodice] = m.consegna.split("\n\n");
+  const mostrato = bloccoCodice.join("\n\n");
+  if (appiattisci(consegna) !== appiattisci(originale.consegna)) consegnePerse++;
   if (appiattisci(mostrato) === appiattisci(originale.codice)) codiciInteri++;
-  if (resto.length > 2) conRigheVuoteNelCodice++;
+  if (bloccoCodice.length > 1) conRigheVuoteNelCodice++;
 }
-difetto("CDC-02", "I7 su tutti e 20 i moduli veri il testo della consegna (secondo blocco) non arriva a schermo: resta solo il titolo", consegnePerse === 20, `consegne perse: ${consegnePerse}`);
+corretto("CDC-02", "I7 su tutti e 20 i moduli veri il testo della consegna (secondo blocco) arriva a schermo, sotto il titolo", consegnePerse === 0, `consegne perse: ${consegnePerse}`);
+corretto("CDC-02b", "I7b e il primo modulo della coda la mostra davvero", typeof codice.schermo.consegna === "string" && codice.schermo.consegna.length > 20 && !codice.schermo.codiceDifettoso.includes(codice.schermo.consegna), JSON.stringify(codice.schermo.consegna));
 ok("I8 il codice difettoso arriva comunque intero, anche nel modulo che ha una riga vuota dentro il codice", codiciInteri === 20 && conRigheVuoteNelCodice === 1, `codici interi ${codiciInteri}, con riga vuota ${conRigheVuoteNelCodice}`);
 
 // --- CDC-03: la soglia dei 15 caratteri
@@ -2781,6 +2795,11 @@ ancora("LET attesa prima di salvare", "app/lettore.tsx", 'if (id !== "prova") sa
 ancora("LET pulizia del timer", "app/lettore.tsx", "return () => { if (salvataggio.current) clearTimeout(salvataggio.current); };");
 ancora("LET messaggio non JSON ignorato", "app/lettore.tsx", "try { m = JSON.parse(e.nativeEvent.data) as Messaggio; } catch { return; }");
 ancora("LET traccia in logcat", "app/lettore.tsx", 'console.error("lettore:", m.messaggio);');
+ancora("LET processo chiuso", "app/lettore.tsx", "onRenderProcessGone={() => setErrore(PROCESSO_CHIUSO)}");
+ancora("LET messaggio del processo chiuso", "app/lettore.tsx", '"Il lettore si è chiuso: il PDF ha chiesto più memoria di quella disponibile. " + "Aprilo con il visore del sistema, oppure torna indietro e riaprilo."');
+const PROCESSO_CHIUSO =
+  "Il lettore si è chiuso: il PDF ha chiesto più memoria di quella disponibile. " +
+  "Aprilo con il visore del sistema, oppure torna indietro e riaprilo.";
 
 /** Copia della macchina a stati di app/lettore.tsx. */
 function ModelloLettore(p) {
@@ -2864,6 +2883,7 @@ function ModelloLettore(p) {
     iniezione: `window.PERCORSO = ${JSON.stringify({ pdf, pagina })}; true;`,
     suMessaggio,
     suErroreWebView: (descrizione) => setErrore(descrizione),
+    suProcessoChiuso: () => setErrore(PROCESSO_CHIUSO),
   };
 }
 
@@ -2960,6 +2980,13 @@ difetto("LET-05", "K24 se la WebView non invia ne' 'pronto' ne' 'errore' non sca
 await tocca(lettoreMuto, () => lettoreMuto.schermo.suErroreWebView("net::ERR_ACCESS_DENIED"));
 ok("K25 onError della WebView porta allo stesso stato di errore, con la descrizione nativa", lettoreMuto.schermo.stato === "errore" && lettoreMuto.schermo.testo === "net::ERR_ACCESS_DENIED");
 lettoreMuto.smonta();
+
+// --- il processo che disegna chiuso da Android: prima schermo bianco, ora
+// il riquadro d'errore con il visore del sistema.
+const lettoreSenzaMemoria = await monta("LettoreSenzaMemoria", ModelloLettore, { ...ambienteLettore, id: volumeConFile.id });
+await tocca(lettoreSenzaMemoria, () => lettoreSenzaMemoria.schermo.suProcessoChiuso());
+corretto("LET-06", "K25b se Android chiude il processo del lettore si vede il messaggio, con il ripiego del visore del sistema", lettoreSenzaMemoria.schermo.stato === "errore" && lettoreSenzaMemoria.schermo.testo === PROCESSO_CHIUSO && lettoreSenzaMemoria.schermo.ripiegoVisore === true, JSON.stringify(lettoreSenzaMemoria.schermo.testo));
+lettoreSenzaMemoria.smonta();
 
 // --- LET-02: id assente, inesistente, ripetuto
 const lettoreSenzaId = await monta("LettoreSenzaId", ModelloLettore, { ...ambienteLettore, id: undefined });

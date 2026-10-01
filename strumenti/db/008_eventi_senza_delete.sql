@@ -1,0 +1,17 @@
+-- 008: la copia remota del registro non si cancella con la chiave pubblica.
+-- Applicata il 1 ottobre 2026 sul progetto hgvzjeituvvwtskbxzzl.
+--
+-- Perché: la chiave publishable sta nel sorgente e nell'APK, e il repository
+-- resta pubblico apposta (l'aggiornatore legge le release senza credenziali).
+-- La policy `solo_utente_fisso` vale per ALL e il ruolo anon aveva DELETE:
+-- chiunque leggesse la chiave poteva svuotare percorso.eventi, cioè la copia
+-- di sicurezza dei due dispositivi e la strada da cui arriva la rassegna.
+--
+-- L'app non cancella mai dal registro remoto: un evento si annulla con un
+-- evento «elimina», mai togliendolo, e la soglia di lettura di
+-- lib/nuvola/sincronia.ts conta proprio su questo (CLAUDE.md, invariante 9).
+-- La prova di rete (test/rete/giro-vero.mjs) annulla la sua nota allo
+-- stesso modo.
+--
+-- UPDATE resta: l'upsert con resolution=merge-duplicates lo richiede.
+revoke delete on percorso.eventi from anon, authenticated;

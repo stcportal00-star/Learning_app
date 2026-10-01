@@ -53,8 +53,12 @@ export default function Codice() {
   }
 
   const extra = JSON.parse(e.rubrica || "{}") as { corretto?: string; test?: string; categoria?: string };
-  const [titoloEconsegna, ...restoCodice] = e.consegna.split("\n\n");
-  const codiceDifettoso = restoCodice.slice(1).join("\n\n") || restoCodice.join("\n\n");
+  // La colonna è `titolo\n\nconsegna\n\ncodice` (lib/contenuti.ts): il
+  // secondo blocco è la domanda, dal terzo in poi il codice, che può avere
+  // righe vuote. La domanda si scartava: si vedevano titolo e codice, ma non
+  // che cosa cercarci.
+  const [titolo, consegna = "", ...bloccoCodice] = e.consegna.split("\n\n");
+  const codiceDifettoso = bloccoCodice.join("\n\n");
 
   /** Esporta modulo e test: il test si esegue sul computer, non sul telefono. */
   async function esportaPerIlPc() {
@@ -94,7 +98,10 @@ export default function Codice() {
       <Text style={{ fontSize: 12, opacity: 0.6, padding: 12, paddingBottom: 4 }}>
         {e.id} · livello {e.livello} {extra.categoria && fase === "confronto" ? `· ${extra.categoria}` : ""}
       </Text>
-      <Text style={{ fontSize: 15, paddingHorizontal: 12, lineHeight: 21 }}>{titoloEconsegna}</Text>
+      <Text style={{ fontSize: 15, paddingHorizontal: 12, lineHeight: 21, fontWeight: "600" }}>{titolo}</Text>
+      {consegna ? (
+        <Text style={{ fontSize: 15, paddingHorizontal: 12, paddingTop: 6, lineHeight: 21 }}>{consegna}</Text>
+      ) : null}
       <ScrollView horizontal style={{ margin: 12, backgroundColor: C.superficie, borderRadius: 9 }}>
         <Text selectable style={{ fontFamily: "monospace", fontSize: 12, color: C.testo, padding: 12, lineHeight: 18 }}>
           {codiceDifettoso}

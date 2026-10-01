@@ -7,6 +7,8 @@
 | `001_schema_percorso.sql` | Schema base: 14 tabelle, event log con HLC, RLS | **già applicata** sul progetto `hgvzjeituvvwtskbxzzl` |
 | `002_piano_modello.sql` | Modello del piano + funzione `installa_piano` | **da applicare** |
 | `003_fonti_rss.sql` | Le prime fonti RSS della conduttura | **già applicata** |
+| `008_eventi_senza_delete.sql` | Toglie DELETE su `percorso.eventi` ad anon e authenticated | **già applicata** (1 ottobre 2026) |
+| `009_eventi_senza_update.sql` | Toglie UPDATE su `percorso.eventi` ad anon e authenticated | **da applicare** solo quando telefono e tablet hanno la build 50 o successiva |
 | `seed_percorso.sql` (cartella contenuti) | 381 item di studio | da applicare dopo la registrazione utente |
 
 Le modifiche di schema della sessione della nuvola (utente fisso, policy

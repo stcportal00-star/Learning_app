@@ -220,6 +220,12 @@ jobs:
           api-level: 34
           arch: x86_64
           target: google_apis
+          # L'emulatore è fissato, non «l'ultimo»: il 1 ottobre 2026 l'ultimo
+          # (build 16428233) non si scaricava da dl.google.com, e il fumo moriva
+          # prima di partire, con l'app sana e nessuna build pubblicata. La
+          # 15917651 (37.1.11.0) è quella con cui il fumo di main è passato quel
+          # mattino. Il test resta identico; si aggiorna a mano, quando serve.
+          emulator-build: 15917651
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: bash .github/fumo.sh

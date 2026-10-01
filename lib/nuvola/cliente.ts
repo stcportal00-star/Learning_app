@@ -124,11 +124,17 @@ export class Nuvola {
   /**
    * Upsert. I blocchi da 200 esistono perché un corpo troppo grande prende un
    * 413 e si perde TUTTO il gruppo, non l'eccedenza.
+   *
+   * `doppioni: "ignora"` per le righe che non cambiano mai, cioè gli eventi
+   * (l'id è hlc:entita_id): un reinvio non fa niente, e al server basta
+   * INSERT. Fonderli (merge-duplicates) chiede anche UPDATE, e UPDATE sul
+   * registro vuol dire poterlo svuotare con la chiave pubblica.
    */
   async innesta(
     tabella: string,
     righe: Array<Record<string, unknown>>,
-    suConflitto: string
+    suConflitto: string,
+    doppioni: "unisci" | "ignora" = "unisci"
   ): Promise<number> {
     if (!righe.length) return 0;
     let scritte = 0;
@@ -141,7 +147,7 @@ export class Nuvola {
           headers: this.intestazioni({
             "Content-Profile": SCHEMA,
             "Content-Type": "application/json",
-            Prefer: "return=minimal,resolution=merge-duplicates",
+            Prefer: `return=minimal,resolution=${doppioni === "ignora" ? "ignore" : "merge"}-duplicates`,
           }),
           body: JSON.stringify(blocco),
         }

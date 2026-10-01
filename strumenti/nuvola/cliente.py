@@ -79,6 +79,11 @@ PAGINA_DEPOSITO = 1000
 PAGINE_MASSIME = 20
 
 
+# Quante righe PostgREST di Supabase restituisce al massimo per richiesta
+# (max_rows). Chiederne di più non dà errore: arrivano le prime 1000.
+RIGHE_PER_RICHIESTA = 1000
+
+
 class ErroreNuvola(Exception):
     """Porta sempre stato HTTP e corpo della risposta nel messaggio.
 
@@ -238,7 +243,7 @@ class Nuvola:
     def _testate_lettura(self):
         return self._testate({"Accept-Profile": SCHEMA, "Accept": "application/json"})
 
-    def _testate_scrittura(self, su_conflitto=None):
+    def _testate_scrittura(self, su_conflitto=None, doppioni="unisci"):
         testate = self._testate({
             "Content-Profile": SCHEMA,
             "Content-Type": "application/json",
@@ -248,7 +253,10 @@ class Nuvola:
             # return=representation serve a chi chiama per rileggere gli id
             # assegnati dal server; merge-duplicates e' cio' che rende l'upsert
             # un upsert invece di un inserimento che fallisce sul duplicato.
-            testate["Prefer"] = "return=representation,resolution=merge-duplicates"
+            # Gli eventi invece non cambiano mai (l'id e' hlc:entita_id): un
+            # reinvio si ignora, e cosi' basta INSERT, senza UPDATE.
+            risoluzione = "ignore" if doppioni == "ignora" else "merge"
+            testate["Prefer"] = f"return=representation,resolution={risoluzione}-duplicates"
         return testate
 
     def _testate_deposito(self, tipo=None, upsert=False):
@@ -336,7 +344,43 @@ class Nuvola:
         `query` e' una stringa PostgREST gia' formata e gia' codificata, per
         esempio "chiave=in.(a,b)&select=chiave". Qui non si compone nulla: la
         sintassi degli operatori e' di chi conosce la tabella.
+
+        Oltre RIGHE_PER_RICHIESTA si legge a pagine. PostgREST di Supabase non
+        restituisce mai piu' di 1000 righe (max_rows), qualunque `limit` gli
+        si chieda, e senza errore: la conduttura chiedeva 20000 chiavi, ne
+        riceveva 1000 su 1304, e ripubblicava ogni giorno articoli gia' in
+        archivio. Le pagine vogliono un `order=` su una colonna univoca, o
+        una riga puo' cadere fra due pagine: senza, si solleva.
         """
+        if massimo is None or massimo <= RIGHE_PER_RICHIESTA:
+            return self._seleziona_una(tabella, query, massimo)
+        if "order=" not in query or "limit=" in query or "offset=" in query:
+            raise ErroreNuvola(
+                f"lettura di {tabella} oltre {RIGHE_PER_RICHIESTA} righe: serve "
+                f"order= su una colonna univoca, e niente limit= o offset= "
+                f"nella query (le pagine le mette questa funzione)")
+        righe = []
+        while len(righe) < massimo:
+            passo = min(RIGHE_PER_RICHIESTA, massimo - len(righe))
+            pagina = self._seleziona_una(
+                tabella, f"{query}&limit={passo}&offset={len(righe)}", None)
+            # Ci si ferma alla pagina VUOTA, non a quella corta: se il server
+            # ne desse meno di quante se ne chiedono, una pagina corta
+            # sembrerebbe l'ultima e il resto sparirebbe di nuovo.
+            if not pagina:
+                break
+            righe.extend(pagina)
+        # Arrivati al tetto con altre righe dopo: fermarsi qui sarebbe di
+        # nuovo il troncamento muto delle mille, solo più in là. Meglio una
+        # corsa che si ferma dicendo perché.
+        if len(righe) >= massimo and self._seleziona_una(
+                tabella, f"{query}&limit=1&offset={len(righe)}", None):
+            raise ErroreNuvola(
+                f"lettura di {tabella}: più di {massimo} righe, e il resto si "
+                f"perderebbe in silenzio. Alza il tetto di chi chiama")
+        return righe
+
+    def _seleziona_una(self, tabella, query, massimo):
         url = self._url_tabella(tabella, query, massimo)
         _, corpo = self._esegui("GET", url, testate=self._testate_lettura())
         dati = _da_json(corpo, f"lettura di {tabella}")
@@ -364,8 +408,13 @@ class Nuvola:
         _, risposta = self._esegui("POST", url, corpo, self._testate_scrittura())
         return _da_json(risposta, f"chiamata a {funzione}") if risposta else None
 
-    def innesta(self, tabella, righe, su_conflitto):
+    def innesta(self, tabella, righe, su_conflitto, doppioni="unisci"):
         """Upsert. `su_conflitto` sono le colonne del vincolo, es. "utente_id,url".
+
+        `doppioni="ignora"` per le righe che non cambiano mai, cioe' gli
+        eventi: un reinvio non fa niente, e al server basta il permesso di
+        INSERT. Con "unisci" (merge-duplicates) serve anche UPDATE, e UPDATE
+        sul registro vuol dire poterlo svuotare con la chiave pubblica.
 
         Restituisce le righe come le ha scritte il server. Non modifica i
         dizionari ricevuti: chi chiama spesso li riusa per il proprio registro
@@ -390,7 +439,7 @@ class Nuvola:
 
         url = (f"{self._url_tabella(tabella)}?on_conflict="
                f"{urllib.parse.quote(su_conflitto, safe=',')}")
-        testate = self._testate_scrittura(su_conflitto)
+        testate = self._testate_scrittura(su_conflitto, doppioni)
         scritte = []
         for gruppo in _gruppi_per_chiavi(preparate):
             for blocco in _blocchi(gruppo):
@@ -536,6 +585,9 @@ if __name__ == "__main__":
     verifica("l'upsert chiede merge-duplicates e la rappresentazione",
              n._testate_scrittura("utente_id,url").get("Prefer") ==
              "return=representation,resolution=merge-duplicates")
+    verifica("gli eventi chiedono di ignorare i doppioni, non di fonderli",
+             n._testate_scrittura("id", "ignora").get("Prefer") ==
+             "return=representation,resolution=ignore-duplicates")
     verifica("senza su_conflitto non si manda Prefer",
              "Prefer" not in n._testate_scrittura())
     verifica("apikey e Authorization portano la stessa chiave",
@@ -600,6 +652,41 @@ if __name__ == "__main__":
              _attesa_429({"Retry-After": "3600"}, 0) == TETTO_ATTESA)
     verifica("senza Retry-After si torna all'esponenziale",
              _attesa_429({}, 2) == 8)
+
+    # La lettura a pagine, contro un finto server che ne dà al massimo
+    # `tetto` per richiesta come max_rows di Supabase.
+    def finto(totale, tetto=1000):
+        f = Nuvola()
+        f.chiamate = 0
+        def una(tabella, query, massimo):
+            f.chiamate += 1
+            q = urllib.parse.parse_qs(query)
+            inizio = int(q.get("offset", ["0"])[0])
+            quante = min(int(q.get("limit", ["1000"])[0]), tetto)
+            return [{"id": i} for i in range(inizio, min(inizio + quante, totale))]
+        f._seleziona_una = una
+        return f
+    f = finto(2500)
+    lette = f.seleziona("articoli", "select=id&order=id.asc", massimo=20000)
+    verifica("oltre le mille si legge a pagine, fino alla pagina vuota",
+             [r["id"] for r in lette] == list(range(2500)) and f.chiamate == 4)
+    f = finto(2500, tetto=300)
+    verifica("con un server che ne dà meno di quante se ne chiedono, arrivano tutte",
+             len(f.seleziona("articoli", "select=id&order=id.asc", massimo=20000)) == 2500)
+    sollevato = False
+    try:
+        finto(2500).seleziona("articoli", "select=id&order=id.asc", massimo=2000)
+    except ErroreNuvola:
+        sollevato = True
+    verifica("oltre il tetto di chi chiama si solleva, non si tronca", sollevato)
+    verifica("esattamente al tetto non si solleva",
+             len(finto(2000).seleziona("articoli", "select=id&order=id.asc", massimo=2000)) == 2000)
+    sollevato = False
+    try:
+        finto(10).seleziona("articoli", "select=id", massimo=5000)
+    except ErroreNuvola:
+        sollevato = True
+    verifica("a pagine senza order= si solleva", sollevato)
 
     e = ErroreNuvola("prova", 400, "message=column x does not exist")
     verifica("l'errore porta stato e corpo nel messaggio",

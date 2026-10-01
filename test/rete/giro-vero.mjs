@@ -19,11 +19,14 @@
  * telefono la rassegna raccolta stanotte, e l'unico modo di provarla è farla.
  *
  * Non fa parte di `npm run verifica`: quella deve restare senza rete. Gira in
- * CI, dove la rete c'è, e lascia l'archivio come l'ha trovato.
+ * CI, dove la rete c'è. La nota di prova se ne va con un evento «elimina»:
+ * dal registro remoto la chiave pubblica non cancella (migrazione 008), e
+ * sui dispositivi arrivano tutti e due gli eventi, che si annullano.
  *
  *   node --import ./test/banco/carica.mjs test/rete/giro-vero.mjs
  */
 import { spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -64,8 +67,11 @@ const { importaApp } = await import("../banco/carica.mjs");
 const CARTELLA = process.env.BANCO_SQLITE_CARTELLA;
 
 // Un marchio riconoscibile: se questa prova muore a metà, chi guarda
-// l'archivio deve capire in un colpo d'occhio cosa sono queste righe.
-const MARCHIO = `prova-rete-${process.env.GITHUB_RUN_ID ?? "locale"}-${process.pid}`;
+// l'archivio deve capire in un colpo d'occhio cosa sono queste righe. E
+// unico: le righe di prova ora restano nel registro (strumenti/db/008), e un
+// job rilanciato ha lo stesso GITHUB_RUN_ID e può avere lo stesso pid.
+const MARCHIO = `prova-rete-${process.env.GITHUB_RUN_ID ?? "locale"}-` +
+  `${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID().slice(0, 8)}`;
 
 let passate = 0;
 const guasti = [];
@@ -86,7 +92,11 @@ const Sincronia = await importaApp("lib/nuvola/sincronia.ts");
 
 const nuvola = new Cliente.Nuvola();
 
-/** Pulizia: via ogni riga che porta il marchio di questa corsa. */
+/**
+ * Pulizia delle tabelle che si possono pulire. `eventi` no: da lì la chiave
+ * pubblica non cancella più (strumenti/db/008), e la nota di prova se ne va
+ * con lapide().
+ */
 async function ripulisci() {
   const intestazioni = {
     apikey: Cliente.NUVOLA_CHIAVE,
@@ -94,7 +104,6 @@ async function ripulisci() {
     "Content-Profile": Cliente.SCHEMA,
   };
   for (const [tabella, filtro] of [
-    ["eventi", `entita_id=like.${MARCHIO}*`],
     ["articoli", `chiave=like.${MARCHIO}*`],
   ]) {
     try {
@@ -103,6 +112,93 @@ async function ripulisci() {
       });
     } catch { /* la pulizia non deve poter far fallire la prova */ }
   }
+}
+
+/**
+ * Senza questa, la nota di prova resterebbe nel registro remoto e la
+ * sincronizzazione la porterebbe fra le note dei due dispositivi. Si annulla
+ * come si annulla ogni cosa nel registro: con un evento «elimina», che dopo
+ * il «crea» vince per HLC. Rossa se non arriva su: meglio una CI rossa che una
+ * nota estranea sul telefono.
+ */
+async function lapide(id) {
+  const nome = "la nota di prova se ne va con un evento «elimina» nel registro remoto";
+  try {
+    await Db.registra("note", id, "elimina", {}, async (d) => {
+      await d.runAsync("DELETE FROM note WHERE id = ?", [id]);
+    });
+  } catch (e) {
+    ok(nome, false, String(e));
+    return;
+  }
+  // Più tentativi, distanziati: finita la prova la cartella temporanea
+  // sparisce, e con lei l'unica copia dell'«elimina» non ancora salita.
+  let guasto = "";
+  for (const attesa of [0, 2000, 4000, 8000]) {
+    if (attesa) await new Promise((r) => setTimeout(r, attesa));
+    try {
+      const su = await Sincronia.sincronizzaNuvola({ scaricaVolumi: false });
+      const remoti = await nuvola.seleziona("eventi",
+        `select=tipo&entita_id=eq.${encodeURIComponent(id)}`);
+      if (su.riuscito && remoti.some((r) => r.tipo === "elimina")) {
+        ok(nome, true);
+        return;
+      }
+      guasto = `${su.motivo} · ${JSON.stringify(remoti)}`;
+    } catch (e) {
+      guasto = String(e);
+    }
+  }
+  ok(nome, false, guasto);
+}
+
+/**
+ * Le note di prova rimaste senza «elimina» da corse passate (una corsa
+ * annullata, la rete caduta proprio alla lapide) si annullano qui, con
+ * l'«elimina» che sale insieme alla nota di questa corsa. Con DELETE non si
+ * poteva: il «crea» restava, e nessuna corsa dopo lo guardava. Solo quelle
+ * più vecchie di un quarto d'ora: una corsa che gira adesso, in parallelo
+ * (push e pull request ne avviano due), la propria lapide la manda da sé.
+ */
+async function riparaOrfane() {
+  try {
+    const righe = await nuvola.seleziona("eventi",
+      "select=entita_id,tipo,creato_a&entita=eq.note&entita_id=like.prova-rete-*" +
+      "&order=creato_a.desc&limit=400");
+    const annullate = new Set(righe.filter((r) => r.tipo === "elimina").map((r) => r.entita_id));
+    const prima = Date.now() - 15 * 60_000;
+    const orfane = [...new Set(righe
+      .filter((r) => r.tipo === "crea" && !annullate.has(r.entita_id) &&
+                     Sincronia.istanteDelServer(r.creato_a) < prima)
+      .map((r) => r.entita_id))];
+    for (const id of orfane) {
+      await Db.registra("note", id, "elimina", {}, async (d) => {
+        await d.runAsync("DELETE FROM note WHERE id = ?", [id]);
+      });
+    }
+    if (orfane.length) console.log(`Note di prova orfane annullate: ${orfane.join(", ")}\n`);
+  } catch (e) {
+    // Una riparazione mancata non ferma la prova: la ritenta la corsa dopo.
+    console.log(`Riparazione delle note orfane non riuscita: ${String(e)}\n`);
+  }
+}
+
+let notaSalita = null;
+
+/**
+ * Fissa da dove legge il prossimo scambio: un secondo prima di `creatoA`. La
+ * prova non rilegge mai il registro dall'inizio. Uno scambio legge al più
+ * 3000 eventi (lib/nuvola/sincronia.ts), e oltre quella misura la nota di
+ * prova, che è l'evento più recente, non tornava più giù: CI rossa a ogni
+ * push con l'app sana, dal giorno in cui il registro passa i 3000 eventi.
+ */
+async function leggiDa(creatoA) {
+  const soglia = new Date(Sincronia.istanteDelServer(creatoA) - 1000).toISOString();
+  await Db.inTransazione(async (dd) => {
+    await dd.runAsync(
+      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_creato', ?)
+       ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`, [soglia]);
+  });
 }
 
 try {
@@ -118,6 +214,7 @@ try {
   // nascondono l'unico che conta.
   if (risponde) {
   await Db.apri("provarete");
+  await riparaOrfane();
 
   // ---------------------------------------------------------------- 1. scrivi
   const idNota = `${MARCHIO}-nota`;
@@ -130,16 +227,23 @@ try {
         [idNota, "giro vero", testo, 0, new Date().toISOString(), hlc]);
     });
 
+  // Anche il primo scambio parte da adesso, non dall'inizio del registro.
+  const [ultimo] = await nuvola.seleziona("eventi", "select=creato_a&order=creato_a.desc&limit=1");
+  if (ultimo?.creato_a) await leggiDa(ultimo.creato_a);
+
   const inSospeso = await Db.daSincronizzare(500);
   ok("l'evento è in coda per salire", inSospeso.some((e) => e.entita_id === idNota));
 
   // ------------------------------------------------------------------ 2. manda
   const salita = await Sincronia.sincronizzaNuvola({ scaricaVolumi: false });
+  // Da qui la nota può essere sul server, anche se lo scambio dice di no: la
+  // lapide va mandata comunque.
+  notaSalita = idNota;
   ok("lo scambio riesce", salita.riuscito, salita.motivo);
   ok("e ha mandato almeno il nostro evento", salita.inviati >= 1, String(salita.inviati));
 
   const remoti = await nuvola.seleziona("eventi",
-    `select=id,hlc,entita,entita_id,tipo,payload&entita_id=eq.${encodeURIComponent(idNota)}`);
+    `select=id,hlc,entita,entita_id,tipo,payload,creato_a&entita_id=eq.${encodeURIComponent(idNota)}`);
   uguale("su Supabase c'è esattamente un evento per quella nota", remoti.length, 1);
   ok("con il payload come OGGETTO, non come stringa",
      remoti[0] && typeof remoti[0].payload === "object" && remoti[0].payload !== null,
@@ -147,12 +251,14 @@ try {
   uguale("e il testo è quello scritto qui", remoti[0]?.payload?.testo, testo);
 
   // ------------------------------------------- 3. cancella ogni traccia locale
+  // Evento e riga via; il segnaposto torna a un secondo prima della nota,
+  // così lo scambio dopo la deve riscaricare comunque.
   const d = Db.database();
   await Db.inTransazione(async (dd) => {
     await dd.runAsync("DELETE FROM eventi WHERE entita_id = ?", [idNota]);
     await dd.runAsync("DELETE FROM note WHERE id = ?", [idNota]);
-    await dd.runAsync("DELETE FROM meta WHERE chiave = 'nuvola_creato'");
   });
+  if (remoti[0]?.creato_a) await leggiDa(remoti[0].creato_a);
   const sparita = await d.getFirstAsync("SELECT id FROM note WHERE id = ?", [idNota]);
   ok("in locale non ne resta niente", !sparita);
 
@@ -194,6 +300,7 @@ try {
         apikey: Cliente.NUVOLA_CHIAVE, Authorization: `Bearer ${Cliente.NUVOLA_CHIAVE}` } });
   }
 } finally {
+  if (notaSalita) await lapide(notaSalita);
   await ripulisci();
   rmSync(CARTELLA, { recursive: true, force: true });
 }

@@ -515,9 +515,11 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
         catalogo = list(catalogo) + pulite
 
     # Lo stato: le chiavi già pubblicate. Una colonna sola, qualche migliaio di
-    # righe: costa meno di qualunque file di stato da tenere allineato.
+    # righe: costa meno di qualunque file di stato da tenere allineato. Tutte,
+    # a pagine ordinate per id: lette solo le prime mille, ogni mattina si
+    # ripubblicavano articoli già in archivio, con letto e salvato a zero.
     gia, titoli_gia, url_gia = set(), set(), set()
-    for r in nuvola.seleziona("articoli", "select=chiave,titolo,url", massimo=20000):
+    for r in nuvola.seleziona("articoli", "select=chiave,titolo,url&order=id.asc", massimo=20000):
         if r.get("chiave"):
             gia.add(r["chiave"])
         if r.get("titolo"):
@@ -613,7 +615,9 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     # promettono righe che non ci sono.
     nuvola.innesta("articoli", righe_articoli, "utente_id,chiave")
     nuvola.innesta("biblioteca", righe_volumi, "utente_id,codice")
-    nuvola.innesta("eventi", eventi, "id")
+    # Ignorati, non fusi: un evento non cambia mai, e cosi' la chiave pubblica
+    # non ha bisogno di UPDATE sul registro (strumenti/db/009).
+    nuvola.innesta("eventi", eventi, "id", doppioni="ignora")
     rapporto["eventi"] = len(eventi)
 
 

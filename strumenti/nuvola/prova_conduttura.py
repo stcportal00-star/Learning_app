@@ -240,6 +240,28 @@ NON_FILTRI = ("select", "order", "limit", "offset", "on_conflict")
 
 VERO_FALSO_NULLO = {"true": True, "false": False, "null": None}
 
+# Come max_rows di Supabase: oltre, PostgREST tronca senza dire niente. Un
+# finto server che restituisce tutto lasciava verde una conduttura che di
+# 1304 chiavi ne leggeva 1000.
+MASSIMO_RIGHE = 1000
+
+
+def ordina_e_taglia(righe, query):
+    """`order=col.asc,col2.desc`, poi `offset` e `limit`, mai oltre MASSIMO_RIGHE."""
+    q = parse_qs(query)
+    ordine = q.get("order", [""])[0]
+    for parte in reversed([p for p in ordine.split(",") if p]):
+        colonna, _, verso = parte.partition(".")
+        righe = sorted(
+            righe,
+            key=lambda r: (r.get(colonna) is None,
+                           r.get(colonna) if isinstance(r.get(colonna), (int, float))
+                           else str(r.get(colonna) or "")),
+            reverse=verso.startswith("desc"))
+    inizio = int(q.get("offset", ["0"])[0])
+    quante = min(int(q.get("limit", [str(MASSIMO_RIGHE)])[0]), MASSIMO_RIGHE)
+    return righe[inizio:inizio + quante]
+
 
 def filtra(righe, query):
     """I tre operatori che la conduttura usa: `eq.`, `is.` e `in.(a,b)`.
@@ -344,6 +366,7 @@ class FintoSupabase(BaseHTTPRequestHandler):
                                "Insegnaglielo in filtra()." % e,
                 }).encode())
                 return
+            righe = ordina_e_taglia(righe, u.query)
             campi = parse_qs(u.query).get("select", ["*"])[0]
             if campi != "*":
                 voluti = campi.split(",")
@@ -393,6 +416,18 @@ class FintoSupabase(BaseHTTPRequestHandler):
                 self._rispondi(400, json.dumps(
                     {"code": "23514", "message": str(e)}).encode())
                 return
+            prefer = self.headers.get("Prefer") or ""
+            # Come il database dopo la migrazione 009: sul registro la chiave
+            # pubblica non ha UPDATE, e un upsert che fonde i doppioni
+            # (ON CONFLICT DO UPDATE) viene rifiutato anche senza doppioni.
+            if tabella == "eventi" and "merge-duplicates" in prefer:
+                self._rispondi(401, json.dumps({
+                    "code": "42501",
+                    "message": "permission denied for table eventi (UPDATE non concesso: "
+                               "gli eventi si mandano con resolution=ignore-duplicates)",
+                }).encode())
+                return
+            ignora = "ignore-duplicates" in prefer
             deposito = RICEVUTO["tabelle"].setdefault(tabella, [])
             try:
                 controlla_unici(tabella, righe, deposito, chiavi)
@@ -406,7 +441,8 @@ class FintoSupabase(BaseHTTPRequestHandler):
                     firma = tuple(r.get(k) for k in chiavi)
                     for i, vecchia in enumerate(deposito):
                         if tuple(vecchia.get(k) for k in chiavi) == firma:
-                            deposito[i] = {**vecchia, **r}
+                            if not ignora:
+                                deposito[i] = {**vecchia, **r}
                             break
                     else:
                         deposito.append(r)
@@ -510,6 +546,27 @@ def principale():
             "trimestre": "T1", "rilevanza": 1.8,
         },
     ]
+    # Un archivio già più grande di una pagina di PostgREST: 1200 articoli
+    # pubblicati nei giorni prima. Due voci del catalogo di oggi stanno oltre
+    # la millesima riga: una con una chiave già pubblicata (non va
+    # ripubblicata: porterebbe letto e salvato a zero), una con una chiave
+    # nuova e un url già in archivio (non va mandata: farebbe rifiutare il
+    # lotto intero dal vincolo sull'url).
+    archivio = [{
+        "id": "%08d-0000-4000-8000-000000000000" % i, "utente_id": cliente.UTENTE,
+        "chiave": "vecchia:%04d" % i, "titolo": "Articolo di ieri %04d" % i,
+        "url": "https://esempio.invalid/ieri/%04d" % i,
+    } for i in range(1200)]
+    RICEVUTO["tabelle"]["articoli"] = list(archivio)
+    catalogo += [{
+        "chiave": "vecchia:1150", "titolo": "Ripubblicato per sbaglio",
+        "url": "https://esempio.invalid/ripubblicato", "data": "2026-09-21",
+        "fonte": "openalex", "tema_slug": "statistica", "trimestre": "T1", "rilevanza": 3.0,
+    }, {
+        "chiave": "openalex:W9", "titolo": "Chiave nuova, indirizzo vecchio",
+        "url": "https://esempio.invalid/ieri/1180", "data": "2026-09-21",
+        "fonte": "openalex", "tema_slug": "statistica", "trimestre": "T1", "rilevanza": 3.0,
+    }]
     with open(os.path.join(cartella, "rassegna", "catalogo.json"), "w", encoding="utf-8") as f:
         json.dump(catalogo, f)
     with open(os.path.join(cartella, "rassegna", "visti.json"), "w", encoding="utf-8") as f:
@@ -597,7 +654,9 @@ def principale():
     finally:
         pubblica.scarica = vero_scarica
 
-    articoli = RICEVUTO["tabelle"].get("articoli", [])
+    gia_scritti = {r["chiave"] for r in archivio}
+    articoli = [r for r in RICEVUTO["tabelle"].get("articoli", [])
+                if r.get("chiave") not in gia_scritti or r.get("titolo") == "Ripubblicato per sbaglio"]
     volumi = RICEVUTO["tabelle"].get("biblioteca", [])
     eventi = RICEVUTO["tabelle"].get("eventi", [])
 
@@ -605,6 +664,20 @@ def principale():
     # che l'innesto è avvenuto NEL catalogo e non accanto: se il feed avesse
     # una strada propria questo numero resterebbe due e le righe comparirebbero
     # da un'altra parte.
+    prova("tutte le 1200 chiavi in archivio lette, oltre la prima pagina",
+          rapporto["gia_in_archivio"], 1200)
+    prova_vero(
+        "la voce con una chiave già pubblicata non è stata ripubblicata",
+        not any(r.get("titolo") == "Ripubblicato per sbaglio" for r in articoli)
+        and not any(e["entita"] == "articoli" and e["entita_id"] == "vecchia:1150"
+                    for e in RICEVUTO["tabelle"].get("eventi", [])),
+        "lette solo le prime mille chiavi: ripubblicarla rimette letto e salvato a zero",
+    )
+    prova_vero(
+        "e quella con un url già in archivio non è stata mandata",
+        not any(r.get("chiave") == "openalex:W9" for r in articoli),
+        repr([r.get("chiave") for r in articoli]),
+    )
     prova("dieci articoli: tre dal catalogo, uno solo-metadati, uno con trascrizione, "
           "due dal feed, tre dal sitemap",
           len(articoli), 10)
@@ -740,8 +813,11 @@ def principale():
     # sulla chiave — quindi senza la deduplica per url PostgREST rifiuta il
     # LOTTO INTERO con 23505, e la mattina si perde tutta: zero articoli, zero
     # eventi, non una riga in meno.
-    prova("le due voci senza collegamento sono collassate in una",
-          rapporto["url_ripetuti"], 1)
+    # Due scarti per url: questo dentro il lotto, e la voce con la chiave nuova
+    # e l'url già in archivio (openalex:W9), che si vede solo leggendo
+    # l'archivio oltre la prima pagina.
+    prova("le due voci senza collegamento sono collassate in una (più W9 contro l'archivio)",
+          rapporto["url_ripetuti"], 2)
     prova_vero(
         "e delle due è rimasta quella con più da leggere",
         any("Execution plan" in (r.get("titolo") or "") for r in da_feed)
@@ -840,8 +916,11 @@ def principale():
     prova_vero("ogni scrittura dichiara lo schema percorso",
                all(r["testate"].get("content-profile") == "percorso" for r in scritture),
                repr([r["testate"].get("content-profile") for r in scritture]))
-    prova_vero("ogni scrittura chiede la fusione dei duplicati",
-               all("merge-duplicates" in (r["testate"].get("prefer") or "") for r in scritture))
+    prova_vero("articoli e volumi chiedono la fusione dei duplicati, gli eventi di ignorarli",
+               all(("ignore-duplicates" if "/rest/v1/eventi" in r["percorso"] else "merge-duplicates")
+                   in (r["testate"].get("prefer") or "") for r in scritture)
+               and any("/rest/v1/eventi" in r["percorso"] for r in scritture),
+               repr([(r["percorso"], r["testate"].get("prefer")) for r in scritture]))
     prova_vero("ogni scrittura porta la chiave",
                all(r["testate"].get("apikey") for r in scritture))
     letture = [r for r in RICEVUTO["richieste"]
