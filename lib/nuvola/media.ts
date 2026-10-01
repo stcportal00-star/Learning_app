@@ -3,11 +3,11 @@
  *
  * Tre regole, e la terza è quella che giustifica il file.
  *
- *  1. **Si scarica solo quando l'utente lo chiede.** Nessun controllo della
- *     rete, nessuna euristica sul wifi: il bottone dice quanti megabyte sono —
- *     `byte_media` arriva dal feed apposta — e chi legge decide. Indovinare il
- *     tipo di connessione vorrebbe dire una dipendenza in più per sbagliare in
- *     roaming, che è esattamente il posto dove sbagliare costa.
+ *  1. **Si scarica da solo sul wifi, e a richiesta sempre.** Lo ha chiesto
+ *     l'utente: col wifi la sincronizzazione scarica tutti i podcast non
+ *     ancora visti (scaricaMediaMancanti); sui dati mobili niente, e il
+ *     bottone resta, con i megabyte scritti sopra — `byte_media` arriva dal
+ *     feed apposta — per chi decide di spenderli lo stesso.
  *
  *  2. **`file_media` non genera mai un evento.** È un percorso di QUESTO
  *     telefono, come `file_locale` della biblioteca: sincronizzarlo vorrebbe
@@ -25,6 +25,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
 import { database, registra } from "../db";
 import type { Articolo } from "./articoli";
+import { cePosto } from "./rete";
 
 export type StatoMedia =
   /** La voce non ha nessun allegato riproducibile. */
@@ -205,6 +206,23 @@ export async function liberaVisti(): Promise<{ liberati: number; byte: number }>
     await d.runAsync("UPDATE articoli SET file_media = NULL WHERE id = ?", [a.id]);
   }
   return { liberati, byte };
+}
+
+/** Col wifi, tutti i podcast non ancora visti che qui non ci sono. */
+export async function scaricaMediaMancanti(): Promise<number> {
+  const righe = await database().getAllAsync<{ id: string; byte_media: number | null }>(
+    `SELECT id, byte_media FROM articoli
+     WHERE url_media IS NOT NULL AND url_media <> ''
+       AND (file_media IS NULL OR file_media = '') AND visto_a IS NULL
+     ORDER BY raccolto_a DESC`
+  );
+  let fatti = 0;
+  for (const r of righe) {
+    // Uno grosso che non entra non ferma i più piccoli dopo di lui.
+    if (!cePosto(r.byte_media)) continue;
+    if ((await scaricaMedia(r.id)).stato === "in_cache") fatti++;
+  }
+  return fatti;
 }
 
 /**

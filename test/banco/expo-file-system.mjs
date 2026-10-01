@@ -141,6 +141,17 @@ const TIPI = new Map([
 // fallisce esattamente come prima. Dichiararla è un atto esplicito del test,
 // non un comportamento che si eredita.
 const RISPOSTE_RETE = new Map();
+
+// Lo spazio libero lo dichiara il test, come la rete: per difetto tanto, così
+// un test che non lo nomina scarica come prima.
+const SPAZIO_PER_DIFETTO = 32 * 1024 * 1024 * 1024;
+let spazioLibero = SPAZIO_PER_DIFETTO;
+export function fissaSpazioLibero(byte) {
+  spazioLibero = byte;
+}
+export function azzeraSpazioLibero() {
+  spazioLibero = SPAZIO_PER_DIFETTO;
+}
 const GUASTI_RETE = new Map();
 
 /** Il contenuto che `File.downloadFileAsync` deve consegnare per questo indirizzo. */
@@ -528,7 +539,7 @@ export class Paths {
     return 64 * 1024 * 1024 * 1024;
   }
   static get availableDiskSpace() {
-    return 32 * 1024 * 1024 * 1024;
+    return spazioLibero;
   }
 
   static info(...uri) {

@@ -1597,6 +1597,211 @@ await scenario("B19 gli eventi salgono anche senza UPDATE sul registro, e un rei
   servitoreInUso = servitore;
 });
 
+// ------------------------------------------------- wifi, cache e PDF letti
+const Rete = await import("../banco/expo-network.mjs");
+const { createHash } = await import("node:crypto");
+/** Il codice del volume con il PDF di un articolo, come in pubblica.py. */
+const volumeDi = (chiave) => `RAS-${createHash("sha1").update(chiave).digest("hex").slice(0, 16)}`;
+const TESTO_LUNGO = "Testo estratto dalla conduttura. ".repeat(60);
+
+/** Un articolo con il suo PDF nel deposito; `fileQui` lo mette già sul telefono. */
+async function articoloConPdf(chiave, { letto = 0, testo = TESTO_LUNGO, fileQui = false } = {}) {
+  const codice = volumeDi(chiave);
+  const db = tab.Db.database();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato, testo)
+     VALUES (?, ?, '2026-10-01T00:00:00Z', ?, 0, ?)`, [chiave, `Articolo ${chiave}`, letto, testo]);
+  let fileLocale = null;
+  if (fileQui) {
+    const f = new FS.File(tab.Sincronia.cartellaVolumi(), `${codice}.pdf`);
+    if (!f.exists) f.create();
+    f.write(Buffer.from("%PDF-1.4 " + chiave));
+    fileLocale = f.uri;
+  }
+  await db.runAsync(
+    `INSERT OR REPLACE INTO biblioteca (id, titolo, origine, formato, pdf_path, file_locale, aggiunto_a)
+     VALUES (?, ?, 'aperta', 'pdf', ?, ?, '2026-10-01T00:00:00Z')`,
+    [codice, `PDF di ${chiave}`, `rassegna/${codice}.pdf`, fileLocale]);
+  FS.rispondi(`${BASE_FINTA}/storage/v1/object/biblioteca/rassegna/${codice}.pdf`, Buffer.from("%PDF-1.4 " + chiave));
+  return codice;
+}
+const fileDi = async (codice) =>
+  (await tab.Db.database().getFirstAsync("SELECT file_locale FROM biblioteca WHERE id = ?", [codice]))?.file_locale ?? null;
+const conFile = (s) => tab.Sincronia.sincronizzaNuvola({ nuvola: new tab.Cliente.Nuvola(BASE_FINTA, CHIAVE_FINTA) });
+
+await scenario("B20 sui dati mobili non si scarica niente da solo; col wifi tutto, non cinque per volta", async () => {
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  await svuotaCoda(tab);
+  const codici = [];
+  for (let i = 0; i < 7; i++) codici.push(await articoloConPdf(`b20-art-${i}`));
+  await tab.Db.database().runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato, url_media, tipo_media)
+     VALUES ('b20-pod', 'Un episodio', '2026-10-01T00:00:00Z', 0, 0, 'https://pod.esempio/b20.mp3', 'audio/mpeg')`);
+  FS.rispondi("https://pod.esempio/b20.mp3", Buffer.from("ID3 audio"));
+
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  let esito = await conFile(s);
+  ok("sui dati mobili lo scambio riesce", esito.riuscito, esito.motivo);
+  uguali("e non scende nessun PDF", [esito.scaricati, (await Promise.all(codici.map(fileDi))).filter(Boolean).length], [0, 0]);
+  ok("e nessun podcast", !(await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b20-pod'")).file_media);
+
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  esito = await conFile(s);
+  ok("col wifi scendono tutti e sette i PDF, non i primi cinque",
+     (await Promise.all(codici.map(fileDi))).every(Boolean), JSON.stringify(esito.scaricati));
+  ok("e il podcast", Boolean((await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b20-pod'")).file_media),
+     esito.motivo);
+  Rete.azzeraRete();
+  servitoreInUso = servitore;
+});
+
+await scenario("B21 segnato «letto», il PDF se ne va e resta il testo; senza testo il PDF resta", async () => {
+  const conTesto = await articoloConPdf("b21-lungo", { fileQui: true });
+  const senzaTesto = await articoloConPdf("b21-corto", { fileQui: true, testo: "Solo il sommario." });
+  const fileLungo = await fileDi(conTesto);
+  await tab.Articoli.segnaLetto("b21-lungo", true);
+  await tab.Articoli.segnaLetto("b21-corto", true);
+  ok("il PDF dell'articolo con il testo non c'è più", (await fileDi(conTesto)) === null && !new FS.File(fileLungo).exists,
+     String(await fileDi(conTesto)));
+  ok("e il testo resta", ((await riga(tab, "articoli", "id", "b21-lungo")).testo ?? "").length >= 1000);
+  ok("quello con il solo sommario tiene il PDF", Boolean(await fileDi(senzaTesto)));
+
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  await conFile(s);
+  ok("col wifi il PDF già letto non si riscarica", (await fileDi(conTesto)) === null, String(await fileDi(conTesto)));
+  const novita = await tab.Articoli.contaNovita();
+  const mancanti = await tab.Db.database().getAllAsync(
+    "SELECT id FROM biblioteca WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')");
+  ok("e Oggi non lo conta fra quelli da scaricare",
+     novita.volumiDaScaricare === mancanti.filter((m) => m.id !== conTesto).length,
+     `${novita.volumiDaScaricare} contro ${mancanti.length}`);
+  Rete.azzeraRete();
+  servitoreInUso = servitore;
+});
+
+await scenario("B22 un «letto» arrivato dall'altro dispositivo libera il PDF anche qui", async () => {
+  const codice = await articoloConPdf("b22-art", { fileQui: true });
+  const s = servitoreNuovo();
+  s.semina("eventi", [{
+    id: "ev-b22-letto", hlc: hlcRemoto(95_000, "telefono"), dispositivo_id: "telefono",
+    entita: "articoli", entita_id: "b22-art", tipo: "aggiorna", payload: { letto: 1 }, utente_id: UTENTE_ATTESO,
+  }]);
+  await fissaSegnaposto(tab, "");
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  const esito = await conFile(s);
+  ok("lo scambio riesce, anche sui dati mobili", esito.riuscito, esito.motivo);
+  ok("e il PDF già letto sull'altro dispositivo non è più qui", (await fileDi(codice)) === null, String(await fileDi(codice)));
+  ok("il motivo lo dice", /PDF già letti tolti/.test(esito.motivo.normalize("NFC")), esito.motivo);
+  Rete.azzeraRete();
+  servitoreInUso = servitore;
+});
+
+await scenario("B23 all'arrivo del wifi parte un giro, una volta sola per arrivo", async () => {
+  const { quandoArrivaIlWifi } = await import("../../lib/nuvola/rete.ts");
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  let giri = 0;
+  const smetti = quandoArrivaIlWifi(() => giri++);
+  // Lo stato iniziale si legge a parte. setImmediate e non setTimeout: qui
+  // setTimeout è finto ed esegue subito, prima che la lettura finisca.
+  await new Promise((r) => setImmediate(r));
+
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  uguali("dai dati mobili al wifi: un giro", giri, 1);
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI, isInternetReachable: true });
+  uguali("un altro evento sullo stesso wifi non ne fa partire un secondo", giri, 1);
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI, isInternetReachable: false });
+  uguali("wifi agganciato ma senza internet (il portale dell'albergo): ancora niente", giri, 1);
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI, isInternetReachable: true });
+  uguali("internet arriva: il secondo giro", giri, 2);
+  Rete.fissaRete({ type: Rete.NetworkStateType.NONE, isConnected: false });
+  Rete.fissaRete({ type: Rete.NetworkStateType.ETHERNET });
+  uguali("anche il cavo vale come wifi", giri, 3);
+
+  smetti();
+  uguali("chi smette non ascolta più", Rete.quantiAscoltano(), 0);
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  uguali("e nessun giro dopo", giri, 3);
+
+  // Già sul wifi all'avvio: il giro lo fa l'avvio dell'app, non l'ascolto.
+  let altri = 0;
+  const smetti2 = quandoArrivaIlWifi(() => altri++);
+  await new Promise((r) => setImmediate(r));
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  uguali("partito già sul wifi, un evento dello stesso wifi non è un arrivo", altri, 0);
+  smetti2();
+  Rete.azzeraRete();
+});
+
+await scenario("B24 un giro per volta: chi chiede durante un giro riceve quello", async () => {
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  const nuvola = new tab.Cliente.Nuvola(BASE_FINTA, CHIAVE_FINTA);
+  const primo = tab.Sincronia.sincronizzaNuvola({ nuvola });
+  const secondo = tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("la seconda chiamata riceve lo stesso giro", primo === secondo);
+  const [a, b] = await Promise.all([primo, secondo]);
+  ok("con lo stesso esito", a === b && a.riuscito, a.motivo);
+
+  const terzo = tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("finito il giro, la chiamata dopo ne fa uno nuovo", terzo !== primo);
+  await terzo;
+
+  const muto = servitoreNuovo();
+  muto.programma({ rete: true, volte: Infinity });
+  servitoreInUso = muto;
+  const fallito = await tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("un giro fallito finisce come prima", !fallito.riuscito, fallito.motivo);
+  servitoreInUso = s;
+  const dopo = await tab.Sincronia.sincronizzaNuvola({ nuvola });
+  ok("e non lascia il giro bloccato: quello dopo riesce", dopo.riuscito, dopo.motivo);
+  servitoreInUso = servitore;
+});
+
+await scenario("B25 i file scendono da soli solo lasciando 1 GB libero; un grosso che non entra non ferma i piccoli", async () => {
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  const GB = 1024 * 1024 * 1024;
+  const piccolo = await articoloConPdf("b25-piccolo");
+  const grosso = await articoloConPdf("b25-grosso");
+  // Il grosso è il più recente, quindi il primo della fila: se non entra, la
+  // fila deve andare avanti, non fermarsi lì.
+  await tab.Db.database().runAsync("UPDATE biblioteca SET byte = ?, aggiunto_a = '2026-10-02T00:00:00Z' WHERE id = ?",
+    [300 * 1024 * 1024, grosso]);
+  await tab.Db.database().runAsync("UPDATE biblioteca SET byte = ? WHERE id = ?", [200 * 1024, piccolo]);
+  await tab.Db.database().runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato, url_media, tipo_media, byte_media)
+     VALUES ('b25-pod', 'Episodio lungo', '2026-10-01T00:00:00Z', 0, 0, 'https://pod.esempio/b25.mp3', 'audio/mpeg', ?)`,
+    [400 * 1024 * 1024]);
+  FS.rispondi("https://pod.esempio/b25.mp3", Buffer.from("ID3 audio lungo"));
+
+  FS.fissaSpazioLibero(1.2 * GB);
+  let esito = await conFile(s);
+  ok("con 1,2 GB liberi il PDF piccolo scende", Boolean(await fileDi(piccolo)), esito.motivo);
+  ok("quello da 300 MB no: lascerebbe meno di 1 GB", !(await fileDi(grosso)));
+  ok("e nemmeno il podcast da 400 MB",
+     !(await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b25-pod'")).file_media);
+
+  FS.fissaSpazioLibero(0.9 * GB);
+  await tab.Db.database().runAsync("UPDATE biblioteca SET file_locale = NULL WHERE id = ?", [piccolo]);
+  esito = await conFile(s);
+  ok("sotto 1 GB non scende niente, nemmeno il piccolo", !(await fileDi(piccolo)));
+  ok("e il motivo lo dice", /Spazio quasi finito/.test(esito.motivo.normalize("NFC")), esito.motivo);
+
+  FS.azzeraSpazioLibero();
+  esito = await conFile(s);
+  ok("con lo spazio tornato scendono tutti",
+     Boolean(await fileDi(piccolo)) && Boolean(await fileDi(grosso))
+     && Boolean((await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b25-pod'")).file_media),
+     esito.motivo);
+  ok("e il motivo non parla più di spazio", !/Spazio quasi finito/.test(esito.motivo.normalize("NFC")), esito.motivo);
+  servitoreInUso = servitore;
+});
+
 // =========================================================================
 // PARTE C — cliente: tentativi, attese misurate, blocchi, intestazioni
 // =========================================================================

@@ -34,6 +34,7 @@ export const DOPPI_ALTRI = {
   "expo-intent-launcher": qui("expo-intent-launcher.mjs"),
   "expo-sharing": qui("expo-sharing.mjs"),
   "expo-notifications": qui("expo-notifications.mjs"),
+  "expo-network": qui("expo-network.mjs"),
   // Non è un modulo Expo, ma lib/notifiche.ts non si carica senza Platform.
   "react-native": qui("react-native.mjs"),
 };
