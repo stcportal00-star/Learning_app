@@ -139,6 +139,22 @@ async function lapide(id) {
 
 let notaSalita = null;
 
+/**
+ * Fissa da dove legge il prossimo scambio: un secondo prima di `creatoA`. La
+ * prova non rilegge mai il registro dall'inizio. Uno scambio legge al più
+ * 3000 eventi (lib/nuvola/sincronia.ts), e oltre quella misura la nota di
+ * prova, che è l'evento più recente, non tornava più giù: CI rossa a ogni
+ * push con l'app sana, dal giorno in cui il registro passa i 3000 eventi.
+ */
+async function leggiDa(creatoA) {
+  const soglia = new Date(Sincronia.istanteDelServer(creatoA) - 1000).toISOString();
+  await Db.inTransazione(async (dd) => {
+    await dd.runAsync(
+      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_creato', ?)
+       ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`, [soglia]);
+  });
+}
+
 try {
   console.log(`Giro vero contro ${Cliente.NUVOLA_BASE}`);
   console.log(`Marchio di questa corsa: ${MARCHIO}\n`);
@@ -164,6 +180,10 @@ try {
         [idNota, "giro vero", testo, 0, new Date().toISOString(), hlc]);
     });
 
+  // Anche il primo scambio parte da adesso, non dall'inizio del registro.
+  const [ultimo] = await nuvola.seleziona("eventi", "select=creato_a&order=creato_a.desc&limit=1");
+  if (ultimo?.creato_a) await leggiDa(ultimo.creato_a);
+
   const inSospeso = await Db.daSincronizzare(500);
   ok("l'evento è in coda per salire", inSospeso.some((e) => e.entita_id === idNota));
 
@@ -176,7 +196,7 @@ try {
   ok("e ha mandato almeno il nostro evento", salita.inviati >= 1, String(salita.inviati));
 
   const remoti = await nuvola.seleziona("eventi",
-    `select=id,hlc,entita,entita_id,tipo,payload&entita_id=eq.${encodeURIComponent(idNota)}`);
+    `select=id,hlc,entita,entita_id,tipo,payload,creato_a&entita_id=eq.${encodeURIComponent(idNota)}`);
   uguale("su Supabase c'è esattamente un evento per quella nota", remoti.length, 1);
   ok("con il payload come OGGETTO, non come stringa",
      remoti[0] && typeof remoti[0].payload === "object" && remoti[0].payload !== null,
@@ -184,12 +204,14 @@ try {
   uguale("e il testo è quello scritto qui", remoti[0]?.payload?.testo, testo);
 
   // ------------------------------------------- 3. cancella ogni traccia locale
+  // Evento e riga via; il segnaposto torna a un secondo prima della nota,
+  // così lo scambio dopo la deve riscaricare comunque.
   const d = Db.database();
   await Db.inTransazione(async (dd) => {
     await dd.runAsync("DELETE FROM eventi WHERE entita_id = ?", [idNota]);
     await dd.runAsync("DELETE FROM note WHERE id = ?", [idNota]);
-    await dd.runAsync("DELETE FROM meta WHERE chiave = 'nuvola_creato'");
   });
+  if (remoti[0]?.creato_a) await leggiDa(remoti[0].creato_a);
   const sparita = await d.getFirstAsync("SELECT id FROM note WHERE id = ?", [idNota]);
   ok("in locale non ne resta niente", !sparita);
 
