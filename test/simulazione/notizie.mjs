@@ -102,7 +102,13 @@ uguale(`N4 [${fuso}] i gruppi: oggi, ieri, questa settimana, prima; il futuro è
   [fa(10), localeIso(2026, 9, 30), localeIso(2026, 9, 27), localeIso(2026, 9, 20), fa(-600)].map((d) => N.gruppoDi(d, adesso)),
   ["Oggi", "Ieri", "Questa settimana", "Prima", "Oggi"]);
 uguale("N4 la data di un articolo: l'uscita, e senza, l'arrivo",
-  [N.dataDi({ pubblicato_a: "a", raccolto_a: "b" }), N.dataDi({ pubblicato_a: null, raccolto_a: "b" })], ["a", "b"]);
+  [N.dataDi({ pubblicato_a: "2026-09-29T00:00:00+00:00", raccolto_a: "2026-09-30T08:00:00+00:00" }),
+   N.dataDi({ pubblicato_a: null, raccolto_a: "2026-09-30T08:00:00+00:00" })],
+  ["2026-09-29T00:00:00+00:00", "2026-09-30T08:00:00+00:00"]);
+uguale("N4 un'uscita dopo l'arrivo (il fascicolo a stampa di Crossref) vale l'arrivo",
+  [N.dataDi({ pubblicato_a: "2121-10-01T00:00:00+00:00", raccolto_a: "2026-09-30T08:00:00+00:00" }),
+   N.dataDi({ pubblicato_a: "2026-10-01T00:00:00+00:00", raccolto_a: "2026-09-30T08:00:00.123456+00:00" })],
+  ["2026-09-30T08:00:00+00:00", "2026-09-30T08:00:00.123456+00:00"]);
 
 // ============================================================ FONTI
 uguale("N5 la fonte come la scrive un giornale",
@@ -159,16 +165,22 @@ await art("e1", "esplorazione");
 await art("x1", "salute-pubblica");
 await art("n1", null, { salvato: 1, letto: 1 });
 await art("h1", "hardware", { url_media: "https://esempio.org/a.mp3", tipo_media: "audio/mpeg" });
+// Dal catalogo vero: Crossref data l'articolo con il fascicolo a stampa.
+await art("cr", "ai_act", { pubblicato_a: "2121-10-01T00:00:00+00:00", raccolto_a: "2026-09-28T08:00:00+00:00" });
 
 const gov = N.categorie().find((c) => c.chiave === "governance").temi;
 {
   const r = await N.leggiNotizie({ temi: gov, soloDaLeggere: true, limite: 50 });
   uguale("D1 un'area, da leggere: solo i suoi temi e solo i non letti, dal più recente",
-    r.map((x) => x.id), ["g2", "g1"]);
-  uguale("D1 l'elenco sa se il testo c'è, senza leggerlo", r.map((x) => [x.id, Boolean(x.ha_testo)]), [["g2", false], ["g1", true]]);
+    r.map((x) => x.id), ["g2", "g1", "cr"]);
+  uguale("D1 l'elenco sa se il testo c'è, senza leggerlo", r.slice(0, 2).map((x) => [x.id, Boolean(x.ha_testo)]), [["g2", false], ["g1", true]]);
+  const cr = r.find((x) => x.id === "cr");
+  uguale("D1 l'articolo datato 2121 sta al giorno in cui è arrivato, non in cima come «oggi»",
+    [N.quando(N.dataDi(cr), new Date(2026, 9, 1, 12)), N.gruppoDi(N.dataDi(cr), new Date(2026, 9, 1, 12))],
+    ["3 giorni fa", "Questa settimana"]);
   ok("D1 il testo non viaggia nell'elenco", r.every((x) => !("testo" in x)));
   const tutti = await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 50 });
-  uguale("D2 «Tutti» comprende i già letti, sempre per data d'uscita", tutti.map((x) => x.id), ["g3", "g2", "g1"]);
+  uguale("D2 «Tutti» comprende i già letti, sempre per data d'uscita", tutti.map((x) => x.id), ["g3", "g2", "g1", "cr"]);
   uguale("D2 il limite vale", (await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 1 })).map((x) => x.id), ["g3"]);
   uguale("D2 un elenco di temi vuoto non trova niente", await N.leggiNotizie({ temi: [], soloDaLeggere: false, limite: 9 }), []);
 }
@@ -183,11 +195,11 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   const conti = await N.contaPerTema();
   const daLeggere = N.contaPerCategoria(conti, true);
   const tutti = N.contaPerCategoria(conti, false);
-  uguale("D5 i numeri della barra, da leggere: governance 2, dati 1, hardware 1, esplorazione 2",
-    ["governance", "dati", "hardware", "esplorazione"].map((a) => daLeggere.get(a) ?? 0), [2, 1, 1, 2]);
-  uguale("D5 e in tutto: governance 3, esplorazione 3", ["governance", "esplorazione"].map((a) => tutti.get(a) ?? 0), [3, 3]);
+  uguale("D5 i numeri della barra, da leggere: governance 3, dati 1, hardware 1, esplorazione 2",
+    ["governance", "dati", "hardware", "esplorazione"].map((a) => daLeggere.get(a) ?? 0), [3, 1, 1, 2]);
+  uguale("D5 e in tutto: governance 4, esplorazione 3", ["governance", "esplorazione"].map((a) => tutti.get(a) ?? 0), [4, 3]);
   const somma = [...tutti.values()].reduce((s, n) => s + n, 0);
-  uguale("D5 nessun articolo si perde fra le categorie", somma, 8);
+  uguale("D5 nessun articolo si perde fra le categorie", somma, 9);
 }
 
 // ============================================================ SORGENTI

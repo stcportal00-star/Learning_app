@@ -76,9 +76,18 @@ export function categorie(): Categoria[] {
 
 const MESI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 
-/** La data di un articolo: quando è uscito, e se non si sa, quando è arrivato. */
+/**
+ * La data di un articolo: quando è uscito, ma mai dopo quando è arrivato; se
+ * non si sa, quando è arrivato. Crossref preferisce la data del fascicolo a
+ * stampa, che per un articolo uscito prima in rete cade mesi avanti (nel
+ * catalogo vero, fino al 2121): presa così com'è, quell'articolo starebbe in
+ * cima a ogni lista, «oggi», per settimane. Le due date le scrive la stessa
+ * conduttura nello stesso formato, e si confrontano come testo, come fa
+ * `DATA` nella query.
+ */
 export function dataDi(n: Pick<Notizia, "pubblicato_a" | "raccolto_a">): string {
-  return n.pubblicato_a || n.raccolto_a;
+  const p = n.pubblicato_a;
+  return p && p <= n.raccolto_a ? p : n.raccolto_a;
 }
 
 /**
@@ -220,8 +229,12 @@ export function areePerTe(temiAttivi: string[]): string[] {
 const COLONNE = `id, titolo, autori, fonte, abstract, tema_slug, pubblicato_a, raccolto_a, letto, salvato,
   url_media, tipo_media, byte_media, file_media, (testo IS NOT NULL AND testo <> '') AS ha_testo`;
 
-/** Per data d'uscita: la conduttura dà a tutti gli articoli di una corsa lo stesso raccolto_a. */
-const PER_DATA = "ORDER BY COALESCE(pubblicato_a, raccolto_a) DESC, titolo";
+/**
+ * La stessa data di dataDi(), in SQL. Per data d'uscita e non d'arrivo: la
+ * conduttura dà a tutti gli articoli di una corsa lo stesso raccolto_a.
+ */
+const DATA = "MIN(COALESCE(pubblicato_a, raccolto_a), raccolto_a)";
+const PER_DATA = `ORDER BY ${DATA} DESC, titolo`;
 
 export type Filtro = {
   /** null: ogni tema. Un elenco vuoto non trova niente. */
