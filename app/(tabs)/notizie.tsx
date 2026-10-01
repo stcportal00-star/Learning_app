@@ -38,7 +38,8 @@ export default function Notizie() {
   const [categoria, setCategoria] = useState<string>("titoli");
   const [tema, setTema] = useState<string | null>(null);
   const [soloDaLeggere, setSoloDaLeggere] = useState(true);
-  const [righe, setRighe] = useState<Riga[] | null>(null);
+  // Le righe con la vista per cui si sono lette: vedi `righe` più sotto.
+  const [caricato, setCaricato] = useState<{ vista: string; righe: Riga[] } | null>(null);
   const [conti, setConti] = useState<Conti>([]);
   const [perTe, setPerTe] = useState<string[]>([]);
   const [adesso, setAdesso] = useState(() => new Date());
@@ -57,43 +58,62 @@ export default function Notizie() {
     router.setParams({ tema: undefined } as never);
   }, [temaChiesto]);
 
+  // La vista che si guarda: cambia con la categoria, il tema e «Da leggere»,
+  // non con un ritorno alla scheda.
+  const vista = `${categoria}|${tema ?? ""}|${soloDaLeggere ? "1" : "0"}`;
+
   useFocusEffect(useCallback(() => {
     let vivo = true;
     (async () => {
       const ora = new Date();
-      const [c, unita, seguiti] = await Promise.all([contaPerTema(), leggiPercorso(), leggiSeguiti()]);
-      const attivi = progetti(unita, seguiti).filter((p) => p.passo).map((p) => p.unita.tema.slug);
-      const piano = prossimoPasso(unita)?.unita.tema.slug;
-      const aree = areePerTe(attivi.length ? attivi : piano ? [piano] : []);
       const cat = CATEGORIE.find((x) => x.chiave === categoria) ?? CATEGORIE[1];
-      let r: Riga[];
-      if (cat.tipo === "titoli") {
-        const sezioni = await Promise.all(
-          CATEGORIE.filter((x) => x.tipo === "area" || x.tipo === "esplorazione").map(async (x) => ({
-            chiave: x.chiave, nome: x.nome,
-            notizie: await leggiNotizie({
-              temi: x.tipo === "area" ? x.temi : null, fuoriDalPiano: x.tipo === "esplorazione",
-              soloDaLeggere, limite: 4,
-            }),
-          })));
-        r = righeTitoli(sezioni);
-      } else if (cat.tipo === "perte") {
-        r = righePerGiorno(await leggiNotizie({
-          temi: aree.flatMap(temiDellArea), soloDaLeggere, limite: 150 }), ora);
-      } else if (cat.tipo === "area") {
-        r = righePerGiorno(await leggiNotizie({
-          temi: tema && cat.temi.includes(tema) ? [tema] : cat.temi, soloDaLeggere, limite: 200 }), ora);
-      } else if (cat.tipo === "esplorazione") {
-        r = righePerGiorno(await leggiNotizie({ temi: null, fuoriDalPiano: true, soloDaLeggere, limite: 200 }), ora);
-      } else {
+      // Il percorso serve a «Per te» prima della sua query; le altre viste
+      // partono subito, insieme ai conteggi.
+      const aree = Promise.all([leggiPercorso(), leggiSeguiti()]).then(([unita, seguiti]) => {
+        const attivi = progetti(unita, seguiti).filter((p) => p.passo).map((p) => p.unita.tema.slug);
+        const piano = prossimoPasso(unita)?.unita.tema.slug;
+        return areePerTe(attivi.length ? attivi : piano ? [piano] : []);
+      });
+      const righeDellaVista = (async (): Promise<Riga[]> => {
+        if (cat.tipo === "titoli") {
+          const sezioni = await Promise.all(
+            CATEGORIE.filter((x) => x.tipo === "area" || x.tipo === "esplorazione").map(async (x) => ({
+              chiave: x.chiave, nome: x.nome,
+              notizie: await leggiNotizie({
+                temi: x.tipo === "area" ? x.temi : null, fuoriDalPiano: x.tipo === "esplorazione",
+                soloDaLeggere, limite: 4,
+              }),
+            })));
+          return righeTitoli(sezioni);
+        }
+        if (cat.tipo === "perte") {
+          return righePerGiorno(await leggiNotizie({
+            temi: (await aree).flatMap(temiDellArea), soloDaLeggere, limite: 150 }), ora);
+        }
+        if (cat.tipo === "area") {
+          return righePerGiorno(await leggiNotizie({
+            temi: tema && cat.temi.includes(tema) ? [tema] : cat.temi, soloDaLeggere, limite: 200 }), ora);
+        }
+        if (cat.tipo === "esplorazione") {
+          return righePerGiorno(await leggiNotizie({ temi: null, fuoriDalPiano: true, soloDaLeggere, limite: 200 }), ora);
+        }
         // I salvati sono quelli da tenere: letti o no, si vedono tutti.
-        r = righePerGiorno(await leggiNotizie({ temi: null, soloDaLeggere: false, soloSalvati: true, limite: 300 }), ora);
-      }
+        return righePerGiorno(await leggiNotizie({ temi: null, soloDaLeggere: false, soloSalvati: true, limite: 300 }), ora);
+      })();
+      const [c, a, r] = await Promise.all([contaPerTema(), aree, righeDellaVista]);
       if (!vivo) return;
-      setConti(c); setPerTe(aree); setAdesso(ora); setRighe(r);
+      setConti(c); setPerTe(a); setAdesso(ora); setCaricato({ vista, righe: r });
     })();
     return () => { vivo = false; };
-  }, [categoria, tema, soloDaLeggere]));
+  }, [vista, categoria, tema, soloDaLeggere]));
+
+  // Le righe valgono solo per la vista da cui sono state lette. Cambiando
+  // categoria, sotto la linguetta nuova restavano per un momento le righe di
+  // quella di prima, e un tema appena scelto le disegnava senza il loro tema;
+  // da Salvati vuoto lampeggiava il messaggio di lista vuota. Meglio un
+  // istante di niente. Tornando sulla scheda la vista è la stessa, e le righe
+  // restano finché arrivano quelle nuove.
+  const righe = caricato && caricato.vista === vista ? caricato.righe : null;
 
   const perCategoria = contaPerCategoria(conti, soloDaLeggere);
   const totale = conti.reduce((s, r) => s + (soloDaLeggere ? r.daLeggere : r.tutti), 0);
@@ -105,9 +125,6 @@ export default function Notizie() {
     setTema(null);
   }
 
-  // La vista che si guarda: cambia con la categoria, il tema e «Da leggere»,
-  // non con un ritorno alla scheda.
-  const vista = `${categoria}|${tema ?? ""}|${soloDaLeggere ? "1" : "0"}`;
   const lista = useRef<FlatList<Riga>>(null);
   // Una vista nuova si apre dall'inizio. FlatList conserva lo scorrimento
   // quando cambiano i dati: dopo «Tutto ›» a metà di In primo piano l'area

@@ -242,10 +242,13 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
     s.includes("router.setParams({ tema: undefined } as never);") && s.includes("}, [temaChiesto]);"));
   ok("S1 il tema scelto resta visibile fra i filtri anche a zero", s.includes(".filter((x) => x.n > 0 || x.t === tema)"));
   ok("S1 si rilegge a ogni ritorno sulla scheda, per sapere che cosa si è letto",
-    s.includes("useFocusEffect(useCallback(() => {") && s.includes("}, [categoria, tema, soloDaLeggere]));"));
+    s.includes("useFocusEffect(useCallback(() => {") && s.includes("}, [vista, categoria, tema, soloDaLeggere]));"));
   ok("S2 una vista nuova si apre dall'inizio; tornando da un articolo si resta dove si era",
     s.includes("useEffect(() => { lista.current?.scrollToOffset({ offset: 0, animated: false }); }, [vista]);") &&
     s.includes("ref={lista}") && !/\[vista[^\]]*adesso|\[righe\]\);/.test(s));
+  ok("S3 le righe valgono solo per la vista da cui sono state lette",
+    s.includes("const righe = caricato && caricato.vista === vista ? caricato.righe : null;") &&
+    s.includes("setCaricato({ vista, righe: r });") && !s.includes("setRighe("));
   ok("S1 la barra delle categorie sta fuori dalla lista, ferma",
     s.indexOf("<ScrollView ref={barra} horizontal") > 0 && s.indexOf("<ScrollView ref={barra} horizontal") < s.indexOf("<FlatList\n"));
 }
