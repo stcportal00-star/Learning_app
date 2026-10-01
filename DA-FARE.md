@@ -212,7 +212,7 @@ L'ordine sbagliato riusa `righe_diverse`, le colonne invertite danno `valori_div
 `durata_sec` è scritta in due punti e non ha un solo SELECT; un errore di sintassi e un difetto del contenuto finiscono come tentativo `errato`. Costo: nessuna schermata mostra una percentuale di riuscita, quindi il danno reale è solo la crescita del registro — e `motivo` è già in tabella per distinguerli. (`grep -rn "durata_sec" app lib components` → nessun SELECT; `app/esercizi.tsx:67`; `app/(tabs)/oggi.tsx:26`)
 
 53. **Due sezioni su quattro del Profilo sono permanentemente vuote e rimandano a un Supabase che nell'app non esiste**
-Nessuna riga di `app/` o `lib/` scrive in `artefatti`, `credenziali` o `pubblicazioni`, e non c'è codice Supabase. Costo: un testo di ripiego che non diventerà mai vero. O una via per riempirle, o una frase onesta. (`app/(tabs)/profilo.tsx:20-21,53,60`; `lib/db.ts:72,76,81`)
+Nessuna riga di `app/` o `lib/` scrive in `artefatti`, `credenziali` o `pubblicazioni`, e non c'è codice Supabase. Costo: un testo di ripiego che non diventerà mai vero. O una via per riempirle, o una frase onesta. (`app/profilo.tsx`, già `app/(tabs)/profilo.tsx`; `lib/db.ts:72,76,81`)
 
 54. **Codice scritto, collaudato e senza chiamanti**
 La regola delle tre settimane (`settimaneConsecutiveSottoMinimo`), `impronta()` — che è proprio ciò che renderebbe visibile SYN-01 — `confronta()` degli HLC, `trasportiUtilizzabili()` e `SCHEMA_VERSIONE`, che può restare 1 mentre le migrazioni diventano due perché il codice usa `MIGRAZIONI.length`. Costo: peso morto, e una costante che può divergere in silenzio. (`lib/sessioni.ts:114`; `lib/sync/fusione.ts:124-128`; `lib/hlc.ts:41`; `lib/sync/auto.ts:144`; `lib/db.ts:18` contro `:104-108`)

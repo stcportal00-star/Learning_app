@@ -164,17 +164,19 @@ senza dare nulla in cambio.
 
 ## Navigazione
 
-Cinque schede — il massimo leggibile su un telefono — più tre schermate impilate.
+Cinque schede — il massimo leggibile su un telefono — più le schermate impilate.
 
 ```
 (tabs)
-  Oggi        stato, divergenza fra dispositivi, motore SQL del dispositivo
-  Studio      hub: esercizi SQL, lettura del codice, ripasso, scenari
+  Oggi        il prossimo passo dei progetti, notizie, copia remota; in alto «Profilo»
+  Studio      il percorso per unità, «Segui» per i progetti in parallelo, gli strumenti per tipo
   Libreria    volumi aperti e PDF tuoi, filtro per trimestre
   Note        Markdown, coda "da pubblicare" per il post mensile
-  Profilo     artefatti, credenziali, accesso alla sincronizzazione
+  Notizie     la rassegna per categoria: per te, in primo piano, le aree, i salvati
 
 impilate
+  /profilo    aggiornamenti dell'app, sincronizzazione, promemoria (da Oggi)
+  /unita      i passi di un tema, «Segui»
   /esercizi   editor SQL con verifica per esecuzione
   /codice     modulo difettoso, ipotesi obbligatoria, test, correzione
   /ripasso    FSRS semplificato su schede con citazione

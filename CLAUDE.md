@@ -330,7 +330,7 @@ conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
   (`components/ProssimoPasso.tsx`), e si ricalcola a ogni ritorno in primo piano.
 - **I progetti in parallelo** (`progetti()` in `lib/percorso.ts`). Il piano
   propone un ordine, non lo impone: dall'unità si «Segue» qualunque tema con
-  verifiche, anche più d'uno, e Oggi e Studio mostrano un riquadro per
+  verifiche non ancora superato, anche più d'uno, e Oggi e Studio mostrano un riquadro per
   progetto, nell'ordine in cui si sono scelti. Superato il tema scelto, al suo
   posto arriva il successivo della stessa area (`pista` di `TEMI`, nomi in
   `AREE`), poi il primo rimasto indietro; mai due progetti sulla stessa unità.

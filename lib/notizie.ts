@@ -226,8 +226,9 @@ export function righePerGiorno(notizie: Notizia[], adesso: Date): Riga[] {
 /**
  * Le aree di «Per te»: quelle dei progetti, e senza progetti quella dell'unità
  * del piano. Si prende l'area intera e non il solo tema, perché cinque temi
- * del piano la conduttura non li assegna mai (le parti di SQL): chi studia
- * SQL — fondamenti leggerebbe una sezione sempre vuota.
+ * del piano la conduttura non li assegna mai (gestione, SQL — join,
+ * aggregazione, CTE e window functions): chi studia SQL — join leggerebbe una
+ * sezione sempre vuota.
  */
 export function areePerTe(temiAttivi: string[]): string[] {
   return [...new Set(temiAttivi.map(areaDelTema).filter((a) => a !== ESPLORAZIONE))];
