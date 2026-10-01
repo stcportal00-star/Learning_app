@@ -5,7 +5,8 @@
 Strato piu' basso della conduttura verso la nuvola. Non sa nulla di Supabase ne'
 del catalogo: prende un indirizzo, riporta byte, e sa dire se quei byte sono un
 PDF o una pagina da cui ricavare testo. Solo libreria standard, perche' gira
-anche su GitHub Actions dove non c'e' nulla di installato.
+anche su GitHub Actions dove non c'e' nulla di installato. L'unica eccezione e'
+`testo_da_pdf`, che usa `pypdf` se c'e' e restituisce il vuoto se non c'e'.
 
     python3 estrattore.py        # autoverifica senza rete
 
@@ -701,6 +702,109 @@ def riassunto(testo, caratteri=280):
     return taglio.rstrip() + "…"
 
 
+# --------------------------------------------------------------------- PDF
+
+# Il testo di un PDF si legge con `pypdf`, l'unica libreria di terze parti
+# della conduttura, e facoltativa: senza, tutto gira come prima e i PDF restano
+# senza testo. Leggere il formato a mano vorrebbe dire decodificare flussi
+# compressi, caratteri incorporati e tabelle di corrispondenza: centinaia di
+# righe che sbaglierebbero in silenzio proprio sui PDF degli editori.
+#
+# Il testo serve perché l'app, quando un articolo è letto, toglie il PDF dal
+# telefono e tiene il testo (lib/nuvola/letti.ts): senza testo il PDF resta,
+# e in viaggio lo spazio finisce.
+try:
+    import pypdf as _pypdf
+except ImportError:  # pragma: no cover — dipende da cosa è installato
+    _pypdf = None
+
+PDF_LEGGIBILI = _pypdf is not None
+
+# Tetti. Le pagine tengono il tempo (circa due centesimi l'una con pypdf), i
+# caratteri tengono il peso dell'evento che porta il testo sul telefono: un
+# articolo scientifico sta sotto, un libro intero no, e non deve.
+PAGINE_PDF = 150
+CARATTERI_PDF = 150_000
+
+# Le legature tipografiche che i PDF degli editori usano al posto delle
+# lettere: «ﬁrst» non si trova cercando «first».
+_LEGATURE = {"\ufb00": "ff", "\ufb01": "fi", "\ufb02": "fl", "\ufb03": "ffi",
+             "\ufb04": "ffl", "\ufb05": "st", "\ufb06": "st"}
+_CONTROLLO = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+_A_CAPO_SPEZZATO = re.compile(r"([a-zà-ÿ])-\n([a-zà-ÿ])")
+
+
+def _pagina_pdf(grezzo):
+    """Una pagina estratta -> paragrafi leggibili su uno schermo stretto.
+
+    Il PDF va a capo a larghezza fissa; sul telefono quelle righe, rimesse a
+    capo dallo schermo, diventano mezze righe alternate. Si riuniscono le
+    righe dello stesso paragrafo, e un paragrafo finisce su una riga vuota o
+    su una riga corta che chiude una frase.
+    """
+    t = grezzo.translate(str.maketrans(_LEGATURE))
+    t = _CONTROLLO.sub("", t).replace("\r", "\n")
+    t = _A_CAPO_SPEZZATO.sub(r"\1\2", t)
+    righe = [r.strip() for r in t.split("\n")]
+    lunghe = sorted(len(r) for r in righe if r)
+    if not lunghe:
+        return ""
+    tipica = lunghe[(len(lunghe) * 3) // 4]
+    paragrafi, corrente = [], []
+    for r in righe:
+        if not r:
+            if corrente:
+                paragrafi.append(" ".join(corrente))
+                corrente = []
+            continue
+        corrente.append(r)
+        if r[-1] in ".:!?" and len(r) < tipica * 0.7:
+            paragrafi.append(" ".join(corrente))
+            corrente = []
+    if corrente:
+        paragrafi.append(" ".join(corrente))
+    return "\n\n".join(re.sub(r"[ \t]+", " ", p) for p in paragrafi)
+
+
+def testo_da_pdf(dati, pagine=PAGINE_PDF, caratteri=CARATTERI_PDF):
+    """Il testo di un PDF, o il vuoto.
+
+    Il vuoto anche quando `pypdf` manca, quando il PDF è cifrato, rotto o
+    fatto di sole immagini: chi chiama decide con la stessa soglia che usa
+    per le pagine web (400 caratteri). Non solleva mai: un PDF malformato non
+    deve poter fermare la rassegna.
+    """
+    if _pypdf is None or not e_pdf(dati):
+        return ""
+    import io
+    import logging
+    # pypdf avvisa a ogni oggetto storto; nel rapporto della mattina sarebbe
+    # rumore che copre i fallimenti veri.
+    logging.getLogger("pypdf").setLevel(logging.ERROR)
+    pezzi, totale = [], 0
+    try:
+        lettore = _pypdf.PdfReader(io.BytesIO(bytes(dati)), strict=False)
+        if lettore.is_encrypted:
+            lettore.decrypt("")
+        for indice, pagina in enumerate(lettore.pages):
+            if indice >= pagine or totale >= caratteri:
+                break
+            try:
+                piano = _pagina_pdf(pagina.extract_text() or "")
+            except Exception:  # noqa: BLE001 — una pagina storta non è il libro
+                continue
+            if piano:
+                pezzi.append(piano)
+                totale += len(piano) + 2
+    except Exception:  # noqa: BLE001 — cifrato, troncato, non un PDF davvero
+        return ""
+    testo = "\n\n".join(pezzi)
+    if len(testo) > caratteri:
+        taglio = testo.rfind("\n\n", 0, caratteri)
+        testo = testo[: taglio if taglio > caratteri // 2 else caratteri].rstrip()
+    return testo
+
+
 # ----------------------------------------------------------- autoverifica (0 rete)
 
 # Scritto a mano, non ricalcolato con hashlib: un atteso prodotto dalla stessa
@@ -913,6 +1017,44 @@ def _autoverifica():
     _prova("sha256 di un valore noto", impronta(b"percorso"), SHA_PERCORSO)
     _prova("una str pesa come i suoi byte utf-8", impronta("percorso"), SHA_PERCORSO)
     _solleva("impronta rifiuta un intero", impronta, 7)
+
+    # -------------------------------------------------------------- testo_da_pdf
+    _prova("le legature tornano lettere: «ﬁrst» si trova cercando «first»",
+           _pagina_pdf("the \ufb01rst and the \ufb02ow"), "the first and the flow")
+    _prova("una parola spezzata a fine riga si ricuce",
+           _pagina_pdf("una infor-\nmazione"), "una informazione")
+    _prova("ma il trattino davanti a una maiuscola resta",
+           _pagina_pdf("Data-\nDriven"), "Data- Driven")
+    _prova("le righe dello stesso paragrafo si riuniscono, la riga corta che chiude va a capo",
+           _pagina_pdf("Una riga lunga quanto la colonna del documento originale\n"
+                       "e la sua seguente, lunga uguale, della stessa colonna.\n"
+                       "Fine.\nNuovo paragrafo lungo quanto basta a non chiudere"),
+           "Una riga lunga quanto la colonna del documento originale e la sua seguente, "
+           "lunga uguale, della stessa colonna. Fine.\n\nNuovo paragrafo lungo quanto "
+           "basta a non chiudere")
+    _prova("i caratteri di controllo spariscono (PostgreSQL rifiuta il NUL)",
+           _pagina_pdf("a\x00b\x07c"), "abc")
+    _prova("una pagina vuota resta vuota", _pagina_pdf("  \n \n"), "")
+    _prova("ciò che non è un PDF non dà testo", testo_da_pdf(b"<html>403</html>"), "")
+    _prova("un PDF rotto non dà testo e non solleva", testo_da_pdf(b"%PDF-1.4\n rotto"), "")
+    _prova("e nemmeno ciò che non sono byte", testo_da_pdf(None), "")
+    if PDF_LEGGIBILI:
+        import tempfile
+        import guida_pdf
+        with tempfile.TemporaryDirectory() as cartella:
+            via = os.path.join(cartella, "prova.pdf")
+            guida_pdf.scrivi(via, [("testo", "Riga %03d del documento di prova." % i)
+                                   for i in range(120)])
+            with open(via, "rb") as f:
+                pdf_vero = f.read()
+        tutto = testo_da_pdf(pdf_vero)
+        _prova("un PDF vero dà il suo testo, dalla prima all'ultima pagina",
+               ("Riga 000" in tutto, "Riga 119" in tutto), (True, True))
+        _prova("il tetto delle pagine si rispetta",
+               ("Riga 000" in testo_da_pdf(pdf_vero, pagine=1),
+                "Riga 119" in testo_da_pdf(pdf_vero, pagine=1)), (True, False))
+        corto = testo_da_pdf(pdf_vero, caratteri=200)
+        _prova("e quello dei caratteri", 0 < len(corto) <= 200, True)
 
     # ---------------------------------------------------------------- riassunto
     _prova("riassunto del vuoto", riassunto("", 280), "")

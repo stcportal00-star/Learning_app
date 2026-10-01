@@ -42,9 +42,11 @@ from estrattore import (  # noqa: E402
     impronta,
     testo_da_html,
     testo_da_trascrizione,
+    testo_da_pdf,
     riassunto,
     ErroreEstrazione,
 )
+import estrattore  # noqa: E402 — PDF_LEGGIBILI si legge al momento: le prove lo spengono
 import feed  # noqa: E402
 from specializzazioni import e_rumore  # noqa: E402
 
@@ -69,6 +71,10 @@ MINUTI_FEED = 6
 # Il rumore redazionale: la stessa lista che setaccia gli archivi aperti.
 ESCLUSIONI = os.path.join(RADICE, "assets", "contenuti", "esclusioni_rassegna.json")
 BYTE_PER_FILE = 60 * 1024 * 1024
+# Quanti articoli arrivati col solo PDF ricevono il testo a ogni corsa. Il
+# primo giorno sono più di cento: ci vogliono due o tre mattine, e nel
+# frattempo la rassegna nuova non aspetta.
+MASSIMO_TESTI_PDF = 60
 
 
 class Orologio:
@@ -448,7 +454,11 @@ def testo_della_voce(v, vie, rapporto, scadenza):
             rapporto["falliti"].append("%s: %s" % (url[:90], str(e)[:120]))
             continue
         if e_pdf(dati):
-            return None, (dati, url)
+            # Il PDF E il suo testo, non l'uno o l'altro: l'app toglie il PDF
+            # di un articolo letto e tiene il testo (lib/nuvola/letti.ts), e
+            # senza testo il PDF resterebbe sul telefono per sempre.
+            testo = testo_da_pdf(dati)
+            return (testo if len(testo) >= 400 else None), (dati, url)
         try:
             # Il formato si riconosce dal contenuto: VTT, SRT, JSON, HTML o
             # testo. Passarla da `testo_da_html` e basta lascerebbe i tempi
@@ -608,6 +618,13 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
             )
 
     rapporto["articoli"] = len(righe_articoli)
+
+    # Il testo degli articoli arrivati col solo PDF. In fondo perché costa
+    # tempo, e il tetto di tempo lo ferma prima della rassegna nuova.
+    con_testo, eventi_testo = testi_dai_pdf(nuvola, orologio, rapporto, scadenza)
+    righe_articoli += con_testo
+    eventi += eventi_testo
+
     rapporto["volumi"] = len(righe_volumi)
 
     # L'ordine conta: prima le proiezioni, poi gli eventi. Se la corsa muore in
@@ -619,6 +636,65 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
     # non ha bisogno di UPDATE sul registro (strumenti/db/009).
     nuvola.innesta("eventi", eventi, "id", doppioni="ignora")
     rapporto["eventi"] = len(eventi)
+
+
+def testi_dai_pdf(nuvola, orologio, rapporto, scadenza, massimo=MASSIMO_TESTI_PDF):
+    """
+    Il testo degli articoli arrivati col solo PDF, letto dal PDF nel deposito.
+
+    Fino al 1° ottobre 2026 la conduttura teneva il testo O il PDF: degli
+    articoli con il PDF nessuno aveva il testo (115 su 115). L'app toglie il
+    PDF di un articolo letto solo se il testo c'è, quindi senza questa
+    passata quei PDF non se ne andrebbero mai dal telefono.
+
+    L'evento è un «aggiorna» con il solo testo: `letto` e `salvato` non si
+    toccano, e un articolo già letto resta letto.
+
+    Un PDF da cui non esce testo (immagini, cifrato) si segna con il testo
+    vuoto, senza evento: altrimenti si riproverebbe ogni mattina, e i primi
+    della fila terrebbero fermi tutti gli altri.
+
+    Restituisce (righe parziali di `articoli`, eventi).
+    """
+    righe, eventi = [], []
+    if not estrattore.PDF_LEGGIBILI:
+        rapporto["pdf_illeggibili"] = True
+        return righe, eventi
+    volumi = {}
+    for r in nuvola.seleziona("biblioteca", "select=codice,pdf_path&order=codice.asc",
+                              massimo=20000):
+        codice = str(r.get("codice") or "")
+        if codice.startswith("RAS-") and r.get("pdf_path"):
+            volumi[codice] = r["pdf_path"]
+    if not volumi:
+        return righe, eventi
+    senza = nuvola.seleziona("articoli", "select=chiave,titolo,url&testo=is.null&order=id.asc",
+                             massimo=20000)
+    for a in senza:
+        if len(righe) >= massimo:
+            break
+        if time.time() > scadenza:
+            rapporto["tempo_scaduto"] = True
+            break
+        percorso = volumi.get(codice_stabile("RAS", a.get("chiave") or ""))
+        if not percorso:
+            continue
+        try:
+            dati = nuvola.scarica_file(percorso)
+        except ErroreNuvola as e:
+            rapporto["falliti"].append("testo da %s: %s" % (percorso, str(e)[:120]))
+            continue
+        testo = testo_da_pdf(dati)
+        if len(testo) < 400:
+            testo = ""
+        # Titolo e url perché l'upsert li pretende: sono NOT NULL, e Postgres
+        # controlla la riga proposta prima di accorgersi che esiste già.
+        righe.append({"chiave": a["chiave"], "titolo": a["titolo"], "url": a["url"],
+                      "testo": testo})
+        if testo:
+            eventi.append(evento(orologio, "articoli", a["chiave"], "aggiorna", {"testo": testo}))
+            rapporto["testi_da_pdf"] = rapporto.get("testi_da_pdf", 0) + 1
+    return righe, eventi
 
 
 def manuali(cartella, nuvola, rapporto):
@@ -698,11 +774,14 @@ def scrivi_rapporto(cartella, rapporto):
         "  con testo      : %d" % rapporto["con_testo"],
         "PDF depositati   : %d" % rapporto["pdf"],
         "File a mano      : %d" % rapporto["manuali"],
+        "Testi dai PDF    : %d" % rapporto.get("testi_da_pdf", 0),
         "Volumi scritti   : %d" % rapporto["volumi"],
         "Eventi scritti   : %d" % rapporto["eventi"],
     ]
     if rapporto["tempo_scaduto"]:
         righe += ["", "TEMPO SCADUTO: il resto va al prossimo giro."]
+    if rapporto.get("pdf_illeggibili"):
+        righe += ["", "PDF SENZA TESTO: pypdf non è installato, il testo dei PDF non si estrae."]
     if rapporto["falliti"]:
         righe += ["", "NON RIUSCITI (%d):" % len(rapporto["falliti"])]
         righe += ["  " + f for f in rapporto["falliti"][:40]]
@@ -741,6 +820,7 @@ def principale(argv=None):
         "con_testo": 0,
         "pdf": 0,
         "manuali": 0,
+        "testi_da_pdf": 0,
         "volumi": 0,
         "eventi": 0,
         "doppioni": 0,

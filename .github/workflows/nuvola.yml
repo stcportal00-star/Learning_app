@@ -96,6 +96,17 @@ jobs:
           fi
           python3 strumenti/nuvola/cancello.py --cron "$CRON"
 
+      # Il testo dei PDF (strumenti/nuvola/estrattore.py, testo_da_pdf).
+      # Facoltativo per costruzione: se l'installazione fallisce la conduttura
+      # gira come prima, senza testo dai PDF, e il rapporto lo scrive. Versione
+      # fissata: un aggiornamento di pypdf non deve cambiare il testo che
+      # arriva sul telefono senza un commit che lo dica. Prima della verifica,
+      # così la verifica prova la strada con pypdf, che è quella che scrive.
+      - name: pypdf
+        if: steps.orario.outputs.esegui == 'si'
+        continue-on-error: true
+        run: pip install --quiet "pypdf==6.19.0"
+
       # Prima di qualunque passo di rete, e senza rete: una conduttura rotta
       # non deve poter scrivere sul database. Un upsert sbagliato su
       # `biblioteca` si ripara a mano, e da qui non c'è nessuna mano.
