@@ -116,7 +116,9 @@ export default function ProssimoPasso() {
         </Text>
         {v.dopo ? (
           <Text style={{ fontSize: 12, color: C.verde, marginTop: 2 }}>
-            «{NOME_TEMA.get(v.dopo) ?? v.dopo}» è superato: si continua con il tema dopo.
+            {/* Non «il tema dopo»: finita l'area in avanti, il seguito è un
+                tema rimasto indietro, che nel piano viene prima. */}
+            «{NOME_TEMA.get(v.dopo) ?? v.dopo}» è superato: si continua con un altro tema della sua area.
           </Text>
         ) : null}
         <Text style={{ fontSize: 18, fontWeight: "600", marginTop: 3 }}>{d.titolo}</Text>

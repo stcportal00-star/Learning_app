@@ -555,6 +555,8 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S14 il passo del piano si presenta come piano anche con dei temi seguiti, e l'intestazione conta solo i progetti aperti",
     pp.includes("dalPiano: v.progetto === null,") && pp.includes("{v.dalPiano\n") &&
     pp.includes("const aperti = s.voci.filter((v) => !v.dalPiano).length;") && !pp.includes("{s.seguiti\n"));
+  ok("S14 il seguito non si chiama «il tema dopo»: può essere un tema rimasto indietro",
+    pp.includes("è superato: si continua con un altro tema della sua area.") && !pp.includes("il tema dopo."));
   ok("S14 Oggi, Studio e le Notizie decidono che cosa fare con la stessa regola, daFare()",
     pp.includes("daFare(unita, seguiti).map(") &&
     sorgente("app/(tabs)/studio.tsx").includes("const correnti = new Set(daFare(unita, seguiti).map((v) => v.unita.tema.slug));") &&
