@@ -128,8 +128,9 @@ legge davvero.
 Di un PDF si tiene anche il testo, estratto con `pypdf` (fissato in
 `nuvola.yml`, unica libreria di terze parti della conduttura, facoltativa:
 senza, tutto gira come prima e il rapporto lo scrive). Gli articoli arrivati
-col solo PDF ricevono il testo poco per volta (`testi_dai_pdf`, 60 a corsa)
-con un evento «aggiorna» che porta solo `testo`. I manuali della release
+col solo PDF ricevono il testo poco per volta (`testi_dai_pdf`, 60 a corsa,
+scritti DOPO la rassegna e 10 per invio, perché un rifiuto non tocchi la
+rassegna del giorno) con un evento «aggiorna» che porta solo `testo`. I manuali della release
 `biblioteca-…` salgono nel deposito sotto `manuale/BIB-xx.pdf` con un
 «aggiorna» di `pdf_path`, `byte` e `sha256` (`manuali_aperti`): il telefono
 li scarica al primo wifi.

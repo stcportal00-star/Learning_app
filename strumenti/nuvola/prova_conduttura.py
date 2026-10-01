@@ -1108,7 +1108,14 @@ def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_sc
             pubblica.scarica = vero_scarica
         return r, RICEVUTO["tabelle"]["eventi"][prima:], depositi
 
-    r3, nuovi, _ = corsa()
+    # Un invio per articolo, per vedere che i testi si scrivono a pezzi.
+    per_invio = pubblica.PER_INVIO
+    pubblica.PER_INVIO = 1
+    try:
+        r3, nuovi, _ = corsa()
+    finally:
+        pubblica.PER_INVIO = per_invio
+    richieste3 = list(RICEVUTO["richieste"])
     riga = {a["chiave"]: a for a in RICEVUTO["tabelle"]["articoli"] if a["chiave"].startswith("ras:")}
 
     # --- i manuali
@@ -1140,7 +1147,7 @@ def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_sc
 
     # --- il testo dai PDF
     if leggibili:
-        testi_dai_pdf_veri(riga, nuovi, r3, cartella)
+        testi_dai_pdf_veri(riga, nuovi, r3, cartella, richieste3, base)
 
     # --- la corsa dopo non rifà niente
     r4, nuovi4, depositi4 = corsa()
@@ -1167,8 +1174,41 @@ def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_sc
                "pypdf non è installato" in pubblica.scrivi_rapporto(cartella, r5))
 
 
-def testi_dai_pdf_veri(riga, nuovi, r3, cartella):
+def testi_dai_pdf_veri(riga, nuovi, r3, cartella, richieste, base):
     """La passata dei testi con pypdf presente: quella che gira in produzione."""
+    def corpo(q):
+        try:
+            return json.loads(q["corpo"] or "[]")
+        except ValueError:
+            return []
+    parziali = [i for i, q in enumerate(richieste)
+                if q["metodo"] == "POST" and q["percorso"].startswith("/rest/v1/articoli")
+                and any(set(r) == {"chiave", "titolo", "url", "testo", "utente_id"}
+                        for r in corpo(q))]
+    eventi_rassegna = [i for i, q in enumerate(richieste)
+                       if q["metodo"] == "POST" and q["percorso"].startswith("/rest/v1/eventi")]
+    prova_vero("i testi si scrivono DOPO gli eventi della rassegna",
+               parziali and eventi_rassegna and min(parziali) > min(eventi_rassegna),
+               "%r contro %r" % (parziali, eventi_rassegna))
+    prova("e a pezzi: con un articolo per invio, due invii", len(parziali), 2)
+
+    # Un rifiuto del server sulla passata dei testi non solleva: si scrive
+    # fra i non riusciti e la corsa finisce.
+    class Rifiuta(cliente.Nuvola):
+        def innesta(self, tabella, righe, su_conflitto, doppioni="unisci"):
+            if tabella == "articoli":
+                raise cliente.ErroreNuvola("POST articoli respinta", 413, "troppo grande")
+            return super().innesta(tabella, righe, su_conflitto, doppioni)
+    testo_buono = riga["ras:testo"]["testo"]
+    riga["ras:muto"]["testo"] = riga["ras:testo"]["testo"] = None
+    rifiuto = {"falliti": [], "eventi": 0}
+    pubblica.testi_dai_pdf(Rifiuta(base=base), pubblica.Orologio(), rifiuto, time.time() + 60)
+    riga["ras:testo"]["testo"] = testo_buono
+    prova_vero("un rifiuto sulla passata dei testi resta fra i non riusciti",
+               any("testi dai PDF" in f and "413" in f for f in rifiuto["falliti"]),
+               repr(rifiuto))
+    prova("e non conta testi che non sono stati scritti", rifiuto.get("testi_da_pdf", 0), 0)
+    riga["ras:muto"]["testo"] = ""
     prova_vero("l'articolo col solo PDF ora ha il testo del PDF",
                FRASE_PDF in (riga["ras:testo"].get("testo") or ""),
                repr((riga["ras:testo"].get("testo") or "")[:120]))

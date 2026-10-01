@@ -76,6 +76,10 @@ BYTE_PER_FILE = 60 * 1024 * 1024
 # primo giorno sono più di cento: ci vogliono due o tre mattine, e nel
 # frattempo la rassegna nuova non aspetta.
 MASSIMO_TESTI_PDF = 60
+# Quanti per invio: dieci testi al tetto (150 000 caratteri) fanno un
+# megabyte e mezzo. Il limite del server sul corpo non è scritto da nessuna
+# parte qui: con invii piccoli un rifiuto costa dieci testi, non la passata.
+PER_INVIO = 10
 
 
 class Orologio:
@@ -627,12 +631,6 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto, zip_biblioteca
     righe_volumi += nuovi_volumi
     eventi += eventi_volumi
 
-    # Il testo degli articoli arrivati col solo PDF. Dopo i manuali perché
-    # costa più tempo, e il tetto di tempo lo ferma prima di loro.
-    con_testo, eventi_testo = testi_dai_pdf(nuvola, orologio, rapporto, scadenza)
-    righe_articoli += con_testo
-    eventi += eventi_testo
-
     rapporto["volumi"] = len(righe_volumi)
 
     # L'ordine conta: prima le proiezioni, poi gli eventi. Se la corsa muore in
@@ -644,6 +642,13 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto, zip_biblioteca
     # non ha bisogno di UPDATE sul registro (strumenti/db/009).
     nuvola.innesta("eventi", eventi, "id", doppioni="ignora")
     rapporto["eventi"] = len(eventi)
+
+    # Il testo degli articoli arrivati col solo PDF: DOPO la rassegna, e per
+    # conto suo. Sono testi lunghi, e un invio troppo grosso respinto qui non
+    # deve poter lasciare la rassegna di oggi con le righe e senza gli eventi
+    # (domani risulterebbe «già in archivio», e sul telefono non arriverebbe
+    # mai).
+    testi_dai_pdf(nuvola, orologio, rapporto, scadenza)
 
 
 def manuali_aperti(percorso_zip, nuvola, orologio, rapporto):
@@ -748,12 +753,23 @@ def testi_dai_pdf(nuvola, orologio, rapporto, scadenza, massimo=MASSIMO_TESTI_PD
     vuoto, senza evento: altrimenti si riproverebbe ogni mattina, e i primi
     della fila terrebbero fermi tutti gli altri.
 
-    Restituisce (righe parziali di `articoli`, eventi).
+    Scrive da sé, `PER_INVIO` articoli alla volta, righe e poi eventi: un
+    invio sta sotto il megabyte e mezzo anche con testi al tetto. Un rifiuto
+    ferma la passata e finisce fra i non riusciti; ciò che è già scritto
+    resta, il resto va alla corsa dopo.
     """
     righe, eventi = [], []
+
+    def invia():
+        nuvola.innesta("articoli", righe, "utente_id,chiave")
+        nuvola.innesta("eventi", eventi, "id", doppioni="ignora")
+        rapporto["testi_da_pdf"] = rapporto.get("testi_da_pdf", 0) + len(eventi)
+        rapporto["eventi"] = rapporto.get("eventi", 0) + len(eventi)
+        del righe[:], eventi[:]
+
     if not estrattore.PDF_LEGGIBILI:
         rapporto["pdf_illeggibili"] = True
-        return righe, eventi
+        return
     volumi = {}
     for r in nuvola.seleziona("biblioteca", "select=codice,pdf_path&order=codice.asc",
                               massimo=20000):
@@ -761,11 +777,12 @@ def testi_dai_pdf(nuvola, orologio, rapporto, scadenza, massimo=MASSIMO_TESTI_PD
         if codice.startswith("RAS-") and r.get("pdf_path"):
             volumi[codice] = r["pdf_path"]
     if not volumi:
-        return righe, eventi
+        return
     senza = nuvola.seleziona("articoli", "select=chiave,titolo,url&testo=is.null&order=id.asc",
                              massimo=20000)
+    tentati = 0
     for a in senza:
-        if len(righe) >= massimo:
+        if tentati >= massimo:
             break
         if time.time() > scadenza:
             rapporto["tempo_scaduto"] = True
@@ -778,6 +795,7 @@ def testi_dai_pdf(nuvola, orologio, rapporto, scadenza, massimo=MASSIMO_TESTI_PD
         except ErroreNuvola as e:
             rapporto["falliti"].append("testo da %s: %s" % (percorso, str(e)[:120]))
             continue
+        tentati += 1
         testo = testo_da_pdf(dati)
         if len(testo) < 400:
             testo = ""
@@ -787,8 +805,17 @@ def testi_dai_pdf(nuvola, orologio, rapporto, scadenza, massimo=MASSIMO_TESTI_PD
                       "testo": testo})
         if testo:
             eventi.append(evento(orologio, "articoli", a["chiave"], "aggiorna", {"testo": testo}))
-            rapporto["testi_da_pdf"] = rapporto.get("testi_da_pdf", 0) + 1
-    return righe, eventi
+        if len(righe) >= PER_INVIO:
+            try:
+                invia()
+            except ErroreNuvola as e:
+                rapporto["falliti"].append("testi dai PDF: %s" % str(e)[:160])
+                return
+    if righe:
+        try:
+            invia()
+        except ErroreNuvola as e:
+            rapporto["falliti"].append("testi dai PDF: %s" % str(e)[:160])
 
 
 def manuali(cartella, nuvola, rapporto):
