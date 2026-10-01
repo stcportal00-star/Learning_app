@@ -1,7 +1,8 @@
 /**
  * I temi seguiti: i progetti che si portano avanti in parallelo. Quale unità
  * e quale passo tocchino a ciascuno lo decide progetti() in lib/percorso.ts;
- * qui si ricorda soltanto la scelta.
+ * qui si ricordano la scelta e, per ogni tema superato, l'ultimo seguito che
+ * ha avuto (una preferenza per la prossima volta, non un vincolo).
  *
  * La scelta sta nel kv-store di questo dispositivo, come i promemoria, e non
  * nel registro degli eventi. L'avanzamento da cui i progetti si calcolano è

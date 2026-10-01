@@ -246,9 +246,11 @@ export type Progetto = {
  * Quando il tema scelto è superato, al suo posto arriva il successivo della
  * stessa area, nell'ordine del piano; se dopo non c'è niente, il primo rimasto
  * indietro nell'area. Il progetto finisce solo quando l'area è tutta superata.
- * Si ricalcola ogni volta dall'avanzamento, senza scrivere niente: un
- * seguito salvato andrebbe tenuto allineato all'avanzamento, e divergerebbe al
- * primo ripasso che fa ricadere un'unità.
+ * Si ricalcola ogni volta dall'avanzamento. Un seguito salvato come vincolo
+ * andrebbe tenuto allineato all'avanzamento, e divergerebbe al primo ripasso
+ * che fa ricadere un'unità; per questo del passato si tiene solo chi aveva
+ * quale seguito (`precedenti`, più sotto), come preferenza che cede quando
+ * l'unità è superata o ripresa dal tema che la segue di suo.
  *
  * Due progetti non finiscono mai sulla stessa unità. Prima si assegnano le
  * unità scelte che hanno ancora qualcosa da fare, poi i seguiti: chi segue SQL
