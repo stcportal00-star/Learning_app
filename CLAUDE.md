@@ -67,6 +67,15 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
    - Gli eventi ricevuti non generano eventi nuovi.
    - `file_locale` è l'UNICA scrittura che di proposito non genera un evento:
      è un percorso di questo telefono e altrove non significa niente.
+   - **I file grossi scendono da soli solo sul wifi, e allora tutti**: PDF
+     della rassegna, manuali, podcast non ancora visti (`lib/nuvola/rete.ts`,
+     expo-network). Sui dati mobili si scambiano solo gli eventi. All'arrivo
+     del wifi parte un giro (`quandoArrivaIlWifi`), e i giri sono uno per
+     volta: chi chiede durante un giro riceve quello.
+   - **Un articolo letto lascia il testo e toglie il PDF** dal telefono
+     (`lib/nuvola/letti.ts`), solo se il testo ha almeno 1000 caratteri; un
+     PDF già letto non si riscarica. Aprire un articolo in Notizie lo segna
+     letto.
    - **Il segnaposto della lettura è l'ora d'arrivo sul server**
      (`creato_a`, meta `nuvola_creato`), mai l'HLC: un evento può arrivare
      con un HLC più vecchio di uno già letto — la conduttura dà gli HLC
@@ -115,6 +124,15 @@ accessibili → `strumenti/nuvola/pubblica.py`, che estrae il testo, deposita i
 PDF nel bucket `biblioteca`, scrive le righe di `percorso.articoli` e
 `percorso.biblioteca` e soprattutto gli **eventi**, che sono ciò che l'app
 legge davvero.
+
+Di un PDF si tiene anche il testo, estratto con `pypdf` (fissato in
+`nuvola.yml`, unica libreria di terze parti della conduttura, facoltativa:
+senza, tutto gira come prima e il rapporto lo scrive). Gli articoli arrivati
+col solo PDF ricevono il testo poco per volta (`testi_dai_pdf`, 60 a corsa)
+con un evento «aggiorna» che porta solo `testo`. I manuali della release
+`biblioteca-…` salgono nel deposito sotto `manuale/BIB-xx.pdf` con un
+«aggiorna» di `pdf_path`, `byte` e `sha256` (`manuali_aperti`): il telefono
+li scarica al primo wifi.
 
 `rassegna.yml` non ha più un cron: questo lo comprende. Condividono il gruppo
 di concorrenza perché toccano lo stesso `stato.tar`.
@@ -506,7 +524,8 @@ Actions fa da PC**: compila, firma, installa su un emulatore, legge logcat.
   dimenticare quello buono. Serve il permesso `REQUEST_INSTALL_PACKAGES` in
   `app.json`: senza, Android rifiuta in silenzio. La firma la verifica il
   sistema, quindi la regola della chiave unica vale anche qui.
-- La biblioteca aperta si scarica con il workflow `biblioteca` (avvio manuale).
+- La biblioteca aperta si scarica con il workflow `biblioteca` (avvio manuale);
+  il pacchetto che produce lo porta nel deposito la conduttura del mattino.
 - I trasporti di sincronizzazione 1 e 2 richiedono moduli nativi propri: non in
   questa fase. Il trasporto 3 passa dal foglio di condivisione e da Quick Share,
   che fra due Android funziona senza internet a livello di sistema operativo.
