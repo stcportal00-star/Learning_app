@@ -1597,6 +1597,103 @@ await scenario("B19 gli eventi salgono anche senza UPDATE sul registro, e un rei
   servitoreInUso = servitore;
 });
 
+// ------------------------------------------------- wifi, cache e PDF letti
+const Rete = await import("../banco/expo-network.mjs");
+const { createHash } = await import("node:crypto");
+/** Il codice del volume con il PDF di un articolo, come in pubblica.py. */
+const volumeDi = (chiave) => `RAS-${createHash("sha1").update(chiave).digest("hex").slice(0, 16)}`;
+const TESTO_LUNGO = "Testo estratto dalla conduttura. ".repeat(60);
+
+/** Un articolo con il suo PDF nel deposito; `fileQui` lo mette già sul telefono. */
+async function articoloConPdf(chiave, { letto = 0, testo = TESTO_LUNGO, fileQui = false } = {}) {
+  const codice = volumeDi(chiave);
+  const db = tab.Db.database();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato, testo)
+     VALUES (?, ?, '2026-10-01T00:00:00Z', ?, 0, ?)`, [chiave, `Articolo ${chiave}`, letto, testo]);
+  let fileLocale = null;
+  if (fileQui) {
+    const f = new FS.File(tab.Sincronia.cartellaVolumi(), `${codice}.pdf`);
+    if (!f.exists) f.create();
+    f.write(Buffer.from("%PDF-1.4 " + chiave));
+    fileLocale = f.uri;
+  }
+  await db.runAsync(
+    `INSERT OR REPLACE INTO biblioteca (id, titolo, origine, formato, pdf_path, file_locale, aggiunto_a)
+     VALUES (?, ?, 'aperta', 'pdf', ?, ?, '2026-10-01T00:00:00Z')`,
+    [codice, `PDF di ${chiave}`, `rassegna/${codice}.pdf`, fileLocale]);
+  FS.rispondi(`${BASE_FINTA}/storage/v1/object/biblioteca/rassegna/${codice}.pdf`, Buffer.from("%PDF-1.4 " + chiave));
+  return codice;
+}
+const fileDi = async (codice) =>
+  (await tab.Db.database().getFirstAsync("SELECT file_locale FROM biblioteca WHERE id = ?", [codice]))?.file_locale ?? null;
+const conFile = (s) => tab.Sincronia.sincronizzaNuvola({ nuvola: new tab.Cliente.Nuvola(BASE_FINTA, CHIAVE_FINTA) });
+
+await scenario("B20 sui dati mobili non si scarica niente da solo; col wifi tutto, non cinque per volta", async () => {
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  await svuotaCoda(tab);
+  const codici = [];
+  for (let i = 0; i < 7; i++) codici.push(await articoloConPdf(`b20-art-${i}`));
+  await tab.Db.database().runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato, url_media, tipo_media)
+     VALUES ('b20-pod', 'Un episodio', '2026-10-01T00:00:00Z', 0, 0, 'https://pod.esempio/b20.mp3', 'audio/mpeg')`);
+  FS.rispondi("https://pod.esempio/b20.mp3", Buffer.from("ID3 audio"));
+
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  let esito = await conFile(s);
+  ok("sui dati mobili lo scambio riesce", esito.riuscito, esito.motivo);
+  uguali("e non scende nessun PDF", [esito.scaricati, (await Promise.all(codici.map(fileDi))).filter(Boolean).length], [0, 0]);
+  ok("e nessun podcast", !(await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b20-pod'")).file_media);
+
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  esito = await conFile(s);
+  ok("col wifi scendono tutti e sette i PDF, non i primi cinque",
+     (await Promise.all(codici.map(fileDi))).every(Boolean), JSON.stringify(esito.scaricati));
+  ok("e il podcast", Boolean((await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b20-pod'")).file_media),
+     esito.motivo);
+  Rete.azzeraRete();
+  servitoreInUso = servitore;
+});
+
+await scenario("B23 all'arrivo del wifi parte un giro, una volta sola per arrivo", async () => {
+  const { quandoArrivaIlWifi } = await import("../../lib/nuvola/rete.ts");
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  let giri = 0;
+  const smetti = quandoArrivaIlWifi(() => giri++);
+  // Lo stato iniziale si legge a parte. setImmediate e non setTimeout: qui
+  // setTimeout è finto ed esegue subito, prima che la lettura finisca.
+  await new Promise((r) => setImmediate(r));
+
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  uguali("dai dati mobili al wifi: un giro", giri, 1);
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI, isInternetReachable: true });
+  uguali("un altro evento sullo stesso wifi non ne fa partire un secondo", giri, 1);
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI, isInternetReachable: false });
+  uguali("wifi agganciato ma senza internet (il portale dell'albergo): ancora niente", giri, 1);
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI, isInternetReachable: true });
+  uguali("internet arriva: il secondo giro", giri, 2);
+  Rete.fissaRete({ type: Rete.NetworkStateType.NONE, isConnected: false });
+  Rete.fissaRete({ type: Rete.NetworkStateType.ETHERNET });
+  uguali("anche il cavo vale come wifi", giri, 3);
+
+  smetti();
+  uguali("chi smette non ascolta più", Rete.quantiAscoltano(), 0);
+  Rete.fissaRete({ type: Rete.NetworkStateType.CELLULAR });
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  uguali("e nessun giro dopo", giri, 3);
+
+  // Già sul wifi all'avvio: il giro lo fa l'avvio dell'app, non l'ascolto.
+  let altri = 0;
+  const smetti2 = quandoArrivaIlWifi(() => altri++);
+  await new Promise((r) => setImmediate(r));
+  Rete.fissaRete({ type: Rete.NetworkStateType.WIFI });
+  uguali("partito già sul wifi, un evento dello stesso wifi non è un arrivo", altri, 0);
+  smetti2();
+  Rete.azzeraRete();
+});
+
 // =========================================================================
 // PARTE C — cliente: tentativi, attese misurate, blocchi, intestazioni
 // =========================================================================

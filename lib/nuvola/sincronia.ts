@@ -28,7 +28,8 @@ import type { EventoSerializzato } from "../sync/pacchetto";
 import { Nuvola, ErroreNuvola } from "./cliente";
 import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
-import { liberaVisti } from "./media";
+import { liberaVisti, scaricaMediaMancanti } from "./media";
+import { suWifi } from "./rete";
 
 /** Quanti eventi per viaggio in invio. Oltre, il corpo diventa scomodo. */
 const PAGINA = 500;
@@ -401,11 +402,21 @@ export async function sincronizzaNuvola(
   // I file vengono DOPO, e fuori da ogni transazione: un PDF da venti mega
   // tenuto dentro una transazione SQLite bloccherebbe ogni altra scrittura
   // per tutto lo scaricamento.
-  if (opzioni.scaricaVolumi !== false) {
+  //
+  // Solo sul wifi, e allora TUTTO: i PDF che mancano, i manuali, i podcast non
+  // ancora visti. Sui dati mobili niente: in viaggio si pagano a megabyte, e
+  // un mese di rassegna sono centinaia di megabyte (lib/nuvola/rete.ts).
+  if (opzioni.scaricaVolumi !== false && (await suWifi())) {
     try {
-      esito.scaricati = await scaricaVolumiMancanti(n);
+      esito.scaricati = await scaricaVolumiMancanti(n, Infinity);
     } catch (e) {
       esito.motivo += ` (i testi non si sono scaricati: ${String(e)})`;
+    }
+    try {
+      const podcast = await scaricaMediaMancanti();
+      if (podcast) esito.motivo += ` ${podcast} podcast scaricati.`;
+    } catch {
+      // Un podcast che non scende resta «da scaricare», e ci si riprova.
     }
     try {
       // Nella stessa occasione partono i file aggiunti a mano mentre era
@@ -486,12 +497,15 @@ export async function scaricaVolume(volumeId: string, nuvola?: Nuvola): Promise<
 }
 
 export async function scaricaVolumiMancanti(n: Nuvola, massimo = 5): Promise<number> {
-  const mancanti = await database().getAllAsync<{ id: string }>(
-    `SELECT id FROM biblioteca
-     WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')
-     ORDER BY aggiunto_a DESC LIMIT ?`,
-    [massimo]
-  );
+  // Il limite si applica qui e non in SQL: col wifi è Infinity, che SQLite
+  // non accetta come LIMIT.
+  const mancanti = (
+    await database().getAllAsync<{ id: string }>(
+      `SELECT id FROM biblioteca
+       WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')
+       ORDER BY aggiunto_a DESC`
+    )
+  ).slice(0, massimo);
   let fatti = 0;
   for (const v of mancanti) {
     try {
