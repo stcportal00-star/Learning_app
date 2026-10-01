@@ -289,11 +289,19 @@ export function progetti(unita: Unita[], seguiti: string[], precedenti: Record<s
     const ieri = unita.find((u) => u.tema.slug === precedenti[s]);
     if (ieri && area && ieri.tema.pista === area && libera(ieri)) { assegnate.set(s, ieri); presi.add(ieri.tema.slug); }
   }
+  // Le unità promesse a un tema tornato sulla sua (una ricaduta: una scheda
+  // «Di nuovo» lo riporta sotto soglia): gli altri le prendono solo se non
+  // resta altro, così quando lo risupera ritrova il seguito su cui lavorava.
+  const riservate = new Set(scelti
+    .filter(({ s, i }) => assegnate.get(s) === unita[i] && precedenti[s])
+    .map(({ s }) => precedenti[s]));
   for (const { s, i } of [...scelti].sort((a, b) => a.i - b.i)) {
     if (assegnate.has(s)) continue;
     const area = unita[i].tema.pista;
     const nellArea = (u: Unita) => Boolean(area) && u.tema.pista === area && libera(u);
-    const seguito = unita.slice(i + 1).find(nellArea) ?? unita.slice(0, i).find(nellArea);
+    const fuoriRiserva = (u: Unita) => nellArea(u) && !riservate.has(u.tema.slug);
+    const cerca = (f: (u: Unita) => boolean) => unita.slice(i + 1).find(f) ?? unita.slice(0, i).find(f);
+    const seguito = cerca(fuoriRiserva) ?? cerca(nellArea);
     if (seguito) { assegnate.set(s, seguito); presi.add(seguito.tema.slug); }
   }
 
@@ -307,9 +315,21 @@ export function progetti(unita: Unita[], seguiti: string[], precedenti: Record<s
   });
 }
 
-/** Il seguito di ogni tema superato, da ricordare per la prossima volta: vedi progetti(). */
-export function subentrate(pr: Progetto[]): Record<string, string> {
-  return Object.fromEntries(pr.filter((p) => p.subentrata && p.passo).map((p) => [p.seguito, p.unita.tema.slug]));
+/**
+ * Il seguito di ogni tema superato, da ricordare per la prossima volta: vedi
+ * progetti(). Un tema tornato sulla sua unità (una ricaduta) tiene il seguito
+ * di prima: dimenticarlo al primo ritorno su Oggi lo lasciava libero, un altro
+ * tema superato se lo prendeva, e quando la ricaduta rientrava l'unità a metà
+ * cambiava progetto.
+ */
+export function subentrate(pr: Progetto[], precedenti: Record<string, string> = {}): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const p of pr) {
+    if (!p.passo) continue;
+    if (p.subentrata) m[p.seguito] = p.unita.tema.slug;
+    else if (precedenti[p.seguito]) m[p.seguito] = precedenti[p.seguito];
+  }
+  return m;
 }
 
 /** Una cosa da fare adesso: il passo di un progetto, o quello del piano (`progetto` null). */

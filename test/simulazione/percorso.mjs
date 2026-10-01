@@ -216,6 +216,32 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
   }
 }
 
+// --- una ricaduta non fa perdere il seguito ricordato
+// Quattro temi di un'area. Seguiti A1 e A2: A2 superato va su A3; poi A2
+// ricade sotto soglia (una scheda «Di nuovo»), A1 viene superato, e infine A2
+// è di nuovo superato. A3, su cui A2 lavorava, deve restare ad A2.
+{
+  const temi = ["a1", "a2", "a3", "a4"].map((s, k) => ({ slug: s, nome: s.toUpperCase(), trimestre: `T${k + 1}`, pista: "x" }));
+  const ordine = temi.map((t) => t.slug);
+  const fatto = M({ esercizi: 2, risolti: 2 });
+  const aperto = M({ esercizi: 2 });
+  const seguiti = ["a1", "a2"];
+  const passo = (mat, prec) => {
+    const pr = P.progetti(P.costruisciPercorso(temi, { a1: aperto, a2: aperto, a3: aperto, a4: aperto, ...mat }, ordine), seguiti, prec);
+    return { pr, ricordo: P.subentrate(pr, prec), vista: pr.map((x) => [x.seguito, x.unita.tema.slug]) };
+  };
+  const g1 = passo({ a2: fatto }, {});
+  uguale("P8b giorno 1: A2 superato continua su A3", g1.vista, [["a1", "a1"], ["a2", "a3"]]);
+  const g2 = passo({}, g1.ricordo);
+  uguale("P8b giorno 2: A2 ricade e torna su sé stesso, ma il seguito resta ricordato", [g2.vista, g2.ricordo], [[["a1", "a1"], ["a2", "a2"]], { a2: "a3" }]);
+  const g3 = passo({ a1: fatto }, g2.ricordo);
+  uguale("P8b giorno 3: A1 superato non prende A3, promesso ad A2, ma A4", g3.vista, [["a1", "a4"], ["a2", "a2"]]);
+  const g4 = passo({ a1: fatto, a2: fatto }, g3.ricordo);
+  uguale("P8b giorno 4: A2 risuperato ritrova A3, A1 resta su A4", g4.vista, [["a1", "a4"], ["a2", "a3"]]);
+  uguale("P8b se non resta altro, l'unità promessa si dà lo stesso",
+    passo({ a1: fatto, a4: fatto }, { a2: "a3" }).vista, [["a1", "a3"], ["a2", "a2"]]);
+}
+
 // --- i progetti in parallelo
 // Temi scelti fuori dall'ordine del piano; superato uno, il successivo della
 // stessa area; mai due progetti sulla stessa unità.
@@ -605,7 +631,7 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S14 una lettura del fuoco partita prima di «Segui» non rimette l'elenco di prima",
     un.includes("if (giro.current === g) setSeguiti(seg);") && un.includes("giro.current += 1;") && !un.includes("setTuttiProgetti("));
   ok("S14 Oggi e Studio ricordano chi ha quale seguito, e tutte le schermate ne tengono conto",
-    pp.includes("void ricordaSubentrate(subentrate(tutti));") && pp.includes("progetti(unita, seguiti, precedenti)") &&
+    pp.includes("void ricordaSubentrate(subentrate(tutti, precedenti));") && pp.includes("progetti(unita, seguiti, precedenti)") &&
     un.includes("leggiSubentrate()]);") && un.includes("setPrecedenti(prec);"));
   ok("S14 su un'unità subentrata si nomina il tema scelto che la tiene, e «Smetti» toglie quello",
     un.includes("`«${nomeDi(progettoQui.seguito)}» è superato: il progetto continua qui.`") && un.includes("Smetti di seguirlo"));

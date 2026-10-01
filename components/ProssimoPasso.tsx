@@ -62,7 +62,7 @@ export default function ProssimoPasso() {
       const tutti = progetti(unita, seguiti, precedenti);
       // Oggi e Studio sono dove i progetti si guardano: qui si ricorda chi ha
       // quale seguito, perché domani resti suo.
-      void ricordaSubentrate(subentrate(tutti));
+      void ricordaSubentrate(subentrate(tutti, precedenti));
       const voci = await Promise.all(daFare(unita, seguiti, precedenti).map(async (v) => ({
         unita: v.unita,
         passo: v.passo,
