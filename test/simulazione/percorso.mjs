@@ -570,6 +570,9 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   const { existsSync } = await import("node:fs");
   ok("S15 Profilo resta una rotta (/profilo, anche per il collegamento del test di fumo), fuori dalle schede",
     existsSync(join(RADICE_PROGETTO, "app/profilo.tsx")) && !existsSync(join(RADICE_PROGETTO, "app/(tabs)/profilo.tsx")));
+  ok("S15 nessun testo a schermo nomina più la schermata Rassegna, che non c'è",
+    !sorgente("app/articolo.tsx").includes("‹ Rassegna") &&
+    P.descriviPasso({ tipo: "rassegna", fatto: 0, totale: 3, soglia: 0, completo: false, conta: false, eseguibile: true }).dettaglio.includes("nelle Notizie"));
   ok("S15 Profilo aperto ad app chiusa, senza niente sotto, torna a Oggi",
     sorgente("app/profilo.tsx").includes('router.canGoBack() ? router.back() : router.replace("/oggi")'));
   ok("S15 da Oggi si aprono Profilo e le Notizie",

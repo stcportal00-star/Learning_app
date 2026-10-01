@@ -338,7 +338,7 @@ export function descriviPasso(p: Passo): { titolo: string; dettaglio: string } {
     case "rassegna":
       return {
         titolo: "Resta aggiornato",
-        dettaglio: `${p.totale} articoli del tema da leggere nella rassegna.`,
+        dettaglio: `${p.totale} articoli del tema da leggere nelle Notizie.`,
       };
   }
 }

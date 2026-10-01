@@ -220,7 +220,7 @@ export default function Unita() {
       </View>
       <Text style={{ fontSize: 13, opacity: 0.65, lineHeight: 19 }}>
         Si supera con l'80% degli esercizi e delle schede e uno scenario svolto, dove ci sono.
-        Leggere e la rassegna non bloccano: si fanno quando il materiale è sul telefono.
+        Leggere e le notizie non bloccano: si fanno quando il materiale è sul telefono.
       </Text>
 
       {u.passi.map((p, n) => {

@@ -209,7 +209,7 @@ export default function SchedaArticolo() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48, gap: 12 }}>
       <Pressable onPress={() => router.back()}>
-        <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Rassegna</Text>
+        <Text style={{ fontSize: 13, opacity: 0.6 }}>‹ Notizie</Text>
       </Pressable>
 
       <Text style={{ fontSize: 21, fontWeight: "600", lineHeight: 28 }}>{a.titolo}</Text>
