@@ -222,6 +222,38 @@ uguale("D0 un articolo datato nel futuro o senza data non scavalca la notizia pi
 uguale("D0 e il giorno è quello dell'arrivo: «oggi», non un'ora",
   N.quando(N.dataDi({ pubblicato_a: "2026-12-01T00:00:00+00:00", raccolto_a: corsa }), new Date(2026, 9, 1, 22, 0)), "oggi");
 
+// Due corse con la stessa data d'uscita: prima la corsa più recente, e dentro
+// ogni corsa la più rilevante.
+for (const [id, raccolto, hlc] of [["ep-a1", "2026-09-24T14:00:00+00:00", "000000000100-0000-x"],
+  ["ep-a2", "2026-09-24T14:00:00+00:00", "000000000101-0000-x"], ["ep-b1", "2026-09-25T14:00:00+00:00", "000000000200-0000-x"],
+  ["ep-b2", "2026-09-25T14:00:00+00:00", "000000000201-0000-x"]]) {
+  await art(id, "epidemiologia", { pubblicato_a: "2026-09-24T00:00:00+00:00", raccolto_a: raccolto, hlc });
+}
+uguale("D0 stessa data, due corse: la più recente prima, e in ciascuna per rilevanza",
+  (await N.leggiNotizie({ temi: ["epidemiologia"], soloDaLeggere: true, limite: 9 })).map((x) => x.id),
+  ["ep-b1", "ep-b2", "ep-a1", "ep-a2"]);
+
+// Attraverso il registro, come sul telefono: la rilevanza è quella della
+// nascita, e «Segna da leggere» o «Salva» non spostano l'articolo.
+{
+  const Art = await import("../../lib/nuvola/articoli.ts");
+  const nasce = (id, titolo) => DB.registra("articoli", id, "crea",
+    { titolo, tema_slug: "modellazione", pubblicato_a: "2026-09-29T00:00:00+00:00", raccolto_a: "2026-09-29T08:00:00+00:00" },
+    async (dd, hlc) => {
+      await dd.runAsync(
+        `INSERT INTO articoli (id, titolo, tema_slug, pubblicato_a, raccolto_a, letto, salvato, hlc) VALUES (?,?,?,?,?,0,0,?)`,
+        [id, titolo, "modellazione", "2026-09-29T00:00:00+00:00", "2026-09-29T08:00:00+00:00", hlc]);
+    });
+  await nasce("mo-piu", "Z, la più rilevante");
+  await nasce("mo-meno", "A, meno rilevante");
+  const ordine = async () => (await N.leggiNotizie({ temi: ["modellazione"], soloDaLeggere: true, limite: 9 })).map((x) => x.id);
+  uguale("D0 nate in ordine di rilevanza", await ordine(), ["mo-piu", "mo-meno"]);
+  await Art.segnaLetto("mo-piu", true);
+  await Art.segnaLetto("mo-piu", false);
+  await Art.segnaSalvato("mo-piu", true);
+  uguale("D0 letta, rimessa da leggere e salvata, la più rilevante resta prima", await ordine(), ["mo-piu", "mo-meno"]);
+}
+
 const gov = N.categorie().find((c) => c.chiave === "governance").temi;
 {
   const r = await N.leggiNotizie({ temi: gov, soloDaLeggere: true, limite: 50 });
@@ -234,8 +266,10 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
     ["3 giorni fa", "Questa settimana"]);
   ok("D1 il testo non viaggia nell'elenco", r.every((x) => !("testo" in x)));
   const tutti = await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 50 });
-  uguale("D2 «Tutti» comprende i già letti, sempre per data d'uscita", tutti.map((x) => x.id), ["g3", "g2", "g1", "cr"]);
-  uguale("D2 il limite vale", (await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 1 })).map((x) => x.id), ["g3"]);
+  // g2 e g3 escono lo stesso giorno, nella stessa corsa: conta il giorno, non
+  // l'ora (le date vere sono nude), e fra loro decide la rilevanza.
+  uguale("D2 «Tutti» comprende i già letti, sempre per giorno d'uscita", tutti.map((x) => x.id), ["g2", "g3", "g1", "cr"]);
+  uguale("D2 il limite vale", (await N.leggiNotizie({ temi: gov, soloDaLeggere: false, limite: 1 })).map((x) => x.id), ["g2"]);
   uguale("D2 un elenco di temi vuoto non trova niente", await N.leggiNotizie({ temi: [], soloDaLeggere: false, limite: 9 }), []);
 }
 {
@@ -243,17 +277,17 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   uguale("D3 esplorazione: lo slug dell'esplorazione, i temi ignoti e gli articoli senza tema",
     fuori.map((x) => x.id).sort(), ["e1", "n1", "x1"]);
   const salvati = await N.leggiNotizie({ temi: null, soloDaLeggere: false, soloSalvati: true, limite: 50 });
-  uguale("D4 salvati: letti o no", salvati.map((x) => x.id), ["n1"]);
+  uguale("D4 salvati: letti o no", salvati.map((x) => x.id), ["n1", "mo-piu"]);
 }
 {
   const conti = await N.contaPerTema();
   const daLeggere = N.contaPerCategoria(conti, true);
   const tutti = N.contaPerCategoria(conti, false);
-  uguale("D5 i numeri della barra, da leggere: governance 3, dati 4, hardware 1, esplorazione 2, kpi 2",
-    ["governance", "dati", "hardware", "esplorazione", "kpi"].map((a) => daLeggere.get(a) ?? 0), [3, 4, 1, 2, 2]);
+  uguale("D5 i numeri della barra, da leggere: governance 3, dati 10, hardware 1, esplorazione 2, kpi 2",
+    ["governance", "dati", "hardware", "esplorazione", "kpi"].map((a) => daLeggere.get(a) ?? 0), [3, 10, 1, 2, 2]);
   uguale("D5 e in tutto: governance 4, esplorazione 3", ["governance", "esplorazione"].map((a) => tutti.get(a) ?? 0), [4, 3]);
   const somma = [...tutti.values()].reduce((s, n) => s + n, 0);
-  uguale("D5 nessun articolo si perde fra le categorie", somma, 14);
+  uguale("D5 nessun articolo si perde fra le categorie", somma, 20);
 }
 
 // ============================================================ SORGENTI

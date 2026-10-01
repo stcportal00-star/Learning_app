@@ -278,17 +278,31 @@ const COLONNE = `id, titolo, autori, fonte, abstract, tema_slug, pubblicato_a, r
 /**
  * La stessa data di dataDi(), in SQL. Per data d'uscita e non d'arrivo: la
  * conduttura dà a tutti gli articoli di una corsa lo stesso raccolto_a.
- *
- * A parità di data, l'ordine della conduttura: le date d'uscita sono quasi
- * tutte nude, e in un giorno ne cadono decine. pubblica.py scrive gli eventi
- * in ordine di rilevanza, e l'HLC di ciascuno cresce: per `hlc` crescente la
- * notizia principale di un'area è la più rilevante, non la prima in ordine
- * alfabetico. Un articolo segnato letto prende un HLC nuovo e scende in fondo
- * al suo giorno, dove un letto può stare.
  */
 const DATA = `CASE WHEN pubblicato_a IS NOT NULL AND pubblicato_a <= raccolto_a THEN pubblicato_a
   ELSE substr(raccolto_a, 1, 10) || 'T00:00:00+00:00' END`;
-const PER_DATA = `ORDER BY ${DATA} DESC, hlc, titolo`;
+/**
+ * L'HLC con cui l'articolo è nato: quello del suo primo evento. pubblica.py
+ * scrive gli eventi di una corsa in ordine di rilevanza, con un HLC che
+ * cresce, e quello della nascita non lo cambia più nessuno. Il `hlc` della
+ * riga invece è dell'ultima scrittura: «Segna da leggere», «Salva» o lo
+ * stesso evento arrivato dal tablet gliene danno uno nuovo, e un articolo
+ * tenuto da parte finiva in fondo al suo giorno, fuori da In primo piano. La
+ * ricerca usa eventi_entita_idx. Senza eventi (nelle prove, o un articolo
+ * scritto a mano) vale il `hlc` della riga.
+ */
+const NASCITA = `COALESCE((SELECT min(e.hlc) FROM eventi e
+  WHERE e.entita = 'articoli' AND e.entita_id = articoli.id), hlc)`;
+
+/**
+ * Il giorno, poi la corsa, poi la rilevanza dentro la corsa. Le date d'uscita
+ * sono quasi tutte nude, e in un giorno ne cadono decine, anche di corse
+ * diverse. La rilevanza si confronta solo dentro una corsa (gli HLC di due
+ * corse non dicono niente l'uno dell'altro, e sul telefono il punteggio non
+ * c'è): a parità di giorno viene prima la corsa più recente, e dentro la corsa
+ * la più rilevante, non la prima in ordine alfabetico.
+ */
+const PER_DATA = `ORDER BY substr(${DATA}, 1, 10) DESC, raccolto_a DESC, ${NASCITA}, titolo`;
 
 export type Filtro = {
   /** null: ogni tema. Un elenco vuoto non trova niente. */
