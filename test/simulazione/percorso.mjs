@@ -574,6 +574,8 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
     sorgente("app/(tabs)/oggi.tsx").includes('router.push("/profilo")') && sorgente("app/(tabs)/oggi.tsx").includes('router.push("/notizie?categoria=titoli")'));
   ok("S15 dall'unità alle Notizie si torna alla scheda, non se ne impila una seconda",
     un.includes('if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d);'));
+  ok("S14 seguire non rilegge la schermata dal fuoco, e non abbassa la guardia dello scenario",
+    un.includes("  }, [slug]));") && !un.includes("versione") && un.includes("setTuttiProgetti(progetti(tutte, seg));"));
   ok("S14 dall'unità si segue e si smette di seguire",
     un.includes("cambiaSeguito(() => segui(slug))") && un.includes("cambiaSeguito(() => smettiDiSeguire(progettoQui.seguito))"));
 }

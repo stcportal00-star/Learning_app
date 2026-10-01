@@ -40,7 +40,7 @@ export default function Unita() {
   const [scenari, setScenari] = useState<ScenarioDiUnita[]>([]);
   const [seguiti, setSeguiti] = useState<string[]>([]);
   const [tuttiProgetti, setTuttiProgetti] = useState<Progetto[]>([]);
-  const [versione, setVersione] = useState(0);
+  const [tutte, setTutte] = useState<UnitaPercorso[]>([]);
   const inCreazione = useRef(false);
   const navigation = useNavigation();
 
@@ -48,19 +48,27 @@ export default function Unita() {
     let vivo = true;
     inCreazione.current = false;
     (async () => {
-      const [tutte, v, s, seg] = await Promise.all([
+      const [percorso, v, s, seg] = await Promise.all([
         leggiPercorso(), leggiVolumi(slug), leggiScenari(slug), leggiSeguiti()]);
       if (!vivo) return;
-      const x = tutte.find((t) => t.tema.slug === slug) ?? null;
+      const x = percorso.find((t) => t.tema.slug === slug) ?? null;
       setU(x); setTrovata(Boolean(x)); setVolumi(v); setScenari(s);
-      setSeguiti(seg); setTuttiProgetti(progetti(tutte, seg));
+      setTutte(percorso); setSeguiti(seg); setTuttiProgetti(progetti(percorso, seg));
     })();
     return () => { vivo = false; };
-  }, [slug, versione]));
+  }, [slug]));
 
-  async function cambiaSeguito(azione: () => Promise<unknown>) {
-    await azione();
-    setVersione((n) => n + 1);
+  /**
+   * Seguire non rilegge la schermata: ricalcola i progetti dall'elenco nuovo.
+   * La rilettura sta nell'effetto del fuoco, che abbassa anche la guardia di
+   * svolgi(); rileggere da lì a ogni «Segui» la abbassava mentre una nota di
+   * scenario era ancora in coda dietro una sincronizzazione, e un secondo
+   * «Svolgi in Note» ne creava una seconda.
+   */
+  async function cambiaSeguito(azione: () => Promise<string[]>) {
+    const seg = await azione();
+    setSeguiti(seg);
+    setTuttiProgetti(progetti(tutte, seg));
   }
 
   /**
