@@ -248,8 +248,12 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
 // La schermata non gira sul banco: si guarda che la forma giusta resti.
 {
   const s = readFileSync(join(RADICE_PROGETTO, "app/(tabs)/notizie.tsx"), "utf8");
-  ok("S1 il ?tema= dell'unità si legge a ogni arrivo e si consuma",
-    s.includes("router.setParams({ tema: undefined } as never);") && s.includes("}, [temaChiesto]);"));
+  ok("S1 il ?tema= dell'unità e il ?categoria= di Oggi si leggono a ogni arrivo e si consumano",
+    s.includes("router.setParams({ tema: undefined, categoria: undefined } as never);") &&
+    s.includes("}, [temaChiesto, categoriaChiesta]);"));
+  const oggi = readFileSync(join(RADICE_PROGETTO, "app/(tabs)/oggi.tsx"), "utf8");
+  ok("S8 il riquadro di Oggi, che conta tutti i non letti, apre In primo piano e non l'ultima vista lasciata",
+    oggi.includes('router.push("/notizie?categoria=titoli")') && s.includes("setSoloDaLeggere(true);"));
   ok("S1 il tema scelto resta visibile fra i filtri anche a zero", s.includes(".filter((x) => x.n > 0 || x.t === tema)"));
   ok("S1 si rilegge a ogni ritorno sulla scheda, per sapere che cosa si è letto",
     s.includes("useFocusEffect(useCallback(() => {") && s.includes("}, [vista, categoria, tema, soloDaLeggere, quante]));"));

@@ -53,19 +53,29 @@ export default function Notizie() {
   const [perTe, setPerTe] = useState<string[]>([]);
   const [adesso, setAdesso] = useState(() => new Date());
 
-  // Dall'unità si arriva con ?tema=: si apre l'area del tema, filtrata su di
-  // lui. La scheda può essere già montata, quindi il parametro si legge a
-  // ogni arrivo e poi si consuma: un ritorno alla scheda non deve rimettere
-  // un filtro che si era tolto.
-  const { tema: temaChiesto } = useLocalSearchParams<{ tema?: string }>();
+  // Si arriva con una vista chiesta: dall'unità ?tema= (l'area del tema,
+  // filtrata su di lui), da Oggi ?categoria= (il riquadro conta tutti i non
+  // letti, e deve aprire una vista che li mostri, non quella in cui si era
+  // lasciata la scheda). La scheda resta montata, quindi i parametri si
+  // leggono a ogni arrivo e poi si consumano: un ritorno alla scheda non deve
+  // rimettere un filtro che si era tolto.
+  const { tema: temaChiesto, categoria: categoriaChiesta } =
+    useLocalSearchParams<{ tema?: string; categoria?: string }>();
   useEffect(() => {
-    if (!temaChiesto) return;
-    const t = String(temaChiesto);
-    const area = areaDelTema(t);
-    setCategoria(area);
-    setTema(area === ESPLORAZIONE ? null : t);
-    router.setParams({ tema: undefined } as never);
-  }, [temaChiesto]);
+    if (temaChiesto) {
+      const t = String(temaChiesto);
+      const area = areaDelTema(t);
+      setCategoria(area);
+      setTema(area === ESPLORAZIONE ? null : t);
+    } else if (categoriaChiesta && CATEGORIE.some((c) => c.chiave === categoriaChiesta)) {
+      setCategoria(String(categoriaChiesta));
+      setTema(null);
+      setSoloDaLeggere(true);
+    } else {
+      return;
+    }
+    router.setParams({ tema: undefined, categoria: undefined } as never);
+  }, [temaChiesto, categoriaChiesta]);
 
   // La vista che si guarda: cambia con la categoria, il tema e «Da leggere»,
   // non con un ritorno alla scheda.

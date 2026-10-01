@@ -88,7 +88,7 @@ export default function Oggi() {
         prima cosa che cambia da un giorno all'altro, e l'unica che arriva da
         fuori mentre il telefono era spento.
       */}
-      <Pressable onPress={() => router.push("/notizie")}
+      <Pressable onPress={() => router.push("/notizie?categoria=titoli")}
         style={{ padding: 13, borderRadius: 11, borderWidth: 1,
                  borderColor: novita.daLeggere ? C.verde : C.bordo,
                  backgroundColor: novita.daLeggere ? C.verdeFondo : "transparent" }}>

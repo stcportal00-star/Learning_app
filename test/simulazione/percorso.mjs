@@ -545,7 +545,7 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S15 Profilo resta una rotta (/profilo, anche per il collegamento del test di fumo), fuori dalle schede",
     existsSync(join(RADICE_PROGETTO, "app/profilo.tsx")) && !existsSync(join(RADICE_PROGETTO, "app/(tabs)/profilo.tsx")));
   ok("S15 da Oggi si aprono Profilo e le Notizie",
-    sorgente("app/(tabs)/oggi.tsx").includes('router.push("/profilo")') && sorgente("app/(tabs)/oggi.tsx").includes('router.push("/notizie")'));
+    sorgente("app/(tabs)/oggi.tsx").includes('router.push("/profilo")') && sorgente("app/(tabs)/oggi.tsx").includes('router.push("/notizie?categoria=titoli")'));
   ok("S15 dall'unità alle Notizie si torna alla scheda, non se ne impila una seconda",
     un.includes('if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d);'));
   ok("S14 dall'unità si segue e si smette di seguire",
