@@ -92,7 +92,10 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
      rileggere.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
-     schema `percorso`, legate a un identificativo utente fisso.
+     schema `percorso`, legate a un identificativo utente fisso. Chi ha la
+     chiave può scrivere e leggere il registro, ma non cancellarlo: DELETE
+     su `percorso.eventi` non è concesso (`strumenti/db/008`). Un evento si
+     annulla con un evento «elimina», anche nelle prove.
 
 ## La conduttura quotidiana
 

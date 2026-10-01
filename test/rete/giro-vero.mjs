@@ -19,7 +19,9 @@
  * telefono la rassegna raccolta stanotte, e l'unico modo di provarla è farla.
  *
  * Non fa parte di `npm run verifica`: quella deve restare senza rete. Gira in
- * CI, dove la rete c'è, e lascia l'archivio come l'ha trovato.
+ * CI, dove la rete c'è. La nota di prova se ne va con un evento «elimina»:
+ * dal registro remoto la chiave pubblica non cancella (migrazione 008), e
+ * sui dispositivi arrivano tutti e due gli eventi, che si annullano.
  *
  *   node --import ./test/banco/carica.mjs test/rete/giro-vero.mjs
  */
@@ -86,7 +88,11 @@ const Sincronia = await importaApp("lib/nuvola/sincronia.ts");
 
 const nuvola = new Cliente.Nuvola();
 
-/** Pulizia: via ogni riga che porta il marchio di questa corsa. */
+/**
+ * Pulizia delle tabelle che si possono pulire. `eventi` no: da lì la chiave
+ * pubblica non cancella più (strumenti/db/008), e la nota di prova se ne va
+ * con lapide().
+ */
 async function ripulisci() {
   const intestazioni = {
     apikey: Cliente.NUVOLA_CHIAVE,
@@ -94,7 +100,6 @@ async function ripulisci() {
     "Content-Profile": Cliente.SCHEMA,
   };
   for (const [tabella, filtro] of [
-    ["eventi", `entita_id=like.${MARCHIO}*`],
     ["articoli", `chiave=like.${MARCHIO}*`],
   ]) {
     try {
@@ -104,6 +109,31 @@ async function ripulisci() {
     } catch { /* la pulizia non deve poter far fallire la prova */ }
   }
 }
+
+/**
+ * Senza questa, la nota di prova resterebbe nel registro remoto e la
+ * sincronizzazione la porterebbe fra le note dei due dispositivi. Si annulla
+ * come si annulla ogni cosa nel registro: con un evento «elimina», che dopo
+ * il «crea» vince per HLC. Rossa se non arriva su: meglio una CI rossa che una
+ * nota estranea sul telefono.
+ */
+async function lapide(id) {
+  try {
+    await Db.registra("note", id, "elimina", {}, async (d) => {
+      await d.runAsync("DELETE FROM note WHERE id = ?", [id]);
+    });
+    const su = await Sincronia.sincronizzaNuvola({ scaricaVolumi: false });
+    const remoti = await nuvola.seleziona("eventi",
+      `select=tipo&entita_id=eq.${encodeURIComponent(id)}`);
+    ok("la nota di prova se ne va con un evento «elimina» nel registro remoto",
+       su.riuscito && remoti.some((r) => r.tipo === "elimina"),
+       `${su.motivo} · ${JSON.stringify(remoti)}`);
+  } catch (e) {
+    ok("la nota di prova se ne va con un evento «elimina» nel registro remoto", false, String(e));
+  }
+}
+
+let notaSalita = null;
 
 try {
   console.log(`Giro vero contro ${Cliente.NUVOLA_BASE}`);
@@ -135,6 +165,9 @@ try {
 
   // ------------------------------------------------------------------ 2. manda
   const salita = await Sincronia.sincronizzaNuvola({ scaricaVolumi: false });
+  // Da qui la nota può essere sul server, anche se lo scambio dice di no: la
+  // lapide va mandata comunque.
+  notaSalita = idNota;
   ok("lo scambio riesce", salita.riuscito, salita.motivo);
   ok("e ha mandato almeno il nostro evento", salita.inviati >= 1, String(salita.inviati));
 
@@ -194,6 +227,7 @@ try {
         apikey: Cliente.NUVOLA_CHIAVE, Authorization: `Bearer ${Cliente.NUVOLA_CHIAVE}` } });
   }
 } finally {
+  if (notaSalita) await lapide(notaSalita);
   await ripulisci();
   rmSync(CARTELLA, { recursive: true, force: true });
 }
