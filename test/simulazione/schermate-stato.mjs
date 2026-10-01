@@ -2794,6 +2794,11 @@ ancora("LET attesa prima di salvare", "app/lettore.tsx", 'if (id !== "prova") sa
 ancora("LET pulizia del timer", "app/lettore.tsx", "return () => { if (salvataggio.current) clearTimeout(salvataggio.current); };");
 ancora("LET messaggio non JSON ignorato", "app/lettore.tsx", "try { m = JSON.parse(e.nativeEvent.data) as Messaggio; } catch { return; }");
 ancora("LET traccia in logcat", "app/lettore.tsx", 'console.error("lettore:", m.messaggio);');
+ancora("LET processo chiuso", "app/lettore.tsx", "onRenderProcessGone={() => setErrore(PROCESSO_CHIUSO)}");
+ancora("LET messaggio del processo chiuso", "app/lettore.tsx", '"Il lettore si è chiuso: il PDF ha chiesto più memoria di quella disponibile. " + "Aprilo con il visore del sistema, oppure torna indietro e riaprilo."');
+const PROCESSO_CHIUSO =
+  "Il lettore si è chiuso: il PDF ha chiesto più memoria di quella disponibile. " +
+  "Aprilo con il visore del sistema, oppure torna indietro e riaprilo.";
 
 /** Copia della macchina a stati di app/lettore.tsx. */
 function ModelloLettore(p) {
@@ -2877,6 +2882,7 @@ function ModelloLettore(p) {
     iniezione: `window.PERCORSO = ${JSON.stringify({ pdf, pagina })}; true;`,
     suMessaggio,
     suErroreWebView: (descrizione) => setErrore(descrizione),
+    suProcessoChiuso: () => setErrore(PROCESSO_CHIUSO),
   };
 }
 
@@ -2973,6 +2979,13 @@ difetto("LET-05", "K24 se la WebView non invia ne' 'pronto' ne' 'errore' non sca
 await tocca(lettoreMuto, () => lettoreMuto.schermo.suErroreWebView("net::ERR_ACCESS_DENIED"));
 ok("K25 onError della WebView porta allo stesso stato di errore, con la descrizione nativa", lettoreMuto.schermo.stato === "errore" && lettoreMuto.schermo.testo === "net::ERR_ACCESS_DENIED");
 lettoreMuto.smonta();
+
+// --- il processo che disegna chiuso da Android: prima schermo bianco, ora
+// il riquadro d'errore con il visore del sistema.
+const lettoreSenzaMemoria = await monta("LettoreSenzaMemoria", ModelloLettore, { ...ambienteLettore, id: volumeConFile.id });
+await tocca(lettoreSenzaMemoria, () => lettoreSenzaMemoria.schermo.suProcessoChiuso());
+corretto("LET-06", "K25b se Android chiude il processo del lettore si vede il messaggio, con il ripiego del visore del sistema", lettoreSenzaMemoria.schermo.stato === "errore" && lettoreSenzaMemoria.schermo.testo === PROCESSO_CHIUSO && lettoreSenzaMemoria.schermo.ripiegoVisore === true, JSON.stringify(lettoreSenzaMemoria.schermo.testo));
+lettoreSenzaMemoria.smonta();
 
 // --- LET-02: id assente, inesistente, ripetuto
 const lettoreSenzaId = await monta("LettoreSenzaId", ModelloLettore, { ...ambienteLettore, id: undefined });
