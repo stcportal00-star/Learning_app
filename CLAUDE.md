@@ -71,10 +71,13 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
      (`creato_a`, meta `nuvola_creato`), mai l'HLC: un evento può arrivare
      con un HLC più vecchio di uno già letto — la conduttura dà gli HLC
      mentre lavora e carica alla fine, il tablet senza rete carica al
-     rientro — e con l'HLC come segnaposto non si leggeva più. Si rilegge da
-     dieci minuti prima (`MARGINE_MS`: `now()` è l'inizio della transazione,
+     rientro — e con l'HLC come segnaposto non si leggeva più. La lettura
+     dopo parte dall'ora del server (intestazione Date della prima pagina)
+     meno dieci minuti (`MARGINE_MS`: `now()` è l'inizio della transazione,
      e un caricamento lento diventa visibile dopo uno svelto), i doppioni li
-     scarta `fondi()`. Le prove sono B12–B14 in `test/simulazione/nuvola.mjs`.
+     scarta `fondi()`. Dall'ultimo arrivo invece che dall'ora, a riposo ogni
+     scambio riscaricava l'ultimo lotto della conduttura. Le prove sono B4 e
+     B12–B15 in `test/simulazione/nuvola.mjs`.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
      schema `percorso`, legate a un identificativo utente fisso.
