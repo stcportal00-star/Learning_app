@@ -10,6 +10,32 @@
  * dice a expo-network se la rete è a consumo. È il limite noto della regola.
  */
 import * as Network from "expo-network";
+import { Paths } from "expo-file-system";
+
+/**
+ * Lo spazio che i file scaricati da soli non toccano mai. Col telefono pieno
+ * SQLite non scrive più, e una sessione di studio registrata in aereo
+ * andrebbe persa: un podcast non vale tanto. Un gigabyte basta all'app e ai
+ * suoi file per settimane.
+ */
+export const RISERVA_BYTE = 1024 * 1024 * 1024;
+
+/**
+ * C'è posto per un file di `byte` lasciando libera la riserva? Solo per ciò
+ * che scende da solo: chi preme «Scarica» decide da sé.
+ */
+export function cePosto(byte?: number | null): boolean {
+  let libero: number;
+  try {
+    libero = Paths.availableDiskSpace;
+  } catch {
+    // Spazio ignoto: si scarica, come prima di questa regola. Bloccare per
+    // sempre su un guasto di lettura vorrebbe dire non scaricare più niente.
+    return true;
+  }
+  if (!Number.isFinite(libero)) return true;
+  return libero - Math.max(0, byte ?? 0) >= RISERVA_BYTE;
+}
 
 /**
  * Wifi utilizzabile: connesso, e con internet non smentita. Appena agganciato

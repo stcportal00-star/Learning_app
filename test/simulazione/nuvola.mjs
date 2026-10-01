@@ -1762,6 +1762,46 @@ await scenario("B24 un giro per volta: chi chiede durante un giro riceve quello"
   servitoreInUso = servitore;
 });
 
+await scenario("B25 i file scendono da soli solo lasciando 1 GB libero; un grosso che non entra non ferma i piccoli", async () => {
+  const s = servitoreNuovo();
+  servitoreInUso = s;
+  const GB = 1024 * 1024 * 1024;
+  const piccolo = await articoloConPdf("b25-piccolo");
+  const grosso = await articoloConPdf("b25-grosso");
+  // Il grosso è il più recente, quindi il primo della fila: se non entra, la
+  // fila deve andare avanti, non fermarsi lì.
+  await tab.Db.database().runAsync("UPDATE biblioteca SET byte = ?, aggiunto_a = '2026-10-02T00:00:00Z' WHERE id = ?",
+    [300 * 1024 * 1024, grosso]);
+  await tab.Db.database().runAsync("UPDATE biblioteca SET byte = ? WHERE id = ?", [200 * 1024, piccolo]);
+  await tab.Db.database().runAsync(
+    `INSERT OR REPLACE INTO articoli (id, titolo, raccolto_a, letto, salvato, url_media, tipo_media, byte_media)
+     VALUES ('b25-pod', 'Episodio lungo', '2026-10-01T00:00:00Z', 0, 0, 'https://pod.esempio/b25.mp3', 'audio/mpeg', ?)`,
+    [400 * 1024 * 1024]);
+  FS.rispondi("https://pod.esempio/b25.mp3", Buffer.from("ID3 audio lungo"));
+
+  FS.fissaSpazioLibero(1.2 * GB);
+  let esito = await conFile(s);
+  ok("con 1,2 GB liberi il PDF piccolo scende", Boolean(await fileDi(piccolo)), esito.motivo);
+  ok("quello da 300 MB no: lascerebbe meno di 1 GB", !(await fileDi(grosso)));
+  ok("e nemmeno il podcast da 400 MB",
+     !(await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b25-pod'")).file_media);
+
+  FS.fissaSpazioLibero(0.9 * GB);
+  await tab.Db.database().runAsync("UPDATE biblioteca SET file_locale = NULL WHERE id = ?", [piccolo]);
+  esito = await conFile(s);
+  ok("sotto 1 GB non scende niente, nemmeno il piccolo", !(await fileDi(piccolo)));
+  ok("e il motivo lo dice", /Spazio quasi finito/.test(esito.motivo.normalize("NFC")), esito.motivo);
+
+  FS.azzeraSpazioLibero();
+  esito = await conFile(s);
+  ok("con lo spazio tornato scendono tutti",
+     Boolean(await fileDi(piccolo)) && Boolean(await fileDi(grosso))
+     && Boolean((await tab.Db.database().getFirstAsync("SELECT file_media FROM articoli WHERE id = 'b25-pod'")).file_media),
+     esito.motivo);
+  ok("e il motivo non parla più di spazio", !/Spazio quasi finito/.test(esito.motivo.normalize("NFC")), esito.motivo);
+  servitoreInUso = servitore;
+});
+
 // =========================================================================
 // PARTE C — cliente: tentativi, attese misurate, blocchi, intestazioni
 // =========================================================================

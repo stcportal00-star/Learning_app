@@ -25,6 +25,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import * as Sharing from "expo-sharing";
 import { database, registra } from "../db";
 import type { Articolo } from "./articoli";
+import { cePosto } from "./rete";
 
 export type StatoMedia =
   /** La voce non ha nessun allegato riproducibile. */
@@ -209,14 +210,16 @@ export async function liberaVisti(): Promise<{ liberati: number; byte: number }>
 
 /** Col wifi, tutti i podcast non ancora visti che qui non ci sono. */
 export async function scaricaMediaMancanti(): Promise<number> {
-  const righe = await database().getAllAsync<{ id: string }>(
-    `SELECT id FROM articoli
+  const righe = await database().getAllAsync<{ id: string; byte_media: number | null }>(
+    `SELECT id, byte_media FROM articoli
      WHERE url_media IS NOT NULL AND url_media <> ''
        AND (file_media IS NULL OR file_media = '') AND visto_a IS NULL
      ORDER BY raccolto_a DESC`
   );
   let fatti = 0;
   for (const r of righe) {
+    // Uno grosso che non entra non ferma i più piccoli dopo di lui.
+    if (!cePosto(r.byte_media)) continue;
     if ((await scaricaMedia(r.id)).stato === "in_cache") fatti++;
   }
   return fatti;

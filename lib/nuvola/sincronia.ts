@@ -30,7 +30,7 @@ import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
 import { liberaVisti, scaricaMediaMancanti } from "./media";
 import { liberaPdfLetti, volumiLetti } from "./letti";
-import { suWifi } from "./rete";
+import { cePosto, suWifi } from "./rete";
 
 /** Quanti eventi per viaggio in invio. Oltre, il corpo diventa scomodo. */
 const PAGINA = 500;
@@ -446,6 +446,9 @@ async function unGiro(opzioni: OpzioniNuvola): Promise<EsitoNuvola> {
     } catch {
       // Un podcast che non scende resta «da scaricare», e ci si riprova.
     }
+    if (!cePosto(0)) {
+      esito.motivo += " Spazio quasi finito: il resto si scarica quando se ne libera (si tiene 1 GB per l'app).";
+    }
     try {
       // Nella stessa occasione partono i file aggiunti a mano mentre era
       // offline: è ciò che rende «Aggiungi PDF» in aereo una cosa che finisce
@@ -531,8 +534,8 @@ export async function scaricaVolumiMancanti(n: Nuvola, massimo = 5): Promise<num
   // stati tolti (letti.ts).
   const letti = await volumiLetti();
   const mancanti = (
-    await database().getAllAsync<{ id: string }>(
-      `SELECT id FROM biblioteca
+    await database().getAllAsync<{ id: string; byte: number | null }>(
+      `SELECT id, byte FROM biblioteca
        WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')
        ORDER BY aggiunto_a DESC`
     )
@@ -541,6 +544,9 @@ export async function scaricaVolumiMancanti(n: Nuvola, massimo = 5): Promise<num
     .slice(0, massimo);
   let fatti = 0;
   for (const v of mancanti) {
+    // La riserva di spazio (rete.ts): un manuale da venti mega che non entra
+    // non ferma i PDF piccoli dopo di lui.
+    if (!cePosto(v.byte)) continue;
     try {
       if (await scaricaVolume(v.id, n)) fatti++;
     } catch {

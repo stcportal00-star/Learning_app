@@ -71,7 +71,9 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
      della rassegna, manuali, podcast non ancora visti (`lib/nuvola/rete.ts`,
      expo-network). Sui dati mobili si scambiano solo gli eventi. All'arrivo
      del wifi parte un giro (`quandoArrivaIlWifi`), e i giri sono uno per
-     volta: chi chiede durante un giro riceve quello.
+     volta: chi chiede durante un giro riceve quello. Da soli scendono solo
+     file che lasciano libero 1 GB (`cePosto`, `RISERVA_BYTE`): col telefono
+     pieno SQLite non scrive più.
    - **Un articolo letto lascia il testo e toglie il PDF** dal telefono
      (`lib/nuvola/letti.ts`), solo se il testo ha almeno 1000 caratteri; un
      PDF già letto non si riscarica. Aprire un articolo in Notizie lo segna
