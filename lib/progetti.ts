@@ -12,6 +12,8 @@
 import AsyncStorageLike from "expo-sqlite/kv-store";
 
 const CHIAVE = "percorso.seguiti";
+/** Il seguito che ogni tema superato aveva l'ultima volta: vedi progetti(). */
+const CHIAVE_SUBENTRATE = "percorso.subentrate";
 
 /**
  * Il valore salvato, ripulito. Un valore illeggibile vale «nessun tema
@@ -40,14 +42,51 @@ export async function leggiSeguiti(): Promise<string[]> {
 // la prima.
 let coda: Promise<unknown> = Promise.resolve();
 
+function inCoda<T>(f: () => Promise<T>): Promise<T> {
+  const turno = coda.catch(() => {}).then(f);
+  coda = turno;
+  return turno;
+}
+
 function modifica(f: (elenco: string[]) => string[]): Promise<string[]> {
-  const turno = coda.catch(() => {}).then(async () => {
+  return inCoda(async () => {
     const nuovo = f(await leggiSeguiti());
     await AsyncStorageLike.setItem(CHIAVE, JSON.stringify(nuovo));
     return nuovo;
   });
-  coda = turno;
-  return turno;
+}
+
+/** Il valore salvato dei seguiti, ripulito; illeggibile vale «nessuno». */
+export function elencoSubentrate(valore: string | null): Record<string, string> {
+  try {
+    const v = JSON.parse(valore ?? "{}");
+    if (!v || typeof v !== "object" || Array.isArray(v)) return {};
+    return Object.fromEntries(Object.entries(v).filter(
+      (x): x is [string, string] => typeof x[1] === "string" && x[0].length > 0 && x[1].length > 0));
+  } catch {
+    return {};
+  }
+}
+
+export async function leggiSubentrate(): Promise<Record<string, string>> {
+  try {
+    return elencoSubentrate(await AsyncStorageLike.getItem(CHIAVE_SUBENTRATE));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Ricorda i seguiti di adesso. Si scrive solo se cambiano: Oggi e Studio lo
+ * chiamano a ogni ritorno in primo piano. Un errore non conta: senza il
+ * ricordo si ricade nell'ordine del piano, che è comunque una risposta.
+ */
+export function ricordaSubentrate(m: Record<string, string>): Promise<void> {
+  return inCoda(async () => {
+    const nuovo = JSON.stringify(m);
+    if (JSON.stringify(await leggiSubentrate()) === nuovo) return;
+    await AsyncStorageLike.setItem(CHIAVE_SUBENTRATE, nuovo);
+  }).catch(() => {});
 }
 
 /** In coda agli altri: l'ordine dei progetti è quello in cui si sono scelti. */

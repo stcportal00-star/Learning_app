@@ -8,7 +8,7 @@ import {
 } from "../../lib/notizie";
 import { descriviByte } from "../../lib/nuvola/media";
 import { leggiPercorso } from "../../lib/avanzamento";
-import { leggiSeguiti } from "../../lib/progetti";
+import { leggiSeguiti, leggiSubentrate } from "../../lib/progetti";
 import { daFare } from "../../lib/percorso";
 import { nomeArea } from "../../lib/contenuti";
 import { Text } from "../../components/Base";
@@ -91,8 +91,8 @@ export default function Notizie() {
       const cat = CATEGORIE.find((x) => x.chiave === categoria) ?? CATEGORIE[1];
       // Il percorso serve a «Per te» prima della sua query; le altre viste
       // partono subito, insieme ai conteggi.
-      const aree = Promise.all([leggiPercorso(), leggiSeguiti()]).then(([unita, seguiti]) => {
-        return areePerTe(daFare(unita, seguiti).map((v) => v.unita.tema.slug));
+      const aree = Promise.all([leggiPercorso(), leggiSeguiti(), leggiSubentrate()]).then(([unita, seguiti, precedenti]) => {
+        return areePerTe(daFare(unita, seguiti, precedenti).map((v) => v.unita.tema.slug));
       });
       // `pieno`: la query ha dato tutte quelle chieste, quindi ce ne possono
       // essere altre.

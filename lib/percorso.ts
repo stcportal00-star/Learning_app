@@ -253,16 +253,24 @@ export type Progetto = {
  * Due progetti non finiscono mai sulla stessa unità. Prima si assegnano le
  * unità scelte che hanno ancora qualcosa da fare, poi i seguiti: chi segue SQL
  * — fondamenti e SQL — join, finite le fondamenta, si trova join e aggregazione,
- * non due volte join. I seguiti si assegnano nell'ordine del piano dei temi
- * scelti, non in quello in cui si sono scelti: così un'unità resta al
- * progetto che l'aveva quando un altro tema scelto viene superato, e il suo
- * riquadro non passa da un progetto all'altro da un giorno all'altro.
+ * non due volte join.
+ *
+ * Quale tema superato prende quale seguito non dipende solo da com'è oggi
+ * l'avanzamento: seguiti fondamenta e join, chi supera join per primo la
+ * manda su aggregazione, e quando poi supera le fondamenta aggregazione deve
+ * restare a join. Nessun ordine fisso dei temi tiene in entrambi i versi,
+ * perché lo stato con tutti e due superati è lo stesso. Per questo
+ * `precedenti` porta il seguito che ogni tema aveva l'ultima volta (lo
+ * ricorda lib/progetti.ts): se quell'unità è ancora libera e nella stessa
+ * area, resta sua. È una preferenza, mai un vincolo: un'unità superata, o
+ * ripresa dal tema che la segue di suo, si riassegna. Gli altri seguiti si
+ * assegnano nell'ordine del piano dei temi scelti.
  *
  * Un tema che su questo dispositivo non è un'unità (sql_window senza window
  * functions, un tema senza materiale) si salta: la scelta resta, e vale dove
  * l'unità c'è.
  */
-export function progetti(unita: Unita[], seguiti: string[]): Progetto[] {
+export function progetti(unita: Unita[], seguiti: string[], precedenti: Record<string, string> = {}): Progetto[] {
   const presi = new Set<string>();
   const libera = (u: Unita) => !presi.has(u.tema.slug) && passoDaFare(u) !== null;
   const scelti = [...new Set(seguiti)]
@@ -272,6 +280,12 @@ export function progetti(unita: Unita[], seguiti: string[]): Progetto[] {
   const assegnate = new Map<string, Unita>();
   for (const { s, i } of scelti) {
     if (libera(unita[i])) { assegnate.set(s, unita[i]); presi.add(unita[i].tema.slug); }
+  }
+  for (const { s, i } of scelti) {
+    if (assegnate.has(s)) continue;
+    const area = unita[i].tema.pista;
+    const ieri = unita.find((u) => u.tema.slug === precedenti[s]);
+    if (ieri && area && ieri.tema.pista === area && libera(ieri)) { assegnate.set(s, ieri); presi.add(ieri.tema.slug); }
   }
   for (const { s, i } of [...scelti].sort((a, b) => a.i - b.i)) {
     if (assegnate.has(s)) continue;
@@ -291,6 +305,11 @@ export function progetti(unita: Unita[], seguiti: string[]): Progetto[] {
   });
 }
 
+/** Il seguito di ogni tema superato, da ricordare per la prossima volta: vedi progetti(). */
+export function subentrate(pr: Progetto[]): Record<string, string> {
+  return Object.fromEntries(pr.filter((p) => p.subentrata && p.passo).map((p) => [p.seguito, p.unita.tema.slug]));
+}
+
 /** Una cosa da fare adesso: il passo di un progetto, o quello del piano (`progetto` null). */
 export type DaFare = { unita: Unita; passo: Passo; progetto: Progetto | null };
 
@@ -301,8 +320,8 @@ export type DaFare = { unita: Unita; passo: Passo; progetto: Progetto | null };
  * schermate, una avrebbe potuto smettere di tornare al piano, e Oggi avrebbe
  * detto «tutte le unità sono superate» con decine ancora da fare.
  */
-export function daFare(unita: Unita[], seguiti: string[]): DaFare[] {
-  const conPasso = progetti(unita, seguiti).filter((p) => p.passo);
+export function daFare(unita: Unita[], seguiti: string[], precedenti: Record<string, string> = {}): DaFare[] {
+  const conPasso = progetti(unita, seguiti, precedenti).filter((p) => p.passo);
   if (conPasso.length) return conPasso.map((p) => ({ unita: p.unita, passo: p.passo!, progetto: p }));
   const piano = prossimoPasso(unita);
   return piano ? [{ unita: piano.unita, passo: piano.passo, progetto: null }] : [];

@@ -2,10 +2,10 @@ import { useCallback, useState } from "react";
 import { View, Pressable } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { leggiPercorso, leggiVolumi, volumeDaAprire } from "../lib/avanzamento";
-import { leggiSeguiti } from "../lib/progetti";
+import { leggiSeguiti, leggiSubentrate, ricordaSubentrate } from "../lib/progetti";
 import { TEMI, nomeArea } from "../lib/contenuti";
 import {
-  Passo, Unita, daFare, descriviPasso, destinazione, progetti, unitaConVerifiche,
+  Passo, Unita, daFare, descriviPasso, destinazione, progetti, subentrate, unitaConVerifiche,
 } from "../lib/percorso";
 import { Text } from "./Base";
 import { C } from "../lib/tema";
@@ -58,9 +58,12 @@ export default function ProssimoPasso() {
   useFocusEffect(useCallback(() => {
     let vivo = true;
     (async () => {
-      const [unita, seguiti] = await Promise.all([leggiPercorso(), leggiSeguiti()]);
-      const tutti = progetti(unita, seguiti);
-      const voci = await Promise.all(daFare(unita, seguiti).map(async (v) => ({
+      const [unita, seguiti, precedenti] = await Promise.all([leggiPercorso(), leggiSeguiti(), leggiSubentrate()]);
+      const tutti = progetti(unita, seguiti, precedenti);
+      // Oggi e Studio sono dove i progetti si guardano: qui si ricorda chi ha
+      // quale seguito, perché domani resti suo.
+      void ricordaSubentrate(subentrate(tutti));
+      const voci = await Promise.all(daFare(unita, seguiti, precedenti).map(async (v) => ({
         unita: v.unita,
         passo: v.passo,
         dopo: v.progetto?.subentrata ? v.progetto.seguito : null,

@@ -5,7 +5,7 @@ import { database } from "../../lib/db";
 import { supportaWindowFunctions } from "../../lib/palestra";
 import { leggiPercorso } from "../../lib/avanzamento";
 import { Unita, daFare } from "../../lib/percorso";
-import { leggiSeguiti } from "../../lib/progetti";
+import { leggiSeguiti, leggiSubentrate } from "../../lib/progetti";
 import ProssimoPasso from "../../components/ProssimoPasso";
 import { Text } from "../../components/Base";
 import { C } from "../../lib/tema";
@@ -29,6 +29,7 @@ export default function Studio() {
   const [c, setC] = useState<Conteggio>({ sql: 0, codice: 0, ripasso: 0, scenari: 0 });
   const [unita, setUnita] = useState<Unita[]>([]);
   const [seguiti, setSeguiti] = useState<string[]>([]);
+  const [precedenti, setPrecedenti] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -55,14 +56,14 @@ export default function Studio() {
   useFocusEffect(useCallback(() => {
     let vivo = true;
     (async () => {
-      const [u, s] = await Promise.all([leggiPercorso(), leggiSeguiti()]);
-      if (vivo) { setUnita(u); setSeguiti(s); }
+      const [u, s, p] = await Promise.all([leggiPercorso(), leggiSeguiti(), leggiSubentrate()]);
+      if (vivo) { setUnita(u); setSeguiti(s); setPrecedenti(p); }
     })();
     return () => { vivo = false; };
   }, []));
 
   // «Adesso» sono le unità dei progetti; senza progetti, quella del piano.
-  const correnti = new Set(daFare(unita, seguiti).map((v) => v.unita.tema.slug));
+  const correnti = new Set(daFare(unita, seguiti, precedenti).map((v) => v.unita.tema.slug));
 
   const Voce = ({ href, titolo, nota, n }: { href: string; titolo: string; nota: string; n: number }) => (
     <Link href={href as never} asChild>

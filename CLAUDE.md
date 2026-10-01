@@ -335,9 +335,13 @@ conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
   posto arriva il successivo della stessa area (`pista` di `TEMI`, nomi in
   `AREE`), poi il primo rimasto indietro; mai due progetti sulla stessa unità.
   Senza temi seguiti, o con tutte le aree finite, torna il prossimo passo del
-  piano. Il seguito si ricalcola dall'avanzamento a ogni lettura, non si
-  salva. La scelta sta nel kv-store del dispositivo (`lib/progetti.ts`), non
-  nel registro: come l'avanzamento, è per dispositivo.
+  piano. Il seguito si ricalcola dall'avanzamento a ogni lettura; Oggi e
+  Studio ricordano solo chi aveva quale seguito (`percorso.subentrate`), e
+  il ricordo vale come preferenza finché l'unità è libera: senza, superati
+  due temi della stessa area in ordine inverso, un'unità passava da un
+  progetto all'altro. Scelta e ricordo stanno nel kv-store del dispositivo
+  (`lib/progetti.ts`), non nel registro: come l'avanzamento, sono per
+  dispositivo.
 - **L'avanzamento non ha eventi suoi.** `lib/avanzamento.ts` lo legge dalle
   tabelle che l'app scrive già (tentativi, ripasso, note, biblioteca, articoli):
   un secondo registro dell'avanzamento andrebbe tenuto allineato al primo.

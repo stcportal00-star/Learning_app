@@ -6,7 +6,7 @@ import { registra } from "../lib/db";
 import {
   Unita as UnitaPercorso, Passo, Progetto, descriviPasso, destinazione, modelloScenario, progetti,
 } from "../lib/percorso";
-import { leggiSeguiti, segui, smettiDiSeguire } from "../lib/progetti";
+import { leggiSeguiti, leggiSubentrate, segui, smettiDiSeguire } from "../lib/progetti";
 import {
   leggiPercorso, leggiScenari, leggiVolumi, volumeDaAprire, ScenarioDiUnita, VolumeDiUnita,
 } from "../lib/avanzamento";
@@ -41,6 +41,7 @@ export default function Unita() {
   const [seguiti, setSeguiti] = useState<string[]>([]);
   const [tuttiProgetti, setTuttiProgetti] = useState<Progetto[]>([]);
   const [tutte, setTutte] = useState<UnitaPercorso[]>([]);
+  const [precedenti, setPrecedenti] = useState<Record<string, string>>({});
   const inCreazione = useRef(false);
   const navigation = useNavigation();
 
@@ -48,12 +49,12 @@ export default function Unita() {
     let vivo = true;
     inCreazione.current = false;
     (async () => {
-      const [percorso, v, s, seg] = await Promise.all([
-        leggiPercorso(), leggiVolumi(slug), leggiScenari(slug), leggiSeguiti()]);
+      const [percorso, v, s, seg, prec] = await Promise.all([
+        leggiPercorso(), leggiVolumi(slug), leggiScenari(slug), leggiSeguiti(), leggiSubentrate()]);
       if (!vivo) return;
       const x = percorso.find((t) => t.tema.slug === slug) ?? null;
       setU(x); setTrovata(Boolean(x)); setVolumi(v); setScenari(s);
-      setTutte(percorso); setSeguiti(seg); setTuttiProgetti(progetti(percorso, seg));
+      setTutte(percorso); setPrecedenti(prec); setSeguiti(seg); setTuttiProgetti(progetti(percorso, seg, prec));
     })();
     return () => { vivo = false; };
   }, [slug]));
@@ -68,7 +69,7 @@ export default function Unita() {
   async function cambiaSeguito(azione: () => Promise<string[]>) {
     const seg = await azione();
     setSeguiti(seg);
-    setTuttiProgetti(progetti(tutte, seg));
+    setTuttiProgetti(progetti(tutte, seg, precedenti));
   }
 
   /**

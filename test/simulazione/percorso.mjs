@@ -247,6 +247,18 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
     pr({ d1: fatto }, ["d2", "d1"]), [["d2", "d2", "esercizi", false], ["d1", "d3", "esercizi", true]]);
   uguale("P8 superato anche D2, D3 resta a D1: un'unità non cambia progetto da un giorno all'altro",
     pr({ d1: fatto, d2: fatto }, ["d2", "d1"]), [["d2", "d2", null, false], ["d1", "d3", "esercizi", true]]);
+  // Il verso opposto: superato prima D2 (il tema che nel piano viene dopo),
+  // poi D1. Senza ricordo, D3 passerebbe a D1; con il ricordo resta a D2.
+  const conRicordo = (mat, seguiti, prec) => P.progetti(P.costruisciPercorso(temi, { ...base, ...mat }, ordine), seguiti, prec)
+    .map((x) => [x.seguito, x.unita.tema.slug, x.passo && x.passo.tipo, x.subentrata]);
+  const ieri = P.subentrate(P.progetti(P.costruisciPercorso(temi, { ...base, d2: fatto }, ordine), ["d1", "d2"]));
+  uguale("P8 il ricordo di ieri: D2 superato continua su D3", ieri, { d2: "d3" });
+  uguale("P8 superato poi anche D1, D3 resta a D2 nell'altro verso",
+    conRicordo({ d1: fatto, d2: fatto }, ["d1", "d2"], ieri), [["d1", "d1", null, false], ["d2", "d3", "esercizi", true]]);
+  uguale("P8 senza ricordo lo stesso stato va nell'ordine del piano",
+    conRicordo({ d1: fatto, d2: fatto }, ["d1", "d2"], {}), [["d1", "d3", "esercizi", true], ["d2", "d2", null, false]]);
+  uguale("P8 un ricordo che non vale più (unità del tema che la segue di suo, o di un'altra area) si ignora",
+    conRicordo({ d1: fatto }, ["d1", "h"], { d1: "h" }), [["d1", "d2", "esercizi", true], ["h", "h", "esercizi", false]]);
   uguale("P8 dopo l'ultimo dell'area si torna al primo rimasto indietro",
     pr({ d3: fatto }, ["d3"]), [["d3", "d1", "esercizi", true]]);
   uguale("P8 area tutta superata: il progetto resta, senza passo",
@@ -282,6 +294,10 @@ ok("P1 la soglia è la minima intera che raggiunge l'80% per ogni n fra 1 e 200"
   uguale("P9 un oggetto al posto dell'elenco, idem", S.elencoSeguiti('{"a":1}'), []);
   uguale("P9 si tengono le stringhe non vuote, una volta sola, nell'ordine",
     S.elencoSeguiti('["h","h",3,"","d1"]'), ["h", "d1"]);
+  uguale("P9 i seguiti ricordati: illeggibili o non un oggetto valgono nessuno",
+    [S.elencoSubentrate(null), S.elencoSubentrate("{rotto"), S.elencoSubentrate('["a"]')], [{}, {}, {}]);
+  uguale("P9 i seguiti ricordati: solo coppie di stringhe non vuote",
+    S.elencoSubentrate('{"d1":"d2","x":3,"y":"","":"z"}'), { d1: "d2" });
 }
 
 // --- gli scenari
@@ -499,6 +515,10 @@ if (!conWindow) {
   await S.smettiDiSeguire("hardware");
   uguale("S13 smettere toglie solo quel tema", await S.leggiSeguiti(), ["ia"]);
   await S.smettiDiSeguire("ia");
+  await S.ricordaSubentrate({ sql_base: "sql_agg" });
+  await S.ricordaSubentrate({ sql_base: "sql_agg" });
+  uguale("S13 il ricordo dei seguiti si rilegge com'è stato scritto", await S.leggiSubentrate(), { sql_base: "sql_agg" });
+  await S.ricordaSubentrate({});
 }
 
 uguale("S8 nessun tentativo di rete", reteTentata, []);
@@ -558,9 +578,9 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S14 il seguito non si chiama «il tema dopo»: può essere un tema rimasto indietro",
     pp.includes("è superato: si continua con un altro tema della sua area.") && !pp.includes("il tema dopo."));
   ok("S14 Oggi, Studio e le Notizie decidono che cosa fare con la stessa regola, daFare()",
-    pp.includes("daFare(unita, seguiti).map(") &&
-    sorgente("app/(tabs)/studio.tsx").includes("const correnti = new Set(daFare(unita, seguiti).map((v) => v.unita.tema.slug));") &&
-    sorgente("app/(tabs)/notizie.tsx").includes("return areePerTe(daFare(unita, seguiti).map((v) => v.unita.tema.slug));") &&
+    pp.includes("daFare(unita, seguiti, precedenti).map(") &&
+    sorgente("app/(tabs)/studio.tsx").includes("const correnti = new Set(daFare(unita, seguiti, precedenti).map((v) => v.unita.tema.slug));") &&
+    sorgente("app/(tabs)/notizie.tsx").includes("return areePerTe(daFare(unita, seguiti, precedenti).map((v) => v.unita.tema.slug));") &&
     ![pp, sorgente("app/(tabs)/studio.tsx"), sorgente("app/(tabs)/notizie.tsx")].some((t) => /prossimoPasso(Di)?\(unita\)/.test(t)));
   const un = sorgente("app/unita.tsx");
   // Notizie è la quinta scheda, Profilo si apre da Oggi.
@@ -580,7 +600,10 @@ const sorgente = (f) => readFileSync(join(RADICE_PROGETTO, f), "utf8");
   ok("S15 dall'unità alle Notizie si torna alla scheda, non se ne impila una seconda",
     un.includes('if (d === "/libreria" || d.startsWith("/notizie")) apriScheda(d);'));
   ok("S14 seguire non rilegge la schermata dal fuoco, e non abbassa la guardia dello scenario",
-    un.includes("  }, [slug]));") && !un.includes("versione") && un.includes("setTuttiProgetti(progetti(tutte, seg));"));
+    un.includes("  }, [slug]));") && !un.includes("versione") && un.includes("setTuttiProgetti(progetti(tutte, seg, precedenti));"));
+  ok("S14 Oggi e Studio ricordano chi ha quale seguito, e tutte le schermate ne tengono conto",
+    pp.includes("void ricordaSubentrate(subentrate(tutti));") && pp.includes("progetti(unita, seguiti, precedenti)") &&
+    un.includes("progetti(percorso, seg, prec)"));
   ok("S14 su un'unità subentrata si nomina il tema scelto che la tiene, e «Smetti» toglie quello",
     un.includes("`«${nomeDi(progettoQui.seguito)}» è superato: il progetto continua qui.`") && un.includes("Smetti di seguirlo"));
   ok("S14 dall'unità si segue e si smette di seguire",
