@@ -151,7 +151,7 @@ try {
   await Db.inTransazione(async (dd) => {
     await dd.runAsync("DELETE FROM eventi WHERE entita_id = ?", [idNota]);
     await dd.runAsync("DELETE FROM note WHERE id = ?", [idNota]);
-    await dd.runAsync("DELETE FROM meta WHERE chiave = 'nuvola_hlc'");
+    await dd.runAsync("DELETE FROM meta WHERE chiave = 'nuvola_creato'");
   });
   const sparita = await d.getFirstAsync("SELECT id FROM note WHERE id = ?", [idNota]);
   ok("in locale non ne resta niente", !sparita);
@@ -170,7 +170,7 @@ try {
   uguale("e il titolo intatto", tornata?.titolo, "giro vero");
 
   // Il segnaposto deve essere avanzato, o domani si riscarica tutto da capo.
-  const segnaposto = await d.getFirstAsync("SELECT valore FROM meta WHERE chiave = 'nuvola_hlc'");
+  const segnaposto = await d.getFirstAsync("SELECT valore FROM meta WHERE chiave = 'nuvola_creato'");
   ok("il segnaposto è avanzato", Boolean(segnaposto?.valore), JSON.stringify(segnaposto));
 
   // ------------------------------------------------------------- 5. deposito

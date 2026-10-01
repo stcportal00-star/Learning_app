@@ -55,6 +55,9 @@ type RigaEvento = {
   payload: Record<string, unknown>;
 };
 
+/** Come la legge il telefono: con l'ora d'arrivo, che assegna Postgres (default now()) e nessuno manda. */
+type RigaRicevuta = RigaEvento & { creato_a: string };
+
 const VUOTO: EsitoProiezione = { scritte: 0, eliminate: 0, incomplete: [], sconosciute: 0 };
 
 export type StatoNuvola = {
@@ -102,11 +105,60 @@ async function leggiMeta(chiave: string): Promise<string | null> {
  * Senza, ogni sincronizzazione riscarica tutto dall'inizio: funziona, ma dopo
  * un mese di rassegne sono decine di migliaia di eventi per aprire l'app.
  *
+ * È l'ora d'ARRIVO sul server dell'ultimo evento letto (`creato_a`, che
+ * assegna Postgres), non il suo HLC. Un evento può arrivare con un HLC più
+ * vecchio di altri già letti: la conduttura dà gli HLC mentre lavora, il più
+ * rilevante per primo, e carica tutto alla fine, fino a venti minuti dopo; il
+ * tablet senza rete scrive per giorni e carica al rientro. Con l'HLC come
+ * segnaposto quegli eventi non si leggevano mai: se il telefono si
+ * sincronizzava durante la corsa, gli articoli più rilevanti non arrivavano
+ * più, e lo stesso le note scritte offline sull'altro dispositivo. L'ora
+ * d'arrivo invece cresce con l'arrivo, qualunque sia l'orologio di chi scrive.
+ *
+ * La chiave è nuova (nuvola_creato) apposta: alla prima sincronizzazione dopo
+ * l'aggiornamento si rilegge tutto il registro remoto, una volta, e si
+ * recupera quello che il segnaposto per HLC aveva fatto perdere. I doppioni li
+ * scarta fondi(), per id.
+ *
  * Avanza ANCHE quando gli eventi letti sono tutti duplicati: sono già nostri,
  * e non rileggerli è proprio il punto.
  */
 async function segnaposto(): Promise<string> {
-  return (await leggiMeta("nuvola_hlc")) ?? "";
+  return (await leggiMeta("nuvola_creato")) ?? "";
+}
+
+/**
+ * Quanto prima del segnaposto si ricomincia a leggere. `now()` di Postgres è
+ * l'ora d'INIZIO della transazione: un caricamento lento può diventare
+ * visibile dopo uno più svelto che ha un'ora più recente, e se nel frattempo
+ * il telefono ha letto quello svelto, il lento cadrebbe prima del segnaposto.
+ * Gli eventi riletti nel margine si scartano per id; costano qualche riga a
+ * ogni scambio.
+ */
+export const MARGINE_MS = 10 * 60 * 1000;
+
+// Come PostgREST scrive un timestamptz: «2026-10-01T03:14:44.548609+00:00»,
+// ma Postgres toglie gli zeri in coda ai decimali, e senza decimali non mette
+// nemmeno il punto. Si legge a mano invece che con Date.parse: sui formati
+// fuori dallo standard di JavaScript (microsecondi, scarto «+00:00») ogni
+// motore decide a modo suo, e Hermes non è quello su cui girano i test.
+const ORA_DEL_SERVER =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:(Z)|([+-])(\d{2})(?::?(\d{2}))?)$/;
+
+/**
+ * Da dove leggere: il segnaposto meno il margine, in UTC e al millesimo (i
+ * microsecondi si troncano, cioè si legge appena prima: mai dopo). Un
+ * segnaposto illeggibile vale «dall'inizio»: rileggere tutto costa, perdere
+ * eventi no.
+ */
+export function sogliaDiLettura(segnaposto: string): string {
+  const m = ORA_DEL_SERVER.exec(segnaposto);
+  if (!m) return "";
+  const [, anno, mese, giorno, ore, minuti, secondi, decimali = "", z, segno, oreScarto, minutiScarto = "00"] = m;
+  const utc = Date.UTC(+anno, +mese - 1, +giorno, +ore, +minuti, +secondi, +(decimali + "00").slice(0, 3));
+  const scarto = z ? 0 : (segno === "-" ? -1 : 1) * (+oreScarto * 60 + +minutiScarto) * 60_000;
+  const ms = utc - scarto - MARGINE_MS;
+  return Number.isNaN(ms) ? "" : new Date(ms).toISOString();
 }
 
 /**
@@ -161,13 +213,19 @@ export async function sincronizzaNuvola(
     }
 
     // ----------------------------------------------------------- si riceve
-    let da = await segnaposto();
+    // Per ora d'arrivo, e a parità per id (un caricamento è una transazione,
+    // e le sue righe hanno la stessa ora). Le pagine si contano dall'inizio
+    // della lettura: una riga che arriva durante lo scambio ha un'ora più
+    // recente e finisce in fondo; una arrivata in ritardo con un'ora vecchia
+    // fa rileggere una riga già letta, che fondi() scarta, e lei si legge
+    // allo scambio dopo, dentro il margine.
+    const soglia = sogliaDiLettura(await segnaposto());
     for (let giro = 0; giro < PAGINE_MASSIME; giro++) {
       const query =
-        `select=id,hlc,dispositivo_id,entita,entita_id,tipo,payload` +
-        (da ? `&hlc=gt.${encodeURIComponent(da)}` : "") +
-        `&order=hlc.asc&limit=${PAGINA}`;
-      const remoti = await n.seleziona<RigaEvento>("eventi", query);
+        `select=id,hlc,dispositivo_id,entita,entita_id,tipo,payload,creato_a` +
+        (soglia ? `&creato_a=gte.${encodeURIComponent(soglia)}` : "") +
+        `&order=creato_a.asc,id.asc&limit=${PAGINA}&offset=${giro * PAGINA}`;
+      const remoti = await n.seleziona<RigaRicevuta>("eventi", query);
       if (!remoti.length) break;
       esito.ricevuti += remoti.length;
 
@@ -217,11 +275,10 @@ export async function sincronizzaNuvola(
         esito.proiezione.sconosciute += p.sconosciute;
         esito.proiezione.incomplete.push(...p.incomplete);
 
-        da = remoti[remoti.length - 1].hlc;
         await dd.runAsync(
-          `INSERT INTO meta (chiave, valore) VALUES ('nuvola_hlc', ?)
+          `INSERT INTO meta (chiave, valore) VALUES ('nuvola_creato', ?)
            ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
-          [da]
+          [remoti[remoti.length - 1].creato_a]
         );
       });
 

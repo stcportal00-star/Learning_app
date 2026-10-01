@@ -67,6 +67,14 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
    - Gli eventi ricevuti non generano eventi nuovi.
    - `file_locale` è l'UNICA scrittura che di proposito non genera un evento:
      è un percorso di questo telefono e altrove non significa niente.
+   - **Il segnaposto della lettura è l'ora d'arrivo sul server**
+     (`creato_a`, meta `nuvola_creato`), mai l'HLC: un evento può arrivare
+     con un HLC più vecchio di uno già letto — la conduttura dà gli HLC
+     mentre lavora e carica alla fine, il tablet senza rete carica al
+     rientro — e con l'HLC come segnaposto non si leggeva più. Si rilegge da
+     dieci minuti prima (`MARGINE_MS`: `now()` è l'inizio della transazione,
+     e un caricamento lento diventa visibile dopo uno svelto), i doppioni li
+     scarta `fondi()`. Le prove sono B12–B14 in `test/simulazione/nuvola.mjs`.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
      schema `percorso`, legate a un identificativo utente fisso.

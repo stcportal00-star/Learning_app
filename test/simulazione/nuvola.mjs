@@ -35,7 +35,9 @@
  *
  * LA RETE SI SIMULA, NON SI TOCCA. `globalThis.fetch` viene sostituito una
  * volta sola, all'avvio, con un finto server Supabase in memoria che conosce
- * PostgREST (GET con hlc=gt., order, limit, select; POST con on_conflict) e le
+ * PostgREST (GET con gt./gte./eq., order su piu' colonne, limit, offset,
+ * select; POST con on_conflict, e `creato_a` assegnata all'arrivo come fa
+ * Postgres con default now()) e le
  * due rotte Storage, registra OGNI richiesta con le sue intestazioni vere, e si
  * puo' programmare per rispondere 500, 429, 400 o per far cadere la
  * connessione. Se qualcosa provasse a chiamare il fetch ORIGINALE, il test si
@@ -242,6 +244,13 @@ const UTENTE_ATTESO = tab.Cliente.UTENTE;
  * Accept-Profile mancante o un Prefer senza resolution=merge-duplicates sono
  * guasti che si vedono solo guardando la richiesta.
  */
+// Il Supabase vero e' uno solo, e il suo orologio non torna indietro: ogni
+// finto server riparte da dove e' arrivato il piu' avanti dei precedenti.
+// Ripartendo ognuno dalla stessa ora, gli eventi di un server nuovo nascevano
+// prima del segnaposto lasciato dal vecchio, e certi scenari passavano solo
+// perche' il margine di rilettura li ripescava.
+let oraPiuAvanti = Date.parse("2026-10-01T00:00:00.000Z");
+
 function nuovoServitore() {
   const tabelle = new Map();
   const deposito = new Map();
@@ -251,6 +260,38 @@ function nuovoServitore() {
   function tabella(nome) {
     if (!tabelle.has(nome)) tabelle.set(nome, new Map());
     return tabelle.get(nome);
+  }
+
+  // L'orologio del server. Come Postgres, `creato_a` (default now()) e' l'ora
+  // d'INIZIO della transazione: tutte le righe di un caricamento la
+  // condividono, e un caricamento puo' nascere con un'ora piu' vecchia di uno
+  // gia' visibile (`fissaOrologio`, per provarlo). Il formato e' quello che
+  // PostgREST restituisce: microsecondi e +00:00.
+  let oraServer = oraPiuAvanti;
+  const comeLoScrivePostgrest = (ms) => new Date(ms).toISOString().replace("Z", "000+00:00");
+  function prossimoIstante() {
+    oraServer += 1000;
+    oraPiuAvanti = Math.max(oraPiuAvanti, oraServer);
+    return comeLoScrivePostgrest(oraServer);
+  }
+  // Nel registro, righe nuove con l'ora del caricamento; quelle che c'erano
+  // gia' la tengono, come un upsert merge-duplicates che non manda la colonna
+  // (se la manda, la aggiorna). Le altre tabelle restano come arrivano.
+  function inserisci(nome, righe, chiave, istante) {
+    for (const r of righe) {
+      const prima = tabella(nome).get(r[chiave]);
+      tabella(nome).set(r[chiave], nome === "eventi"
+        ? { ...r, creato_a: r.creato_a ?? prima?.creato_a ?? istante }
+        : r);
+    }
+  }
+  // Un istante si confronta come istante (PostgREST lo scrive con +00:00, chi
+  // chiede puo' usare la Z), il resto come testo.
+  const istante = (v) => Date.parse(String(v).replace(/(\.\d{3})\d+/, "$1"));
+  function confronta(a, b) {
+    const x = istante(a), y = istante(b);
+    if (/^\d{4}-\d{2}-\d{2}T/.test(String(a)) && !Number.isNaN(x) && !Number.isNaN(y)) return x - y;
+    return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
   }
 
   function risposta(stato, corpo) {
@@ -271,8 +312,19 @@ function nuovoServitore() {
     deposito,
     richieste,
     /** Righe gia' presenti nel registro remoto, come le avrebbe messe la conduttura. */
+    /** Righe gia' sul server, arrivate in un solo caricamento (salvo `creato_a` esplicita). */
     semina(nomeTabella, righe) {
-      for (const r of righe) tabella(nomeTabella).set(r.id, r);
+      inserisci(nomeTabella, righe, "id", prossimoIstante());
+    },
+    /** Il prossimo caricamento comincia a quest'ora (per i caricamenti lenti). */
+    fissaOrologio(iso) {
+      oraServer = Date.parse(iso) - 1000;
+    },
+    ora() {
+      return comeLoScrivePostgrest(oraServer);
+    },
+    righe(nomeTabella) {
+      return [...tabella(nomeTabella).values()];
     },
     /**
      * Programma una risposta forzata. `quando` filtra sulla richiesta, `volte`
@@ -325,11 +377,12 @@ function nuovoServitore() {
     if (metodo === "GET") {
       let righe = [...tabella(nome).values()];
       for (const [chiave, valore] of u.searchParams) {
-        if (chiave === "select" || chiave === "order" || chiave === "limit") continue;
+        if (["select", "order", "limit", "offset"].includes(chiave)) continue;
         const punto = valore.indexOf(".");
         const operatore = valore.slice(0, punto);
         const atteso = valore.slice(punto + 1);
-        if (operatore === "gt") righe = righe.filter((r) => String(r[chiave]) > atteso);
+        if (operatore === "gt") righe = righe.filter((r) => confronta(r[chiave], atteso) > 0);
+        else if (operatore === "gte") righe = righe.filter((r) => confronta(r[chiave], atteso) >= 0);
         else if (operatore === "eq") righe = righe.filter((r) => String(r[chiave]) === atteso);
         else {
           return risposta(400, JSON.stringify({ message: `operatore ${operatore} non implementato` }));
@@ -337,12 +390,20 @@ function nuovoServitore() {
       }
       const ordine = u.searchParams.get("order");
       if (ordine) {
-        const [campo, verso] = ordine.split(".");
-        const segno = verso === "desc" ? -1 : 1;
-        righe = [...righe].sort((a, b) =>
-          String(a[campo]) < String(b[campo]) ? -segno : String(a[campo]) > String(b[campo]) ? segno : 0
-        );
+        const criteri = ordine.split(",").map((c) => {
+          const [campo, verso] = c.split(".");
+          return { campo, segno: verso === "desc" ? -1 : 1 };
+        });
+        righe = [...righe].sort((a, b) => {
+          for (const { campo, segno } of criteri) {
+            const d = confronta(a[campo], b[campo]);
+            if (d) return d * segno;
+          }
+          return 0;
+        });
       }
+      const scarto = Number(u.searchParams.get("offset") ?? "0");
+      if (scarto > 0) righe = righe.slice(scarto);
       const limite = Number(u.searchParams.get("limit") ?? "0");
       if (limite > 0) righe = righe.slice(0, limite);
       const select = u.searchParams.get("select");
@@ -361,7 +422,7 @@ function nuovoServitore() {
         return risposta(400, JSON.stringify({ message: "corpo non JSON" }));
       }
       if (!Array.isArray(righe)) return risposta(400, JSON.stringify({ message: "atteso un array" }));
-      for (const r of righe) tabella(nome).set(r[suConflitto], r);
+      inserisci(nome, righe, suConflitto, prossimoIstante());
       // Prefer: return=minimal -> corpo vuoto, come fa PostgREST davvero.
       return risposta(201, "");
     }
@@ -818,19 +879,22 @@ async function leggiMeta(app, chiave) {
 async function fissaSegnaposto(app, valore) {
   await app.Db.inTransazione(async (d) => {
     await d.runAsync(
-      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_hlc', ?)
+      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_creato', ?)
        ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
       [valore]
     );
   });
 }
 
+/** L'ora d'arrivo sul server dell'ultimo evento del registro remoto. */
+const ultimoArrivo = (s) => s.righe("eventi").map((r) => r.creato_a).sort().at(-1);
+
 /**
  * Gli eventi che il finto registro remoto contiene nascono DIECI MINUTI avanti
- * rispetto a ora: le scritture locali usano l'orologio vero, e un evento remoto
- * piu' vecchio di loro non avanzerebbe mai il segnaposto, che e' l'hlc
- * dell'ultima riga letta. Con lo scarto, l'ordine e' quello che si vuole
- * verificare invece che quello che capita.
+ * rispetto a ora, cosi' nei confronti «vince il piu' recente» sono loro i piu'
+ * recenti, e l'ordine e' quello che si vuole verificare invece che quello che
+ * capita. Il segnaposto non c'entra piu': e' l'ora d'arrivo sul server (B12-B14
+ * provano proprio eventi con HLC piu' vecchi di quelli gia' letti).
  */
 const PARTENZA_B = Date.now() + 10 * 60_000;
 const hlcRemoto = (scarto, dispositivo) =>
@@ -975,7 +1039,7 @@ await scenario("B3bis la transazione e' UNA: se la proiezione cade, nemmeno l'ev
       utente_id: UTENTE_ATTESO,
     },
   ]);
-  const primaSegnaposto = await leggiMeta(tab, "nuvola_hlc");
+  const primaSegnaposto = await leggiMeta(tab, "nuvola_creato");
   const esito = await sincronizza(tab, velenoso);
 
   ok("lo scambio non e' riuscito", esito.riuscito === false, JSON.stringify(esito));
@@ -986,8 +1050,8 @@ await scenario("B3bis la transazione e' UNA: se la proiezione cade, nemmeno l'ev
   ok("l'evento NON e' rimasto nel registro", ev === null || ev === undefined, JSON.stringify(ev));
   const s = await riga(tab, "segni", "id", "s-veleno");
   ok("e nessuna riga e' rimasta a meta'", s === null || s === undefined, JSON.stringify(s));
-  ok("il segnaposto non e' avanzato", (await leggiMeta(tab, "nuvola_hlc")) === primaSegnaposto,
-     `${primaSegnaposto} -> ${await leggiMeta(tab, "nuvola_hlc")}`);
+  ok("il segnaposto non e' avanzato", (await leggiMeta(tab, "nuvola_creato")) === primaSegnaposto,
+     `${primaSegnaposto} -> ${await leggiMeta(tab, "nuvola_creato")}`);
   // Il registro resta usabile: se il ROLLBACK avesse lasciato una transazione
   // aperta, da qui in poi l'app non scriverebbe piu' niente, e in silenzio
   // (vedi il commento lungo in lib/db.ts).
@@ -998,19 +1062,23 @@ await scenario("B3bis la transazione e' UNA: se la proiezione cade, nemmeno l'ev
   await svuotaCoda(tab);
 });
 
-await scenario("B4 il segnaposto avanza, e una seconda sincronizzazione non riscarica", async () => {
-  const atteso = hlcRemoto(7000, "rassegna");
-  ok("il segnaposto e' l'hlc dell'ultimo evento ricevuto",
-     (await leggiMeta(tab, "nuvola_hlc")) === atteso, String(await leggiMeta(tab, "nuvola_hlc")));
+await scenario("B4 il segnaposto avanza all'ora d'arrivo dell'ultimo evento, e un secondo giro non porta niente di nuovo", async () => {
+  const atteso = ultimoArrivo(servitore);
+  ok("il segnaposto e' l'ora d'arrivo sul server dell'ultimo evento letto, non il suo HLC",
+     (await leggiMeta(tab, "nuvola_creato")) === atteso, String(await leggiMeta(tab, "nuvola_creato")));
 
   servitore.azzeraRichieste();
   const esito = await sincronizza(tab, servitore);
-  uguali("il secondo giro non riceve niente e non ha niente da mandare",
-    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi, inviati: esito.inviati },
-    { riuscito: true, ricevuti: 0, nuovi: 0, inviati: 0 });
-  ok("e la domanda partita chiede solo cio' che viene dopo il segnaposto",
-     servitore.versoEventi("GET")[0].parametri.get("hlc") === "gt." + atteso,
+  uguali("il secondo giro non porta niente di nuovo e non ha niente da mandare",
+    { riuscito: esito.riuscito, nuovi: esito.nuovi, inviati: esito.inviati },
+    { riuscito: true, nuovi: 0, inviati: 0 });
+  const q = servitore.versoEventi("GET")[0].parametri;
+  ok("e chiede dall'ora d'arrivo meno il margine, in ordine d'arrivo e per id, dalla prima pagina",
+     q.get("creato_a") === "gte." + tab.Sincronia.sogliaDiLettura(atteso) &&
+     q.get("order") === "creato_a.asc,id.asc" && q.get("offset") === "0" && q.get("hlc") === null,
      servitore.versoEventi("GET")[0].url);
+  ok("il margine e' di dieci minuti",
+     Date.parse(atteso.replace(/(\.\d{3})\d+/, "$1")) - Date.parse(tab.Sincronia.sogliaDiLettura(atteso)) === 10 * 60_000);
   ok("motivo onesto quando non c'e' nulla da fare", esito.motivo.startsWith("Già allineato."), esito.motivo);
 });
 
@@ -1023,9 +1091,9 @@ await scenario("B5 il segnaposto avanza ANCHE quando gli eventi ricevuti sono tu
   servitore.azzeraRichieste();
   const esito = await sincronizza(tab, servitore);
   uguali("due eventi riletti, nessuno nuovo", [esito.ricevuti, esito.nuovi], [2, 0]);
-  const atteso = hlcRemoto(7000, "rassegna");
+  const atteso = ultimoArrivo(servitore);
   ok("e il segnaposto e' tornato in fondo lo stesso",
-     (await leggiMeta(tab, "nuvola_hlc")) === atteso, String(await leggiMeta(tab, "nuvola_hlc")));
+     (await leggiMeta(tab, "nuvola_creato")) === atteso, String(await leggiMeta(tab, "nuvola_creato")));
 });
 
 await scenario("B6 l'orologio assorbe gli HLC ricevuti (invariante 2)", async () => {
@@ -1043,7 +1111,9 @@ await scenario("B6 l'orologio assorbe gli HLC ricevuti (invariante 2)", async ()
     },
   ]);
   const esito = await sincronizza(tab, servitore);
-  uguali("l'evento del dispositivo avanti e' entrato", [esito.ricevuti, esito.nuovi], [1, 1]);
+  // ricevuti conta anche quelli riletti nel margine di dieci minuti, che
+  // fondi() scarta: il nuovo e' uno.
+  uguali("l'evento del dispositivo avanti e' entrato", esito.nuovi, 1);
 
   const segno = await tab.Segni.annota("b-vol-1", "segnalibro", "scritto dopo lo scambio", 1, null);
   ok("il primo evento locale dopo lo scambio ha un HLC piu' alto del piu' alto ricevuto",
@@ -1120,9 +1190,10 @@ await scenario("B9 paginazione: con piu' eventi del limite di pagina si fanno pi
     { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi }, { riuscito: true, ricevuti: 501, nuovi: 501 });
   const letture = tanti.versoEventi("GET");
   ok("in due giri, non in uno", letture.length === 2, String(letture.length));
-  ok("il primo giro parte dall'inizio", letture[0].parametri.get("hlc") === null, letture[0].url);
-  ok("il secondo riparte dall'ultimo hlc del primo",
-     letture[1].parametri.get("hlc") === "gt." + righe[499].hlc, letture[1].url);
+  ok("il primo giro parte dall'inizio",
+     letture[0].parametri.get("creato_a") === null && letture[0].parametri.get("offset") === "0", letture[0].url);
+  ok("il secondo e' la pagina dopo della stessa lettura",
+     letture[1].parametri.get("creato_a") === null && letture[1].parametri.get("offset") === "500", letture[1].url);
   const quante = await tab.Db.database().getFirstAsync(
     "SELECT count(*) AS n FROM note WHERE id LIKE 'b-pag-%'");
   ok("e 501 righe operative sono state scritte", quante.n === 501, String(quante.n));
@@ -1203,6 +1274,118 @@ await scenario("B10 CORREZIONE SORVEGLIATA: sincronizzaNuvola non finge di scegl
      corpoInviato[0].dispositivo_id === "tab1", corpoInviato[0].dispositivo_id);
   ok("e l'evento e' proprio il nostro", corpoInviato[0].entita_id === segno.id, corpoInviato[0].entita_id);
   servitoreInUso = servitore;
+});
+
+/** Una nota remota come la scriverebbe un altro dispositivo, o la conduttura. */
+const notaRemota = (id, hlc, dispositivo) => ({
+  id: `ev-${id}`, hlc, dispositivo_id: dispositivo, entita: "note", entita_id: id, tipo: "crea",
+  payload: { titolo: id, testo: "corpo", creato_a: "2026-09-01T10:00:00.000Z" },
+  utente_id: UTENTE_ATTESO,
+});
+const noteArrivate = async (prefisso) =>
+  (await tab.Db.database().getFirstAsync(
+    "SELECT count(*) AS n FROM note WHERE id LIKE ?", [`${prefisso}%`])).n;
+/** Un istante di PostgREST spostato di `ms`, nel formato che userebbe lui. */
+const spostato = (ora, ms) =>
+  new Date(Date.parse(ora.replace(/(\.\d{3})\d+/, "$1")) + ms).toISOString().replace("Z", "000+00:00");
+
+await scenario("B12 CORREZIONE SORVEGLIATA: un evento che ARRIVA dopo, con un HLC piu' vecchio di uno gia' letto, si riceve", async () => {
+  // Era il difetto del segnaposto per HLC: si chiedeva `hlc=gt.<ultimo letto>`,
+  // e un evento con l'HLC piu' vecchio di quello non si leggeva mai piu'.
+  // Succede ogni mattina: la conduttura da' gli HLC mentre lavora, il piu'
+  // rilevante per primo, e carica tutto alla fine; se nel frattempo il
+  // telefono ha caricato una nota e il tablet l'ha letta, i dieci articoli
+  // della corsa restano fuori. E succede a ogni viaggio: il tablet senza rete
+  // scrive per giorni e carica al rientro. Verdetto rovesciato: un rosso qui
+  // vuol dire che il segnaposto e' tornato a essere un orologio di chi scrive.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+
+  s.semina("eventi", [notaRemota("b12-telefono", hlcRemoto(60_000, "telefono"), "telefono")]);
+  let esito = await sincronizza(tab, s);
+  uguali("la nota del telefono arriva", [esito.riuscito, esito.nuovi], [true, 1]);
+
+  // Venti minuti dopo carica la conduttura: dieci articoli con HLC dati prima
+  // della nota del telefono.
+  s.fissaOrologio(spostato(s.ora(), 20 * 60_000));
+  s.semina("eventi", Array.from({ length: 10 }, (_, i) =>
+    notaRemota(`b12-rassegna-${i}`, hlcRemoto(1_000 + i, "rassegna"), "rassegna")));
+  esito = await sincronizza(tab, s);
+  uguali("arrivano tutti e dieci", [esito.riuscito, esito.nuovi], [true, 10]);
+  ok("e sono scritti", (await noteArrivate("b12-rassegna-")) === 10, String(await noteArrivate("b12-rassegna-")));
+
+  // Il tablet torna in rete dopo un giorno senza: le sue note hanno l'ora di
+  // quando sono state scritte, ieri.
+  s.fissaOrologio(spostato(s.ora(), 60 * 60_000));
+  s.semina("eventi", [notaRemota("b12-offline", hlcRemoto(-86_400_000, "tablet-due"), "tablet-due")]);
+  esito = await sincronizza(tab, s);
+  uguali("la nota scritta senza rete arriva anche lei", [esito.riuscito, esito.nuovi], [true, 1]);
+
+  // Un caricamento lento: la sua transazione e' cominciata cinque minuti
+  // prima dell'ultimo evento letto, ed e' diventata visibile dopo la lettura.
+  const segnaposto = await leggiMeta(tab, "nuvola_creato");
+  s.fissaOrologio(spostato(segnaposto, -5 * 60_000));
+  s.semina("eventi", [notaRemota("b12-lento", hlcRemoto(70_000, "telefono"), "telefono")]);
+  esito = await sincronizza(tab, s);
+  uguali("il margine lo riprende", [esito.riuscito, esito.nuovi], [true, 1]);
+  ok("e il segnaposto non torna indietro per lui",
+     (await leggiMeta(tab, "nuvola_creato")) === segnaposto, String(await leggiMeta(tab, "nuvola_creato")));
+
+  esito = await sincronizza(tab, s);
+  uguali("dopo, niente di nuovo", [esito.riuscito, esito.nuovi], [true, 0]);
+  ok("e la schermata dice che e' allineato", esito.motivo.startsWith("Già allineato."), esito.motivo);
+  ok("tutte le note della prova ci sono, una volta sola",
+     (await noteArrivate("b12-")) === 13, String(await noteArrivate("b12-")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B13 il primo scambio dopo l'aggiornamento rilegge tutto, e recupera cio' che il segnaposto per HLC aveva perso", async () => {
+  // Il telefono arriva dalla versione di prima: ha il vecchio segnaposto
+  // (`nuvola_hlc`) e non il nuovo. Nel registro remoto c'e' un articolo che
+  // quel segnaposto aveva saltato: non e' mai entrato.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await tab.Db.inTransazione(async (d) => {
+    await d.runAsync("DELETE FROM meta WHERE chiave = 'nuvola_creato'");
+    await d.runAsync(
+      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_hlc', ?)
+       ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
+      [hlcRemoto(5_000_000, "telefono")]);
+  });
+  s.semina("eventi", [
+    notaRemota("b13-gia-qui", hlcRemoto(4_000_000, "telefono"), "telefono"),
+    notaRemota("b13-perso", hlcRemoto(2_000, "rassegna"), "rassegna"),
+  ]);
+  await depositaEventi(tab, [{ ...notaRemota("b13-gia-qui", hlcRemoto(4_000_000, "telefono"), "telefono"),
+    dispositivo: "telefono", payload: JSON.stringify({ titolo: "b13-gia-qui", testo: "corpo", creato_a: "2026-09-01T10:00:00.000Z" }) }]);
+  s.azzeraRichieste();
+
+  const esito = await sincronizza(tab, s);
+  ok("si legge dall'inizio", s.versoEventi("GET")[0].parametri.get("creato_a") === null, s.versoEventi("GET")[0].url);
+  uguali("l'articolo perso arriva, quello gia' qui no",
+    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi },
+    { riuscito: true, ricevuti: 2, nuovi: 1 });
+  ok("ed e' scritto", (await noteArrivate("b13-perso")) === 1);
+  ok("da qui il segnaposto e' quello nuovo",
+     (await leggiMeta(tab, "nuvola_creato")) === ultimoArrivo(s), String(await leggiMeta(tab, "nuvola_creato")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B14 l'ora del server si legge in tutte le forme in cui Postgres la scrive", async () => {
+  // Postgres toglie gli zeri in coda ai decimali e, senza decimali, il punto:
+  // le tre forme escono dallo stesso server. Una che non si legge vale
+  // «dall'inizio», che costa una rilettura ma non perde niente.
+  const soglia = tab.Sincronia.sogliaDiLettura;
+  uguali("microsecondi, millisecondi, decimi, niente, Z, un altro fuso",
+    ["2026-10-01T03:14:44.548609+00:00", "2026-10-01T03:14:44.548+00:00", "2026-10-01T03:14:44.5+00:00",
+     "2026-10-01T03:14:44+00:00", "2026-10-01T03:14:44Z", "2026-10-01T05:14:44.548609+02:00",
+     "2026-09-30T21:14:44.548609-06:00", "2026-10-01 03:14:44.548609+00"].map(soglia),
+    ["2026-10-01T03:04:44.548Z", "2026-10-01T03:04:44.548Z", "2026-10-01T03:04:44.500Z",
+     "2026-10-01T03:04:44.000Z", "2026-10-01T03:04:44.000Z", "2026-10-01T03:04:44.548Z",
+     "2026-10-01T03:04:44.548Z", "2026-10-01T03:04:44.548Z"]);
+  uguali("e quelle che non si leggono valgono «dall'inizio»",
+    ["", "ieri", "2026-10-01", "1727752484", "2026-10-01T03:14:44"].map(soglia), ["", "", "", "", ""]);
 });
 
 // =========================================================================
