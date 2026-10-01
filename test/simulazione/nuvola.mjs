@@ -1114,6 +1114,10 @@ await scenario("B4 la soglia e' l'ora del server meno il margine, e a riposo sme
   // ogni scambio di quelle ore riscaricava l'intero lotto.
   servitore.avanza(11 * 60_000);
   await sincronizza(tab, servitore);
+  // Un minuto in piu' prima dell'ultimo scambio: senza, la soglia che resta
+  // e' quella dello scambio prima, e la verifica sotto non direbbe se la
+  // pagina vuota l'ha scritta.
+  servitore.avanza(60_000);
   servitore.azzeraRichieste();
   esito = await sincronizza(tab, servitore);
   uguali("passati dieci minuti, uno scambio non rilegge piu' niente",
@@ -1495,15 +1499,28 @@ await scenario("B16 piu' eventi di quanti ne legge uno scambio, arrivati in poch
       return notaRemota(`b16-${k}`, hlcRemoto(1_000_000 + lotto * 100 + i, "tablet-due"), "tablet-due");
     }));
   }
+  // E mentre il primo scambio legge, diventa visibile un caricamento lento
+  // cominciato cinque minuti prima: finisce dietro la prima pagina. E' lui
+  // che vieta di ripartire dall'ultimo arrivo quando l'ultimo arrivo e'
+  // dentro il margine.
+  s.allaRichiesta = (r) => {
+    if (r.metodo !== "GET" || r.parametri.get("offset") !== "100") return;
+    s.allaRichiesta = null;
+    s.iniziaCaricamentoAlle(spostato(s.ora(), -5 * 60_000));
+    s.semina("eventi", [notaRemota("b16-lento", hlcRemoto(900_000, "telefono"), "telefono")]);
+  };
   let esito = await sincronizza(tab, s);
-  uguali("il primo scambio si ferma al tetto", [esito.riuscito, esito.nuovi], [true, 3000]);
+  // 3000 righe lette, ma il caricamento lento ha spostato tutto in avanti di
+  // una: la seconda pagina ne rilegge una della prima, che fondi() scarta.
+  uguali("il primo scambio si ferma al tetto", [esito.riuscito, esito.ricevuti, esito.nuovi], [true, 3000, 2999]);
   esito = await sincronizza(tab, s);
-  ok("subito dopo, la finestra e' ancora piena", esito.riuscito && esito.nuovi === 0, JSON.stringify(esito.nuovi));
+  ok("subito dopo arriva il caricamento lento, e la finestra e' ancora piena",
+     esito.riuscito && esito.nuovi === 1 && (await noteArrivate("b16-lento")) === 1, JSON.stringify(esito.nuovi));
   s.avanza(11 * 60_000);
   let arrivati = 0;
   for (let giro = 0; giro < 3; giro++) arrivati += (await sincronizza(tab, s)).nuovi;
-  uguali("passati dieci minuti, arriva il resto", arrivati, 100);
-  ok("e ci sono tutti e 3100", (await noteArrivate("b16-")) === 3100, String(await noteArrivate("b16-")));
+  uguali("passati dieci minuti, arriva il resto", arrivati, 101);
+  ok("e ci sono tutti e 3101", (await noteArrivate("b16-")) === 3101, String(await noteArrivate("b16-")));
   servitoreInUso = servitore;
 });
 
