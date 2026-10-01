@@ -267,6 +267,8 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   ok("S6 intestazione, barra e lista stanno nella stessa colonna",
     s.includes("<View style={COLONNA}>") && s.includes("contentContainerStyle={[COLONNA,") &&
     s.indexOf("<View style={COLONNA}>") < s.indexOf("<ScrollView ref={barra} horizontal"));
+  ok("S7 la categoria scelta da fuori viene in vista anche se la barra non era ancora misurata",
+    s.includes("if (attiva) barra.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });"));
   ok("S1 la barra delle categorie sta fuori dalla lista, ferma",
     s.indexOf("<ScrollView ref={barra} horizontal") > 0 && s.indexOf("<ScrollView ref={barra} horizontal") < s.indexOf("<FlatList\n"));
 }

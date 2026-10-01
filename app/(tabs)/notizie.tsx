@@ -317,7 +317,15 @@ export default function Notizie() {
             const n = numeroDi(c);
             return (
               <Pressable key={c.chiave} onPress={() => scegli(c.chiave)}
-                onLayout={(e) => posizioni.current.set(c.chiave, e.nativeEvent.layout.x)}
+                onLayout={(e) => {
+                const x = e.nativeEvent.layout.x;
+                posizioni.current.set(c.chiave, x);
+                // Al primo arrivo dall'unità la categoria si sceglie prima
+                // che la barra sia misurata, e l'effetto qui sopra non trova
+                // dove scorrere; e i numeri, quando arrivano, allargano le
+                // linguette prima di questa. Si riprova quando la misura c'è.
+                if (attiva) barra.current?.scrollTo({ x: Math.max(0, x - 16), animated: false });
+              }}
                 style={{ paddingHorizontal: 10, paddingTop: 10, paddingBottom: 8,
                          borderBottomWidth: 2, borderColor: attiva ? C.blu : "transparent" }}>
                 <Text style={{ fontSize: 14, fontWeight: attiva ? "600" : "400",
