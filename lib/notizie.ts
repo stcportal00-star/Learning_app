@@ -77,17 +77,24 @@ export function categorie(): Categoria[] {
 const MESI = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 
 /**
- * La data di un articolo: quando è uscito, ma mai dopo quando è arrivato; se
- * non si sa, quando è arrivato. Crossref preferisce la data del fascicolo a
- * stampa, che per un articolo uscito prima in rete cade mesi avanti (nel
- * catalogo vero, fino al 2121): presa così com'è, quell'articolo starebbe in
- * cima a ogni lista, «oggi», per settimane. Le due date le scrive la stessa
- * conduttura nello stesso formato, e si confrontano come testo, come fa
- * `DATA` nella query.
+ * La data di un articolo: quando è uscito, ma mai dopo il giorno in cui è
+ * arrivato; se non si sa, quel giorno. Crossref preferisce la data del
+ * fascicolo a stampa, che per un articolo uscito prima in rete cade mesi
+ * avanti (nel catalogo vero, fino al 2121): presa così com'è, quell'articolo
+ * starebbe in cima a ogni lista, «oggi», per settimane.
+ *
+ * Il giorno, non l'istante: le date d'uscita vere sono nude (mezzanotte UTC),
+ * mentre raccolto_a ha l'ora della corsa. Con l'istante, un articolo senza
+ * data o datato nel futuro veniva dopo mezzanotte e quindi prima di tutti
+ * quelli della sua corsa, e faceva da notizia principale dell'area per tutto
+ * il viaggio; con il giorno pareggia con loro, e decide la rilevanza.
+ *
+ * Le due date le scrive la stessa conduttura nello stesso formato, e si
+ * confrontano come testo, come fa `DATA` nella query.
  */
 export function dataDi(n: Pick<Notizia, "pubblicato_a" | "raccolto_a">): string {
   const p = n.pubblicato_a;
-  return p && p <= n.raccolto_a ? p : n.raccolto_a;
+  return p && p <= n.raccolto_a ? p : `${n.raccolto_a.slice(0, 10)}T00:00:00+00:00`;
 }
 
 /**
@@ -279,7 +286,8 @@ const COLONNE = `id, titolo, autori, fonte, abstract, tema_slug, pubblicato_a, r
  * alfabetico. Un articolo segnato letto prende un HLC nuovo e scende in fondo
  * al suo giorno, dove un letto può stare.
  */
-const DATA = "MIN(COALESCE(pubblicato_a, raccolto_a), raccolto_a)";
+const DATA = `CASE WHEN pubblicato_a IS NOT NULL AND pubblicato_a <= raccolto_a THEN pubblicato_a
+  ELSE substr(raccolto_a, 1, 10) || 'T00:00:00+00:00' END`;
 const PER_DATA = `ORDER BY ${DATA} DESC, hlc, titolo`;
 
 export type Filtro = {

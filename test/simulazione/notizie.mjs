@@ -101,14 +101,14 @@ uguale(`N3 [${fuso}] niente data o data illeggibile: niente etichetta`, [N.quand
 uguale(`N4 [${fuso}] i gruppi: oggi, ieri, questa settimana, prima; il futuro è oggi`,
   [fa(10), localeIso(2026, 9, 30), localeIso(2026, 9, 27), localeIso(2026, 9, 20), fa(-600)].map((d) => N.gruppoDi(d, adesso)),
   ["Oggi", "Ieri", "Questa settimana", "Prima", "Oggi"]);
-uguale("N4 la data di un articolo: l'uscita, e senza, l'arrivo",
+uguale("N4 la data di un articolo: l'uscita, e senza, il giorno dell'arrivo",
   [N.dataDi({ pubblicato_a: "2026-09-29T00:00:00+00:00", raccolto_a: "2026-09-30T08:00:00+00:00" }),
    N.dataDi({ pubblicato_a: null, raccolto_a: "2026-09-30T08:00:00+00:00" })],
-  ["2026-09-29T00:00:00+00:00", "2026-09-30T08:00:00+00:00"]);
-uguale("N4 un'uscita dopo l'arrivo (il fascicolo a stampa di Crossref) vale l'arrivo",
+  ["2026-09-29T00:00:00+00:00", "2026-09-30T00:00:00+00:00"]);
+uguale("N4 un'uscita dopo l'arrivo (il fascicolo a stampa di Crossref) vale il giorno dell'arrivo, non l'istante",
   [N.dataDi({ pubblicato_a: "2121-10-01T00:00:00+00:00", raccolto_a: "2026-09-30T08:00:00+00:00" }),
    N.dataDi({ pubblicato_a: "2026-10-01T00:00:00+00:00", raccolto_a: "2026-09-30T08:00:00.123456+00:00" })],
-  ["2026-09-30T08:00:00+00:00", "2026-09-30T08:00:00.123456+00:00"]);
+  ["2026-09-30T00:00:00+00:00", "2026-09-30T00:00:00+00:00"]);
 
 // ============================================================ FONTI
 uguale("N5 la fonte come la scrive un giornale",
@@ -210,6 +210,18 @@ await art("k-piu", "kpi", { titolo: "Z, più rilevante", pubblicato_a: "2026-09-
 uguale("D0 a parità di data, prima la più rilevante della corsa, non la prima in ordine alfabetico",
   (await N.leggiNotizie({ temi: ["kpi"], soloDaLeggere: true, limite: 9 })).map((x) => x.id), ["k-piu", "k-meno"]);
 
+// Una corsa sola: la più rilevante datata oggi, e una datata nel futuro
+// (il fascicolo a stampa) meno rilevante. La prima resta la principale.
+const corsa = "2026-10-01T14:03:11.48+00:00";
+await art("q-primo", "qualita_dati", { pubblicato_a: "2026-10-01T00:00:00+00:00", raccolto_a: corsa, hlc: "000000000010-0000-x" });
+await art("q-futuro", "qualita_dati", { pubblicato_a: "2026-12-01T00:00:00+00:00", raccolto_a: corsa, hlc: "000000000050-0000-x" });
+await art("q-senzadata", "qualita_dati", { pubblicato_a: null, raccolto_a: corsa, hlc: "000000000060-0000-x" });
+uguale("D0 un articolo datato nel futuro o senza data non scavalca la notizia più rilevante della sua corsa",
+  (await N.leggiNotizie({ temi: ["qualita_dati"], soloDaLeggere: true, limite: 9 })).map((x) => x.id),
+  ["q-primo", "q-futuro", "q-senzadata"]);
+uguale("D0 e il giorno è quello dell'arrivo: «oggi», non un'ora",
+  N.quando(N.dataDi({ pubblicato_a: "2026-12-01T00:00:00+00:00", raccolto_a: corsa }), new Date(2026, 9, 1, 22, 0)), "oggi");
+
 const gov = N.categorie().find((c) => c.chiave === "governance").temi;
 {
   const r = await N.leggiNotizie({ temi: gov, soloDaLeggere: true, limite: 50 });
@@ -237,11 +249,11 @@ const gov = N.categorie().find((c) => c.chiave === "governance").temi;
   const conti = await N.contaPerTema();
   const daLeggere = N.contaPerCategoria(conti, true);
   const tutti = N.contaPerCategoria(conti, false);
-  uguale("D5 i numeri della barra, da leggere: governance 3, dati 1, hardware 1, esplorazione 2, kpi 2",
-    ["governance", "dati", "hardware", "esplorazione", "kpi"].map((a) => daLeggere.get(a) ?? 0), [3, 1, 1, 2, 2]);
+  uguale("D5 i numeri della barra, da leggere: governance 3, dati 4, hardware 1, esplorazione 2, kpi 2",
+    ["governance", "dati", "hardware", "esplorazione", "kpi"].map((a) => daLeggere.get(a) ?? 0), [3, 4, 1, 2, 2]);
   uguale("D5 e in tutto: governance 4, esplorazione 3", ["governance", "esplorazione"].map((a) => tutti.get(a) ?? 0), [4, 3]);
   const somma = [...tutti.values()].reduce((s, n) => s + n, 0);
-  uguale("D5 nessun articolo si perde fra le categorie", somma, 11);
+  uguale("D5 nessun articolo si perde fra le categorie", somma, 14);
 }
 
 // ============================================================ SORGENTI
