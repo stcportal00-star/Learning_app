@@ -5,7 +5,9 @@ import { C } from "../../lib/tema";
 /**
  * Cinque schede: il massimo leggibile su un telefono.
  * Esercizi, ripasso, lettore e sincronizzazione sono schermate impilate,
- * raggiunte da Studio e da Profilo.
+ * raggiunte da Studio e da Profilo. Profilo stesso è impilato e si apre da
+ * Oggi: la quinta scheda è Notizie, che si apre ogni giorno, mentre in
+ * Profilo si va per un aggiornamento o un accoppiamento.
  *
  * Sotto i 600dp barra in basso, sopra barra laterale: stesso codice.
  */
@@ -36,7 +38,7 @@ export default function Schede() {
       <Tabs.Screen name="studio" options={{ title: "Studio" }} />
       <Tabs.Screen name="libreria" options={{ title: "Libreria" }} />
       <Tabs.Screen name="note" options={{ title: "Note" }} />
-      <Tabs.Screen name="profilo" options={{ title: "Profilo" }} />
+      <Tabs.Screen name="notizie" options={{ title: "Notizie" }} />
     </Tabs>
   );
 }

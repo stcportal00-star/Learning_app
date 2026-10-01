@@ -265,7 +265,8 @@ const rifatto = await agg.scaricaRelease(r28);
 uguale("A6 un file a metà si riscarica intero",
   rifatto.uri && new fs.File(rifatto.uri).size, 4096);
 
-// Due pulsanti, un solo scarico: Oggi e Profilo restano montati entrambi.
+// Due pulsanti, un solo scarico: Profilo può chiudersi a scarico in corso, e
+// Oggi avviarne un altro sullo stesso file.
 new fs.File(agg.cartellaAggiornamenti(), "percorso-28.apk").delete();
 const veroScarica = fs.File.downloadFileAsync;
 let scarichi = 0;

@@ -67,6 +67,29 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
    - Gli eventi ricevuti non generano eventi nuovi.
    - `file_locale` è l'UNICA scrittura che di proposito non genera un evento:
      è un percorso di questo telefono e altrove non significa niente.
+   - **Il segnaposto della lettura è l'ora d'arrivo sul server**
+     (`creato_a`, meta `nuvola_creato`), mai l'HLC: un evento può arrivare
+     con un HLC più vecchio di uno già letto — la conduttura dà gli HLC
+     mentre lavora e carica alla fine, il tablet senza rete carica al
+     rientro — e con l'HLC come segnaposto non si leggeva più. La lettura
+     dopo parte dall'ora del server (intestazione Date della prima pagina)
+     meno dieci minuti (`MARGINE_MS`: `now()` è l'inizio della transazione,
+     e un caricamento lento diventa visibile dopo uno svelto), i doppioni li
+     scarta `fondi()`. Dall'ultimo arrivo invece che dall'ora, a riposo ogni
+     scambio riscaricava l'ultimo lotto della conduttura. Una lettura che si
+     ferma a metà riparte dall'ultimo arrivo senza margine: con il margine,
+     più di 3000 eventi arrivati in dieci minuti la fermavano per sempre. Si
+     legge a pagine da 100, perché ogni pagina arrivi entro il timeout. Le
+     prove sono B4 e B12–B17 in `test/simulazione/nuvola.mjs`.
+   - **La soglia non perde eventi finché reggono quattro condizioni**, e chi
+     tocca Supabase deve tenerle: ogni transazione che scrive in `eventi`
+     dura meno di dieci minuti (meno il tempo di una query); l'orologio
+     dell'intestazione Date e quello di Postgres stanno entro pochi secondi
+     (uno avanti di più non si vede dall'app); le letture vanno al
+     primario, non a una replica in ritardo; `max_rows` di PostgREST non
+     scende sotto 100 (Supabase: 1000), o ogni pagina sembra l'ultima. Da
+     `eventi` non si cancella mai: lo spostamento delle pagine fa solo
+     rileggere.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
      schema `percorso`, legate a un identificativo utente fisso.
@@ -286,7 +309,11 @@ schema vero letto da `lib/db.ts`) e `strumenti/nuvola/prova_conduttura.py`
   deliberatamente rimossa perché dichiarata e mai usata.
 - Layout adattivo con un solo punto di rottura: `useWindowDimensions()`, 600dp.
   Niente rami separati per telefono e tablet.
-- Massimo cinque schede. Il resto sono schermate impilate.
+- Massimo cinque schede: Oggi, Studio, Libreria, Note, Notizie. Il resto sono
+  schermate impilate. Profilo è impilato e si apre dal pulsante in alto in
+  Oggi: si apre di rado (aggiornamento, accoppiamento, promemoria), mentre le
+  Notizie ogni giorno. La rotta resta `/profilo`, e il collegamento
+  `percorso://profilo` del test di fumo continua ad aprirla.
 - **Tema nero.** I colori stanno solo in `lib/tema.ts` (`C`): nessun esadecimale
   nelle schermate. `Text`, `TextInput` e `ActivityIndicator` si importano da
   `components/Base`, mai da `react-native`: il testo predefinito di React Native
@@ -324,14 +351,29 @@ conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
   prima unità non superata; la lettura viene prima solo se il volume è sul
   telefono e mai aperto. Sta in cima a Oggi e a Studio
   (`components/ProssimoPasso.tsx`), e si ricalcola a ogni ritorno in primo piano.
+- **I progetti in parallelo** (`progetti()` in `lib/percorso.ts`). Il piano
+  propone un ordine, non lo impone: dall'unità si «Segue» qualunque tema con
+  verifiche non ancora superato, anche più d'uno, e Oggi e Studio mostrano un riquadro per
+  progetto, nell'ordine in cui si sono scelti. Superato il tema scelto, al suo
+  posto arriva il successivo della stessa area (`pista` di `TEMI`, nomi in
+  `AREE`), poi il primo rimasto indietro; mai due progetti sulla stessa unità.
+  Senza temi seguiti, o con tutte le aree finite, torna il prossimo passo del
+  piano. Il seguito si ricalcola dall'avanzamento a ogni lettura; Oggi,
+  Studio e l'unità ricordano solo chi aveva quale seguito
+  (`percorso.subentrate`), anche durante una ricaduta, e il ricordo vale
+  come preferenza finché l'unità è libera: senza, superati due temi della
+  stessa area in ordine inverso, un'unità passava da un progetto all'altro. Scelta e ricordo stanno nel kv-store del dispositivo
+  (`lib/progetti.ts`), non nel registro: come l'avanzamento, sono per
+  dispositivo.
 - **L'avanzamento non ha eventi suoi.** `lib/avanzamento.ts` lo legge dalle
   tabelle che l'app scrive già (tentativi, ripasso, note, biblioteca, articoli):
   un secondo registro dell'avanzamento andrebbe tenuto allineato al primo.
 - **Gli scenari si svolgono in Note.** L'unità crea la nota con consegna e
   rubrica e `origine_url = scenario:<id>`; lo scenario è svolto quando la nota
   non è più il modello con cui è nata. Se la nota esiste già, si riapre quella.
-- Esercizi, Ripasso e Rassegna accettano `?tema=`: dall'unità si arriva già
-  filtrati. Senza parametro fanno quello che facevano prima.
+- Esercizi, Ripasso e Notizie accettano `?tema=`: dall'unità si arriva già
+  filtrati. Senza parametro fanno quello che facevano prima. Notizie è una
+  scheda: dall'unità ci si va con `dismissTo`, come a Note e Libreria.
 - **Da una schermata impilata a una scheda si va con `router.dismissTo`**, mai
   con `navigate` o `push`. In expo-router 6 NAVIGATE riusa una schermata della
   pila solo se è quella corrente: dall'unità, `navigate("/note")` impila un
@@ -361,6 +403,30 @@ conduttura porta ogni mattina e, contato, spostava i numeri di tutte le altre.
   passaggio.
 - Le prove sono in `test/simulazione/percorso.mjs`, sul codice vero e sui
   contenuti veri.
+
+## Le notizie
+
+La quinta scheda (`app/(tabs)/notizie.tsx`, logica in `lib/notizie.ts`) è la
+rassegna letta come un giornale. Le categorie sono fisse e nello stesso
+ordine: Per te, In primo piano, le sette aree di `AREE`, Esplorazione,
+Salvati.
+
+- **Le categorie sono le aree, non i trimestri.** Il trimestre di un
+  articolo lo scrive la conduttura, e per cinque temi non coincide con
+  quello del piano; l'area si ricava dal tema con `TEMI`. Un articolo senza
+  tema, o con un tema che il piano non conosce, finisce in Esplorazione: mai
+  fuori dall'elenco.
+- **In primo piano** ha una sezione per area con la notizia principale e tre
+  dopo; **Per te** le aree dei progetti (senza progetti, quella dell'unità del
+  piano). L'area intera e non il tema, perché le parti di SQL la conduttura
+  non le assegna mai.
+- **Le date sono quelle del telefono.** «3 ore fa» solo se l'ora c'è: le date
+  nude la conduttura le scrive come mezzanotte UTC, e diventano «oggi»,
+  «ieri». L'ordine è per data d'uscita, perché tutti gli articoli di una
+  corsa hanno lo stesso `raccolto_a`. `verifica.sh` esegue
+  `test/simulazione/notizie.mjs` in UTC, a Città del Messico e a Roma: un
+  giorno calcolato in UTC passa la prima e sbaglia la seconda.
+- L'elenco non legge la colonna `testo`, che pesa: sa solo se c'è.
 
 ## Stato verificato al momento della consegna
 
@@ -426,8 +492,8 @@ Actions fa da PC**: compila, firma, installa su un emulatore, legge logcat.
   GitHub l'elenco delle release, prende la build di `main` con il numero di
   corsa più alto (le preliminari dei rami restano fuori), la confronta con
   `extra.corsa` e, se è più recente, la scarica e la consegna all'installatore
-  di Android con un intent VIEW. Il riquadro sta in Profilo, e in Oggi compare
-  solo quando c'è qualcosa da installare. Si controlla al massimo ogni sei
+  di Android con un intent VIEW. Il riquadro sta in Profilo (Oggi → Profilo,
+  in alto), e in Oggi compare solo quando c'è qualcosa da installare. Si controlla al massimo ogni sei
   ore, l'ultimo esito si ricorda senza rete, e un controllo fallito non fa
   dimenticare quello buono. Serve il permesso `REQUEST_INSTALL_PACKAGES` in
   `app.json`: senza, Android rifiuta in silenzio. La firma la verifica il

@@ -16,7 +16,12 @@
  * si è fatto, non un secondo registro da tenere allineato al primo.
  */
 
-export type Tema = { slug: string; nome: string; trimestre: string | null };
+/**
+ * `pista` è l'area del tema (dati, ia, hardware…, vedi `TEMI`): serve ai
+ * progetti, per sapere che cosa viene dopo un tema superato. È facoltativa
+ * perché un tema senza area non ha un seguito, e resta un'unità come le altre.
+ */
+export type Tema = { slug: string; nome: string; trimestre: string | null; pista?: string | null };
 
 /** Quanto materiale c'è per un tema, e quanto se n'è fatto. */
 export type Materiale = {
@@ -194,11 +199,154 @@ export type Indicazione = { unita: Unita; passo: Passo };
  */
 export function prossimoPasso(unita: Unita[]): Indicazione | null {
   for (const u of unita) {
-    if (u.stato === "completa" || u.stato === "senza_verifiche") continue;
-    const p = u.passi.find((p) => !p.completo && p.eseguibile && (p.conta || p.tipo === "leggi"));
+    const p = passoDaFare(u);
     if (p) return { unita: u, passo: p };
   }
   return null;
+}
+
+/**
+ * Il passo da fare adesso dentro un'unità, con la regola di prossimoPasso():
+ * il primo non fatto che si può fare, e fra quelli che non contano solo la
+ * lettura. null per un'unità superata o di sola lettura.
+ */
+export function passoDaFare(u: Unita): Passo | null {
+  if (u.stato === "completa" || u.stato === "senza_verifiche") return null;
+  return u.passi.find((p) => !p.completo && p.eseguibile && (p.conta || p.tipo === "leggi")) ?? null;
+}
+
+// ---------------------------------------------------------------- progetti
+
+/**
+ * Un progetto è un tema che si è scelto di seguire, in parallelo agli altri e
+ * fuori dall'ordine del piano: SQL, l'hardware e l'IA insieme, o l'hardware
+ * prima di SQL.
+ */
+export type Progetto = {
+  /** Il tema scelto. È la chiave del progetto: smettere di seguirlo toglie questo. */
+  seguito: string;
+  /** L'unità su cui si lavora adesso: il tema scelto, o chi ne ha preso il posto. */
+  unita: Unita;
+  /** null quando non resta niente da fare per questo progetto: vedi `areaFinita`. */
+  passo: Passo | null;
+  /** Il tema scelto è superato (o è già di un altro progetto) e questa unità è il suo seguito. */
+  subentrata: boolean;
+  /**
+   * Nell'area del tema scelto non resta niente da fare. Un progetto senza
+   * passo con l'area non finita è un tema superato il cui resto d'area è già
+   * negli altri progetti (si segue lettura del codice e AI engineering, che
+   * stanno nella stessa area): dirgli «area tutta superata» sarebbe falso.
+   */
+  areaFinita: boolean;
+};
+
+/**
+ * I progetti, nell'ordine in cui si sono scelti.
+ *
+ * Quando il tema scelto è superato, al suo posto arriva il successivo della
+ * stessa area, nell'ordine del piano; se dopo non c'è niente, il primo rimasto
+ * indietro nell'area. Il progetto finisce solo quando l'area è tutta superata.
+ * Si ricalcola ogni volta dall'avanzamento. Un seguito salvato come vincolo
+ * andrebbe tenuto allineato all'avanzamento, e divergerebbe al primo ripasso
+ * che fa ricadere un'unità; per questo del passato si tiene solo chi aveva
+ * quale seguito (`precedenti`, più sotto), come preferenza che cede quando
+ * l'unità è superata o ripresa dal tema che la segue di suo.
+ *
+ * Due progetti non finiscono mai sulla stessa unità. Prima si assegnano le
+ * unità scelte che hanno ancora qualcosa da fare, poi i seguiti: chi segue SQL
+ * — fondamenti e SQL — join, finite le fondamenta, si trova join e aggregazione,
+ * non due volte join.
+ *
+ * Quale tema superato prende quale seguito non dipende solo da com'è oggi
+ * l'avanzamento: seguiti fondamenta e join, chi supera join per primo la
+ * manda su aggregazione, e quando poi supera le fondamenta aggregazione deve
+ * restare a join. Nessun ordine fisso dei temi tiene in entrambi i versi,
+ * perché lo stato con tutti e due superati è lo stesso. Per questo
+ * `precedenti` porta il seguito che ogni tema aveva l'ultima volta (lo
+ * ricorda lib/progetti.ts): se quell'unità è ancora libera e nella stessa
+ * area, resta sua. È una preferenza, mai un vincolo: un'unità superata, o
+ * ripresa dal tema che la segue di suo, si riassegna. Gli altri seguiti si
+ * assegnano nell'ordine del piano dei temi scelti.
+ *
+ * Un tema che su questo dispositivo non è un'unità (sql_window senza window
+ * functions, un tema senza materiale) si salta: la scelta resta, e vale dove
+ * l'unità c'è.
+ */
+export function progetti(unita: Unita[], seguiti: string[], precedenti: Record<string, string> = {}): Progetto[] {
+  const presi = new Set<string>();
+  const libera = (u: Unita) => !presi.has(u.tema.slug) && passoDaFare(u) !== null;
+  const scelti = [...new Set(seguiti)]
+    .map((s) => ({ s, i: unita.findIndex((u) => u.tema.slug === s) }))
+    .filter((x) => x.i >= 0 && unita[x.i].stato !== "senza_verifiche");
+
+  const assegnate = new Map<string, Unita>();
+  for (const { s, i } of scelti) {
+    if (libera(unita[i])) { assegnate.set(s, unita[i]); presi.add(unita[i].tema.slug); }
+  }
+  for (const { s, i } of scelti) {
+    if (assegnate.has(s)) continue;
+    const area = unita[i].tema.pista;
+    const ieri = unita.find((u) => u.tema.slug === precedenti[s]);
+    if (ieri && area && ieri.tema.pista === area && libera(ieri)) { assegnate.set(s, ieri); presi.add(ieri.tema.slug); }
+  }
+  // Le unità promesse a un tema tornato sulla sua (una ricaduta: una scheda
+  // «Di nuovo» lo riporta sotto soglia): gli altri le prendono solo se non
+  // resta altro, così quando lo risupera ritrova il seguito su cui lavorava.
+  const riservate = new Set(scelti
+    .filter(({ s, i }) => assegnate.get(s) === unita[i] && precedenti[s])
+    .map(({ s }) => precedenti[s]));
+  for (const { s, i } of [...scelti].sort((a, b) => a.i - b.i)) {
+    if (assegnate.has(s)) continue;
+    const area = unita[i].tema.pista;
+    const nellArea = (u: Unita) => Boolean(area) && u.tema.pista === area && libera(u);
+    const fuoriRiserva = (u: Unita) => nellArea(u) && !riservate.has(u.tema.slug);
+    const cerca = (f: (u: Unita) => boolean) => unita.slice(i + 1).find(f) ?? unita.slice(0, i).find(f);
+    const seguito = cerca(fuoriRiserva) ?? cerca(nellArea);
+    if (seguito) { assegnate.set(s, seguito); presi.add(seguito.tema.slug); }
+  }
+
+  return scelti.map(({ s, i }) => {
+    const u = assegnate.get(s) ?? unita[i];
+    const area = unita[i].tema.pista;
+    const areaFinita = area
+      ? !unita.some((x) => x.tema.pista === area && passoDaFare(x) !== null)
+      : passoDaFare(unita[i]) === null;
+    return { seguito: s, unita: u, passo: passoDaFare(u), subentrata: u !== unita[i], areaFinita };
+  });
+}
+
+/**
+ * Il seguito di ogni tema superato, da ricordare per la prossima volta: vedi
+ * progetti(). Un tema tornato sulla sua unità (una ricaduta) tiene il seguito
+ * di prima: dimenticarlo al primo ritorno su Oggi lo lasciava libero, un altro
+ * tema superato se lo prendeva, e quando la ricaduta rientrava l'unità a metà
+ * cambiava progetto.
+ */
+export function subentrate(pr: Progetto[], precedenti: Record<string, string> = {}): Record<string, string> {
+  const m: Record<string, string> = {};
+  for (const p of pr) {
+    if (!p.passo) continue;
+    if (p.subentrata) m[p.seguito] = p.unita.tema.slug;
+    else if (precedenti[p.seguito]) m[p.seguito] = precedenti[p.seguito];
+  }
+  return m;
+}
+
+/** Una cosa da fare adesso: il passo di un progetto, o quello del piano (`progetto` null). */
+export type DaFare = { unita: Unita; passo: Passo; progetto: Progetto | null };
+
+/**
+ * Che cosa fare adesso: i passi dei progetti, e se nessun progetto ne ha uno
+ * (nessun tema seguito, o le loro aree tutte finite) il prossimo passo del
+ * piano. Una regola sola per Oggi, Studio e le Notizie: copiata in tre
+ * schermate, una avrebbe potuto smettere di tornare al piano, e Oggi avrebbe
+ * detto «tutte le unità sono superate» con decine ancora da fare.
+ */
+export function daFare(unita: Unita[], seguiti: string[], precedenti: Record<string, string> = {}): DaFare[] {
+  const conPasso = progetti(unita, seguiti, precedenti).filter((p) => p.passo);
+  if (conPasso.length) return conPasso.map((p) => ({ unita: p.unita, passo: p.passo!, progetto: p }));
+  const piano = prossimoPasso(unita);
+  return piano ? [{ unita: piano.unita, passo: piano.passo, progetto: null }] : [];
 }
 
 /** Il titolo e la riga di spiegazione di un passo, come li mostra lo schermo. */
@@ -231,7 +379,7 @@ export function descriviPasso(p: Passo): { titolo: string; dettaglio: string } {
     case "rassegna":
       return {
         titolo: "Resta aggiornato",
-        dettaglio: `${p.totale} articoli del tema da leggere nella rassegna.`,
+        dettaglio: `${p.totale} articoli del tema da leggere nelle Notizie.`,
       };
   }
 }
@@ -248,7 +396,7 @@ export function destinazione(slug: string, p: Passo, volume?: string | null): st
     case "scenario":
       return `/unita?tema=${encodeURIComponent(slug)}`;
     case "rassegna":
-      return `/rassegna?tema=${encodeURIComponent(slug)}`;
+      return `/notizie?tema=${encodeURIComponent(slug)}`;
   }
 }
 

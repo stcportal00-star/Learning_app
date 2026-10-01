@@ -264,8 +264,9 @@ export function liberaScaricati(corsaAttuale: unknown): number {
  * volta, magari in roaming.
  *
  * Uno scarico alla volta per build: Oggi e Profilo hanno ciascuno il suo
- * pulsante e restano montati. Due scarichi sullo stesso file si cancellano a
- * vicenda e finiscono entrambi «incompleti».
+ * pulsante. Profilo si chiude con «Indietro» mentre lo scarico continua, e
+ * Oggi può avviarne uno sullo stesso file; due scarichi sullo stesso file si
+ * cancellano a vicenda e finiscono entrambi «incompleti».
  */
 const scarichiInCorso = new Map<number, Promise<{ uri?: string; errore?: string }>>();
 

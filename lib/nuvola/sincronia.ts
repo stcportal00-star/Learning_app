@@ -30,10 +30,20 @@ import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
 import { liberaVisti } from "./media";
 
-/** Quanti eventi per viaggio. Oltre, il corpo della risposta diventa scomodo. */
+/** Quanti eventi per viaggio in invio. Oltre, il corpo diventa scomodo. */
 const PAGINA = 500;
 /** Quante pagine al massimo in una sola sincronizzazione. */
 const PAGINE_MASSIME = 20;
+/**
+ * In lettura, cento: gli eventi degli articoli portano il testo, e sul
+ * registro vero cento consecutivi pesano fino a 2 MB, cinquecento fino a
+ * 8,2. In React Native `fetch` risolve a corpo scaricato, quindi la pagina
+ * intera deve arrivare dentro TIMEOUT_MS (20 s): 8,2 MB chiedono 3,3 Mbit/s,
+ * e sotto quella rete la prima pagina cadeva a ogni scambio, per sempre.
+ */
+const PAGINA_LETTURA = 100;
+/** 3000 eventi a scambio: il registro intero (2354 oggi) si rilegge in uno. */
+const PAGINE_LETTURA = 30;
 
 export type EsitoNuvola = {
   riuscito: boolean;
@@ -54,6 +64,9 @@ type RigaEvento = {
   tipo: "crea" | "aggiorna" | "elimina";
   payload: Record<string, unknown>;
 };
+
+/** Come la legge il telefono: con l'ora d'arrivo, che assegna Postgres (default now()) e nessuno manda. */
+type RigaRicevuta = RigaEvento & { creato_a: string };
 
 const VUOTO: EsitoProiezione = { scritte: 0, eliminate: 0, incomplete: [], sconosciute: 0 };
 
@@ -98,15 +111,127 @@ async function leggiMeta(chiave: string): Promise<string | null> {
 }
 
 /**
- * Il segnaposto dice fin dove siamo già arrivati a leggere il registro remoto.
+ * Il segnaposto dice da dove comincia la prossima lettura del registro remoto.
  * Senza, ogni sincronizzazione riscarica tutto dall'inizio: funziona, ma dopo
  * un mese di rassegne sono decine di migliaia di eventi per aprire l'app.
+ *
+ * È un'ora d'ARRIVO sul server (`creato_a`, che assegna Postgres), non un
+ * HLC, e si salva già tolto il margine: la calcola prossimaSoglia(). Un
+ * evento può arrivare con un HLC più vecchio di altri già letti: la
+ * conduttura dà gli HLC mentre lavora, il più rilevante per primo, e carica
+ * tutto alla fine, fino a venti minuti dopo; il tablet senza rete scrive per
+ * giorni e carica al rientro. Con l'HLC come
+ * segnaposto quegli eventi non si leggevano mai: se il telefono si
+ * sincronizzava durante la corsa, gli articoli più rilevanti non arrivavano
+ * più, e lo stesso le note scritte offline sull'altro dispositivo. L'ora
+ * d'arrivo invece cresce con l'arrivo, qualunque sia l'orologio di chi scrive.
+ *
+ * La chiave è nuova (nuvola_creato) apposta: alla prima sincronizzazione dopo
+ * l'aggiornamento si rilegge tutto il registro remoto, una volta, e si
+ * recupera quello che il segnaposto per HLC aveva fatto perdere. I doppioni li
+ * scarta fondi(), per id.
  *
  * Avanza ANCHE quando gli eventi letti sono tutti duplicati: sono già nostri,
  * e non rileggerli è proprio il punto.
  */
 async function segnaposto(): Promise<string> {
-  return (await leggiMeta("nuvola_hlc")) ?? "";
+  const v = (await leggiMeta("nuvola_creato")) ?? "";
+  // Finisce in una query: un valore illeggibile la farebbe rifiutare a ogni
+  // scambio, per sempre. Meglio rileggere tutto, una volta.
+  return Number.isNaN(istanteDelServer(v)) ? "" : v;
+}
+
+/**
+ * Quanto prima di dove si è arrivati riparte la lettura dopo. `now()` di
+ * Postgres è l'ora d'INIZIO della transazione: un caricamento lento può
+ * diventare visibile dopo uno più svelto che ha un'ora più recente, e se nel
+ * frattempo il telefono ha letto quello svelto, il lento cadrebbe prima della
+ * soglia. Gli eventi riletti nel margine si scartano per id; un caricamento si
+ * rilegge al più negli scambi dei dieci minuti dopo il suo arrivo.
+ */
+export const MARGINE_MS = 10 * 60 * 1000;
+
+// Come PostgREST scrive un timestamptz: «2026-10-01T03:14:44.548609+00:00»,
+// ma Postgres toglie gli zeri in coda ai decimali, e senza decimali non mette
+// nemmeno il punto. Si legge a mano invece che con Date.parse: sui formati
+// fuori dallo standard di JavaScript (microsecondi, scarto «+00:00») ogni
+// motore decide a modo suo, e Hermes non è quello su cui girano i test.
+const ORA_DEL_SERVER =
+  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:(Z)|([+-])(\d{2})(?::?(\d{2}))?)$/;
+
+/**
+ * Un'ora del server in millisecondi UTC, NaN se illeggibile. I microsecondi si
+ * troncano: una soglia che ne deriva legge appena prima, mai dopo.
+ */
+export function istanteDelServer(s: string): number {
+  const m = ORA_DEL_SERVER.exec(s);
+  if (!m) return NaN;
+  const [, anno, mese, giorno, ore, minuti, secondi, decimali = "", z, segno, oreScarto, minutiScarto = "00"] = m;
+  const utc = Date.UTC(+anno, +mese - 1, +giorno, +ore, +minuti, +secondi, +(decimali + "00").slice(0, 3));
+  const scarto = z ? 0 : (segno === "-" ? -1 : 1) * (+oreScarto * 60 + +minutiScarto) * 60_000;
+  return utc - scarto;
+}
+
+const MESI = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** L'intestazione Date di HTTP («Thu, 01 Oct 2026 03:14:44 GMT»), NaN se illeggibile. */
+export function istanteHttp(s: string | null): number {
+  const m = /^[A-Z][a-z]{2}, (\d{2}) ([A-Z][a-z]{2}) (\d{4}) (\d{2}):(\d{2}):(\d{2}) GMT$/.exec(s ?? "");
+  if (!m || !MESI.includes(m[2])) return NaN;
+  return Date.UTC(+m[3], MESI.indexOf(m[2]), +m[1], +m[4], +m[5], +m[6]);
+}
+
+/**
+ * Da dove comincia la prossima lettura, in UTC e al millesimo; "" se non si
+ * sa, e allora resta quella di prima.
+ *
+ * Arrivati in fondo, si parte dall'ora del server della PRIMA pagina meno il
+ * margine. Un evento che quella lettura non ha visto è diventato visibile
+ * dopo, e la sua transazione è cominciata al più un margine prima: sta dopo la
+ * soglia. Con l'ultimo arrivo al posto dell'ora, a riposo ogni scambio
+ * riscaricava l'ultimo lotto della conduttura, un megabyte e mezzo di testo,
+ * finché qualcuno non scriveva qualcosa di nuovo. Senza ora del server
+ * (`oraDelServer` NaN: vedi oraAffidabile) si parte dall'ultimo arrivo meno
+ * il margine.
+ *
+ * A metà lettura (una pagina piena, o le pagine dello scambio finite) si
+ * riparte dall'ultimo arrivo letto SENZA margine, se è più di un margine
+ * prima dell'ora: un evento che non si è visto è diventato visibile dopo la
+ * prima pagina, quindi è arrivato dopo, e il margine lì non serve. Con il
+ * margine sempre, più eventi di quanti ne legge uno scambio arrivati in dieci
+ * minuti (il tablet che torna in rete con la coda di settimane) facevano
+ * ripartire ogni scambio dagli stessi e fermavano la lettura per sempre. Se
+ * l'ultimo arrivo è più recente, si riparte dall'ora meno il margine: col
+ * passare del tempo la finestra si svuota, e la lettura riprende.
+ */
+/**
+ * L'ora della prima pagina, o NaN se non ci si può fidare: manca, o è prima
+ * dell'ultimo arrivo che quella stessa pagina ha letto (più il secondo che
+ * l'intestazione Date tronca), cioè i due orologi non sono d'accordo.
+ *
+ * Si decide sulla PRIMA pagina e basta. Confrontata con l'ultimo arrivo di
+ * una pagina dopo, scartava l'ora proprio quando la lettura è lunga e nel
+ * frattempo arriva qualcosa: è normale, non un disaccordo. E la soglia
+ * ripiegava sull'ultimo arrivo meno il margine, che può stare dopo un evento
+ * entrato dietro la prima pagina con una transazione lenta: quell'evento non
+ * si leggeva più.
+ *
+ * Un orologio HTTP AVANTI rispetto a Postgres non si vede da qui: si conta
+ * che i due stiano entro pochi secondi, come due server sincronizzati.
+ */
+export function oraAffidabile(oraHttp: string | null, ultimoArrivoPrimaPagina: number): number {
+  const ora = istanteHttp(oraHttp);
+  return ultimoArrivoPrimaPagina > ora + 1000 ? NaN : ora;
+}
+
+export function prossimaSoglia(fine: boolean, ultimoArrivo: number, oraDelServer: number): string {
+  const daOra = oraDelServer - MARGINE_MS;
+  const ms = Number.isNaN(daOra)
+    ? ultimoArrivo - MARGINE_MS
+    : fine
+      ? daOra
+      : Math.min(ultimoArrivo, daOra);
+  return Number.isNaN(ms) ? "" : new Date(ms).toISOString();
 }
 
 /**
@@ -161,14 +286,30 @@ export async function sincronizzaNuvola(
     }
 
     // ----------------------------------------------------------- si riceve
-    let da = await segnaposto();
-    for (let giro = 0; giro < PAGINE_MASSIME; giro++) {
+    // Per ora d'arrivo, e a parità per id (un caricamento è una transazione,
+    // e le sue righe hanno la stessa ora). Le pagine si contano dall'inizio
+    // della lettura: una riga che arriva durante lo scambio ha un'ora più
+    // recente e finisce in fondo; una arrivata in ritardo con un'ora vecchia
+    // fa rileggere una riga già letta, che fondi() scarta, e lei si legge
+    // allo scambio dopo, dentro il margine.
+    const soglia = await segnaposto();
+    let oraDelServer = NaN;
+    let ultimoArrivo = NaN;
+    for (let giro = 0; giro < PAGINE_LETTURA; giro++) {
       const query =
-        `select=id,hlc,dispositivo_id,entita,entita_id,tipo,payload` +
-        (da ? `&hlc=gt.${encodeURIComponent(da)}` : "") +
-        `&order=hlc.asc&limit=${PAGINA}`;
-      const remoti = await n.seleziona<RigaEvento>("eventi", query);
-      if (!remoti.length) break;
+        `select=id,hlc,dispositivo_id,entita,entita_id,tipo,payload,creato_a` +
+        (soglia ? `&creato_a=gte.${encodeURIComponent(soglia)}` : "") +
+        `&order=creato_a.asc,id.asc&limit=${PAGINA_LETTURA}&offset=${giro * PAGINA_LETTURA}`;
+      const { righe: remoti, ora } = await n.selezionaConOra<RigaRicevuta>("eventi", query);
+      const fine = remoti.length < PAGINA_LETTURA;
+      if (remoti.length) ultimoArrivo = istanteDelServer(remoti[remoti.length - 1].creato_a);
+      if (giro === 0) oraDelServer = oraAffidabile(ora, ultimoArrivo);
+      const prossima = prossimaSoglia(fine, ultimoArrivo, oraDelServer);
+      if (!remoti.length) {
+        // Niente di nuovo, ma il tempo è passato: la soglia avanza lo stesso.
+        if (prossima) await scriviMeta([["nuvola_creato", prossima]]);
+        break;
+      }
       esito.ricevuti += remoti.length;
 
       const ricevuti: EventoSerializzato[] = remoti.map((r) => ({
@@ -217,15 +358,16 @@ export async function sincronizzaNuvola(
         esito.proiezione.sconosciute += p.sconosciute;
         esito.proiezione.incomplete.push(...p.incomplete);
 
-        da = remoti[remoti.length - 1].hlc;
-        await dd.runAsync(
-          `INSERT INTO meta (chiave, valore) VALUES ('nuvola_hlc', ?)
-           ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
-          [da]
-        );
+        if (prossima) {
+          await dd.runAsync(
+            `INSERT INTO meta (chiave, valore) VALUES ('nuvola_creato', ?)
+             ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
+            [prossima]
+          );
+        }
       });
 
-      if (remoti.length < PAGINA) break;
+      if (fine) break;
     }
 
     esito.riuscito = true;

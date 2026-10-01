@@ -83,11 +83,3 @@ export async function contaNovita(): Promise<{ daLeggere: number; conTesto: numb
   ]);
   return { daLeggere: a?.n ?? 0, conTesto: t?.n ?? 0, volumiDaScaricare: v?.n ?? 0 };
 }
-
-/** I temi presenti, con quanti articoli non letti ciascuno. */
-export async function temiConNovita(): Promise<Array<{ tema_slug: string; n: number }>> {
-  return database().getAllAsync<{ tema_slug: string; n: number }>(
-    `SELECT tema_slug, count(*) AS n FROM articoli
-     WHERE letto = 0 AND tema_slug IS NOT NULL GROUP BY tema_slug ORDER BY n DESC`
-  );
-}

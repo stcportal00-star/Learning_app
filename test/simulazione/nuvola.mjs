@@ -35,7 +35,9 @@
  *
  * LA RETE SI SIMULA, NON SI TOCCA. `globalThis.fetch` viene sostituito una
  * volta sola, all'avvio, con un finto server Supabase in memoria che conosce
- * PostgREST (GET con hlc=gt., order, limit, select; POST con on_conflict) e le
+ * PostgREST (GET con gt./gte./eq., order su piu' colonne, limit, offset,
+ * select; POST con on_conflict, e `creato_a` assegnata all'arrivo come fa
+ * Postgres con default now()) e le
  * due rotte Storage, registra OGNI richiesta con le sue intestazioni vere, e si
  * puo' programmare per rispondere 500, 429, 400 o per far cadere la
  * connessione. Se qualcosa provasse a chiamare il fetch ORIGINALE, il test si
@@ -242,6 +244,13 @@ const UTENTE_ATTESO = tab.Cliente.UTENTE;
  * Accept-Profile mancante o un Prefer senza resolution=merge-duplicates sono
  * guasti che si vedono solo guardando la richiesta.
  */
+// Il Supabase vero e' uno solo, e il suo orologio non torna indietro: ogni
+// finto server riparte da dove e' arrivato il piu' avanti dei precedenti.
+// Ripartendo ognuno dalla stessa ora, gli eventi di un server nuovo nascevano
+// prima del segnaposto lasciato dal vecchio, e certi scenari passavano solo
+// perche' il margine di rilettura li ripescava.
+let oraPiuAvanti = Date.parse("2026-10-01T00:00:00.000Z");
+
 function nuovoServitore() {
   const tabelle = new Map();
   const deposito = new Map();
@@ -253,10 +262,54 @@ function nuovoServitore() {
     return tabelle.get(nome);
   }
 
+  // L'orologio del server. Come Postgres, `creato_a` (default now()) e' l'ora
+  // d'INIZIO della transazione: tutte le righe di un caricamento la
+  // condividono, e un caricamento puo' nascere con un'ora piu' vecchia di uno
+  // gia' visibile (`iniziaCaricamentoAlle`, per provarlo). Ogni caricamento
+  // fa avanzare l'orologio di un secondo, `avanza` lo fa avanzare senza
+  // caricare niente, e ogni risposta porta l'ora nell'intestazione Date, come
+  // il server vero. Il formato e' quello di Postgres: +00:00, e gli zeri in
+  // coda ai decimali tolti, punto compreso quando i decimali sono tutti zero.
+  let oraServer = oraPiuAvanti;
+  let inizioFissato = null;
+  const comeLoScrivePostgrest = (ms) =>
+    new Date(ms).toISOString().replace(/\.?0+Z$/, "Z").replace("Z", "+00:00");
+  const adesso = () => (oraServer = Math.max(oraServer, oraPiuAvanti));
+  function prossimoIstante() {
+    if (inizioFissato !== null) {
+      const t = inizioFissato;
+      inizioFissato = null;
+      return comeLoScrivePostgrest(t);
+    }
+    oraServer = oraPiuAvanti = adesso() + 1000;
+    return comeLoScrivePostgrest(oraServer);
+  }
+  // Nel registro, righe nuove con l'ora del caricamento; quelle che c'erano
+  // gia' la tengono, come un upsert merge-duplicates che non manda la colonna
+  // (se la manda, la aggiorna). Le altre tabelle restano come arrivano.
+  function inserisci(nome, righe, chiave, istante) {
+    for (const r of righe) {
+      const prima = tabella(nome).get(r[chiave]);
+      tabella(nome).set(r[chiave], nome === "eventi"
+        ? { ...r, creato_a: r.creato_a ?? prima?.creato_a ?? istante }
+        : r);
+    }
+  }
+  // Un istante si confronta come istante (PostgREST lo scrive con +00:00, chi
+  // chiede puo' usare la Z), il resto come testo.
+  const istante = (v) => Date.parse(String(v).replace(/(\.\d{3})\d+/, "$1"));
+  function confronta(a, b) {
+    const x = istante(a), y = istante(b);
+    if (/^\d{4}-\d{2}-\d{2}T/.test(String(a)) && !Number.isNaN(x) && !Number.isNaN(y)) return x - y;
+    return String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0;
+  }
+
   function risposta(stato, corpo) {
+    const data = new Date(adesso() + servitore.scartoData).toUTCString();
     return {
       ok: stato >= 200 && stato < 300,
       status: stato,
+      headers: { get: (nome) => (nome.toLowerCase() === "date" && !servitore.senzaData ? data : null) },
       async text() {
         return corpo;
       },
@@ -271,8 +324,29 @@ function nuovoServitore() {
     deposito,
     richieste,
     /** Righe gia' presenti nel registro remoto, come le avrebbe messe la conduttura. */
+    /** Righe gia' sul server, arrivate in un solo caricamento (salvo `creato_a` esplicita). */
     semina(nomeTabella, righe) {
-      for (const r of righe) tabella(nomeTabella).set(r.id, r);
+      inserisci(nomeTabella, righe, "id", prossimoIstante());
+    },
+    /** Il prossimo caricamento e' cominciato a quest'ora, e lo si vede solo adesso. */
+    iniziaCaricamentoAlle(iso) {
+      inizioFissato = Date.parse(iso);
+    },
+    /** Passa del tempo senza che arrivi niente. */
+    avanza(ms) {
+      oraServer = oraPiuAvanti = adesso() + ms;
+    },
+    ora() {
+      return comeLoScrivePostgrest(adesso());
+    },
+    /** true: le risposte non portano l'intestazione Date. */
+    senzaData: false,
+    /** Di quanto l'orologio HTTP e' avanti (o indietro) rispetto a Postgres. */
+    scartoData: 0,
+    /** Chiamata a ogni richiesta, prima della risposta. */
+    allaRichiesta: null,
+    righe(nomeTabella) {
+      return [...tabella(nomeTabella).values()];
     },
     /**
      * Programma una risposta forzata. `quando` filtra sulla richiesta, `volte`
@@ -302,6 +376,9 @@ function nuovoServitore() {
         corpo: opzioni.body,
       };
       richieste.push(richiesta);
+      // Cio' che succede sul server mentre lo scambio e' a meta': altri che
+      // caricano, il tempo che passa fra una pagina e l'altra.
+      servitore.allaRichiesta?.(richiesta);
 
       for (const regola of regole) {
         if (regola.usate >= regola.volte) continue;
@@ -325,11 +402,12 @@ function nuovoServitore() {
     if (metodo === "GET") {
       let righe = [...tabella(nome).values()];
       for (const [chiave, valore] of u.searchParams) {
-        if (chiave === "select" || chiave === "order" || chiave === "limit") continue;
+        if (["select", "order", "limit", "offset"].includes(chiave)) continue;
         const punto = valore.indexOf(".");
         const operatore = valore.slice(0, punto);
         const atteso = valore.slice(punto + 1);
-        if (operatore === "gt") righe = righe.filter((r) => String(r[chiave]) > atteso);
+        if (operatore === "gt") righe = righe.filter((r) => confronta(r[chiave], atteso) > 0);
+        else if (operatore === "gte") righe = righe.filter((r) => confronta(r[chiave], atteso) >= 0);
         else if (operatore === "eq") righe = righe.filter((r) => String(r[chiave]) === atteso);
         else {
           return risposta(400, JSON.stringify({ message: `operatore ${operatore} non implementato` }));
@@ -337,12 +415,20 @@ function nuovoServitore() {
       }
       const ordine = u.searchParams.get("order");
       if (ordine) {
-        const [campo, verso] = ordine.split(".");
-        const segno = verso === "desc" ? -1 : 1;
-        righe = [...righe].sort((a, b) =>
-          String(a[campo]) < String(b[campo]) ? -segno : String(a[campo]) > String(b[campo]) ? segno : 0
-        );
+        const criteri = ordine.split(",").map((c) => {
+          const [campo, verso] = c.split(".");
+          return { campo, segno: verso === "desc" ? -1 : 1 };
+        });
+        righe = [...righe].sort((a, b) => {
+          for (const { campo, segno } of criteri) {
+            const d = confronta(a[campo], b[campo]);
+            if (d) return d * segno;
+          }
+          return 0;
+        });
       }
+      const scarto = Number(u.searchParams.get("offset") ?? "0");
+      if (scarto > 0) righe = righe.slice(scarto);
       const limite = Number(u.searchParams.get("limit") ?? "0");
       if (limite > 0) righe = righe.slice(0, limite);
       const select = u.searchParams.get("select");
@@ -361,7 +447,7 @@ function nuovoServitore() {
         return risposta(400, JSON.stringify({ message: "corpo non JSON" }));
       }
       if (!Array.isArray(righe)) return risposta(400, JSON.stringify({ message: "atteso un array" }));
-      for (const r of righe) tabella(nome).set(r[suConflitto], r);
+      inserisci(nome, righe, suConflitto, prossimoIstante());
       // Prefer: return=minimal -> corpo vuoto, come fa PostgREST davvero.
       return risposta(201, "");
     }
@@ -818,7 +904,7 @@ async function leggiMeta(app, chiave) {
 async function fissaSegnaposto(app, valore) {
   await app.Db.inTransazione(async (d) => {
     await d.runAsync(
-      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_hlc', ?)
+      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_creato', ?)
        ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
       [valore]
     );
@@ -826,11 +912,18 @@ async function fissaSegnaposto(app, valore) {
 }
 
 /**
+ * La soglia che deve restare dopo una lettura arrivata in fondo: l'ora del
+ * server meno dieci minuti. Nessuna lettura fa avanzare l'orologio del finto
+ * server, quindi la sua ora di adesso e' quella della prima pagina.
+ */
+const sogliaDopo = (s) => new Date(Date.parse(s.ora()) - 10 * 60_000).toISOString();
+
+/**
  * Gli eventi che il finto registro remoto contiene nascono DIECI MINUTI avanti
- * rispetto a ora: le scritture locali usano l'orologio vero, e un evento remoto
- * piu' vecchio di loro non avanzerebbe mai il segnaposto, che e' l'hlc
- * dell'ultima riga letta. Con lo scarto, l'ordine e' quello che si vuole
- * verificare invece che quello che capita.
+ * rispetto a ora, cosi' nei confronti «vince il piu' recente» sono loro i piu'
+ * recenti, e l'ordine e' quello che si vuole verificare invece che quello che
+ * capita. Il segnaposto non c'entra piu': e' l'ora d'arrivo sul server (B12-B14
+ * provano proprio eventi con HLC piu' vecchi di quelli gia' letti).
  */
 const PARTENZA_B = Date.now() + 10 * 60_000;
 const hlcRemoto = (scarto, dispositivo) =>
@@ -957,7 +1050,7 @@ await scenario("B3 gli eventi remoti scendono, si deduplicano per id, entrano e 
   ok("e il testo e' arrivato per intero",
      art.testo === "Testo integrale depositato dalla conduttura.", String(art.testo));
   ok("la lettura ha chiesto la pagina con il limite di sincronia.ts",
-     servitore.versoEventi("GET")[0].parametri.get("limit") === "500",
+     servitore.versoEventi("GET")[0].parametri.get("limit") === "100",
      servitore.versoEventi("GET")[0].url);
 });
 
@@ -975,7 +1068,7 @@ await scenario("B3bis la transazione e' UNA: se la proiezione cade, nemmeno l'ev
       utente_id: UTENTE_ATTESO,
     },
   ]);
-  const primaSegnaposto = await leggiMeta(tab, "nuvola_hlc");
+  const primaSegnaposto = await leggiMeta(tab, "nuvola_creato");
   const esito = await sincronizza(tab, velenoso);
 
   ok("lo scambio non e' riuscito", esito.riuscito === false, JSON.stringify(esito));
@@ -986,8 +1079,8 @@ await scenario("B3bis la transazione e' UNA: se la proiezione cade, nemmeno l'ev
   ok("l'evento NON e' rimasto nel registro", ev === null || ev === undefined, JSON.stringify(ev));
   const s = await riga(tab, "segni", "id", "s-veleno");
   ok("e nessuna riga e' rimasta a meta'", s === null || s === undefined, JSON.stringify(s));
-  ok("il segnaposto non e' avanzato", (await leggiMeta(tab, "nuvola_hlc")) === primaSegnaposto,
-     `${primaSegnaposto} -> ${await leggiMeta(tab, "nuvola_hlc")}`);
+  ok("il segnaposto non e' avanzato", (await leggiMeta(tab, "nuvola_creato")) === primaSegnaposto,
+     `${primaSegnaposto} -> ${await leggiMeta(tab, "nuvola_creato")}`);
   // Il registro resta usabile: se il ROLLBACK avesse lasciato una transazione
   // aperta, da qui in poi l'app non scriverebbe piu' niente, e in silenzio
   // (vedi il commento lungo in lib/db.ts).
@@ -998,23 +1091,42 @@ await scenario("B3bis la transazione e' UNA: se la proiezione cade, nemmeno l'ev
   await svuotaCoda(tab);
 });
 
-await scenario("B4 il segnaposto avanza, e una seconda sincronizzazione non riscarica", async () => {
-  const atteso = hlcRemoto(7000, "rassegna");
-  ok("il segnaposto e' l'hlc dell'ultimo evento ricevuto",
-     (await leggiMeta(tab, "nuvola_hlc")) === atteso, String(await leggiMeta(tab, "nuvola_hlc")));
+await scenario("B4 la soglia e' l'ora del server meno il margine, e a riposo smette di rileggere", async () => {
+  let esito = await sincronizza(tab, servitore);
+  ok("dopo una lettura arrivata in fondo, la prossima parte dall'ora del server meno dieci minuti",
+     esito.riuscito && (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(servitore),
+     String(await leggiMeta(tab, "nuvola_creato")));
 
   servitore.azzeraRichieste();
-  const esito = await sincronizza(tab, servitore);
-  uguali("il secondo giro non riceve niente e non ha niente da mandare",
+  esito = await sincronizza(tab, servitore);
+  uguali("subito dopo rilegge il margine, e non porta niente di nuovo",
     { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi, inviati: esito.inviati },
-    { riuscito: true, ricevuti: 0, nuovi: 0, inviati: 0 });
-  ok("e la domanda partita chiede solo cio' che viene dopo il segnaposto",
-     servitore.versoEventi("GET")[0].parametri.get("hlc") === "gt." + atteso,
+    { riuscito: true, ricevuti: 2, nuovi: 0, inviati: 0 });
+  const q = servitore.versoEventi("GET")[0].parametri;
+  ok("chiede dalla soglia salvata, in ordine d'arrivo e per id, dalla prima pagina",
+     q.get("creato_a") === "gte." + sogliaDopo(servitore) &&
+     q.get("order") === "creato_a.asc,id.asc" && q.get("offset") === "0" && q.get("hlc") === null,
      servitore.versoEventi("GET")[0].url);
   ok("motivo onesto quando non c'e' nulla da fare", esito.motivo.startsWith("Già allineato."), esito.motivo);
+
+  // Il caso per cui la soglia viene dall'ora e non dall'ultimo arrivo: dopo
+  // la corsa del mattino non arriva piu' niente per ore. Con l'ultimo arrivo,
+  // ogni scambio di quelle ore riscaricava l'intero lotto.
+  servitore.avanza(11 * 60_000);
+  await sincronizza(tab, servitore);
+  // Un minuto in piu' prima dell'ultimo scambio: senza, la soglia che resta
+  // e' quella dello scambio prima, e la verifica sotto non direbbe se la
+  // pagina vuota l'ha scritta.
+  servitore.avanza(60_000);
+  servitore.azzeraRichieste();
+  esito = await sincronizza(tab, servitore);
+  uguali("passati dieci minuti, uno scambio non rilegge piu' niente",
+    { riuscito: esito.riuscito, ricevuti: esito.ricevuti }, { riuscito: true, ricevuti: 0 });
+  ok("perche' la soglia e' andata avanti con l'ora, anche senza eventi",
+     (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(servitore), String(await leggiMeta(tab, "nuvola_creato")));
 });
 
-await scenario("B5 il segnaposto avanza ANCHE quando gli eventi ricevuti sono tutti duplicati", async () => {
+await scenario("B5 la soglia avanza ANCHE quando gli eventi ricevuti sono tutti duplicati", async () => {
   // Senza questo, ogni sincronizzazione ripartirebbe dall'inizio del registro
   // remoto: dopo un mese di rassegne sono decine di migliaia di eventi per
   // aprire l'app, e il segnaposto smetterebbe di servire proprio a chi ne ha
@@ -1023,9 +1135,8 @@ await scenario("B5 il segnaposto avanza ANCHE quando gli eventi ricevuti sono tu
   servitore.azzeraRichieste();
   const esito = await sincronizza(tab, servitore);
   uguali("due eventi riletti, nessuno nuovo", [esito.ricevuti, esito.nuovi], [2, 0]);
-  const atteso = hlcRemoto(7000, "rassegna");
-  ok("e il segnaposto e' tornato in fondo lo stesso",
-     (await leggiMeta(tab, "nuvola_hlc")) === atteso, String(await leggiMeta(tab, "nuvola_hlc")));
+  ok("e la soglia e' tornata all'ora del server meno il margine",
+     (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(servitore), String(await leggiMeta(tab, "nuvola_creato")));
 });
 
 await scenario("B6 l'orologio assorbe gli HLC ricevuti (invariante 2)", async () => {
@@ -1043,7 +1154,8 @@ await scenario("B6 l'orologio assorbe gli HLC ricevuti (invariante 2)", async ()
     },
   ]);
   const esito = await sincronizza(tab, servitore);
-  uguali("l'evento del dispositivo avanti e' entrato", [esito.ricevuti, esito.nuovi], [1, 1]);
+  uguali("l'evento del dispositivo avanti e' entrato, e solo lui e' stato letto",
+    [esito.ricevuti, esito.nuovi], [1, 1]);
 
   const segno = await tab.Segni.annota("b-vol-1", "segnalibro", "scritto dopo lo scambio", 1, null);
   ok("il primo evento locale dopo lo scambio ha un HLC piu' alto del piu' alto ricevuto",
@@ -1096,12 +1208,12 @@ await scenario("B8 un 400 in invio interrompe, non segna nulla, e riporta il cor
 });
 
 await scenario("B9 paginazione: con piu' eventi del limite di pagina si fanno piu' giri", async () => {
-  // PAGINA in lib/nuvola/sincronia.ts vale 500: 501 eventi devono costare due
-  // giri e arrivare tutti. Se il ciclo si fermasse alla prima pagina, l'ultimo
-  // articolo di ogni rassegna abbondante non arriverebbe mai.
+  // PAGINA_LETTURA in lib/nuvola/sincronia.ts vale 100: 101 eventi devono
+  // costare due giri e arrivare tutti. Se il ciclo si fermasse alla prima
+  // pagina, l'ultimo articolo di ogni rassegna abbondante non arriverebbe mai.
   const tanti = servitoreNuovo();
   const righe = [];
-  for (let i = 0; i < 501; i++) {
+  for (let i = 0; i < 101; i++) {
     righe.push({
       id: `ev-pag-${String(i).padStart(4, "0")}`,
       hlc: hlcRemoto(900000 + i, "rassegna"),
@@ -1117,16 +1229,18 @@ await scenario("B9 paginazione: con piu' eventi del limite di pagina si fanno pi
 
   const esito = await sincronizza(tab, tanti);
   uguali("arrivano tutti, e tutti nuovi",
-    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi }, { riuscito: true, ricevuti: 501, nuovi: 501 });
+    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi }, { riuscito: true, ricevuti: 101, nuovi: 101 });
   const letture = tanti.versoEventi("GET");
   ok("in due giri, non in uno", letture.length === 2, String(letture.length));
-  ok("il primo giro parte dall'inizio", letture[0].parametri.get("hlc") === null, letture[0].url);
-  ok("il secondo riparte dall'ultimo hlc del primo",
-     letture[1].parametri.get("hlc") === "gt." + righe[499].hlc, letture[1].url);
+  ok("il primo giro parte dall'inizio",
+     letture[0].parametri.get("creato_a") === null && letture[0].parametri.get("offset") === "0", letture[0].url);
+  ok("il secondo e' la pagina dopo della stessa lettura, da cento",
+     letture[1].parametri.get("creato_a") === null && letture[1].parametri.get("offset") === "100" &&
+     letture.every((l) => l.parametri.get("limit") === "100"), letture[1].url);
   const quante = await tab.Db.database().getFirstAsync(
     "SELECT count(*) AS n FROM note WHERE id LIKE 'b-pag-%'");
-  ok("e 501 righe operative sono state scritte", quante.n === 501, String(quante.n));
-  ok("la proiezione le conta tutte", esito.proiezione.scritte === 501, String(esito.proiezione.scritte));
+  ok("e 101 righe operative sono state scritte", quante.n === 101, String(quante.n));
+  ok("la proiezione le conta tutte", esito.proiezione.scritte === 101, String(esito.proiezione.scritte));
   servitoreInUso = servitore;
 });
 
@@ -1202,6 +1316,247 @@ await scenario("B10 CORREZIONE SORVEGLIATA: sincronizzaNuvola non finge di scegl
   ok("il dispositivo dichiarato e' quello che ha scritto l'evento",
      corpoInviato[0].dispositivo_id === "tab1", corpoInviato[0].dispositivo_id);
   ok("e l'evento e' proprio il nostro", corpoInviato[0].entita_id === segno.id, corpoInviato[0].entita_id);
+  servitoreInUso = servitore;
+});
+
+/** Una nota remota come la scriverebbe un altro dispositivo, o la conduttura. */
+const notaRemota = (id, hlc, dispositivo) => ({
+  id: `ev-${id}`, hlc, dispositivo_id: dispositivo, entita: "note", entita_id: id, tipo: "crea",
+  payload: { titolo: id, testo: "corpo", creato_a: "2026-09-01T10:00:00.000Z" },
+  utente_id: UTENTE_ATTESO,
+});
+const noteArrivate = async (prefisso) =>
+  (await tab.Db.database().getFirstAsync(
+    "SELECT count(*) AS n FROM note WHERE id LIKE ?", [`${prefisso}%`])).n;
+/** Un istante di PostgREST spostato di `ms`, nel formato che userebbe lui. */
+const spostato = (ora, ms) =>
+  new Date(Date.parse(ora.replace(/(\.\d{3})\d+/, "$1")) + ms).toISOString().replace("Z", "000+00:00");
+
+await scenario("B12 CORREZIONE SORVEGLIATA: un evento che ARRIVA dopo, con un HLC piu' vecchio di uno gia' letto, si riceve", async () => {
+  // Era il difetto del segnaposto per HLC: si chiedeva `hlc=gt.<ultimo letto>`,
+  // e un evento con l'HLC piu' vecchio di quello non si leggeva mai piu'.
+  // Succede ogni mattina: la conduttura da' gli HLC mentre lavora, il piu'
+  // rilevante per primo, e carica tutto alla fine; se nel frattempo il
+  // telefono ha caricato una nota e il tablet l'ha letta, i dieci articoli
+  // della corsa restano fuori. E succede a ogni viaggio: il tablet senza rete
+  // scrive per giorni e carica al rientro. Verdetto rovesciato: un rosso qui
+  // vuol dire che il segnaposto e' tornato a essere un orologio di chi scrive.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+
+  s.semina("eventi", [notaRemota("b12-telefono", hlcRemoto(60_000, "telefono"), "telefono")]);
+  let esito = await sincronizza(tab, s);
+  uguali("la nota del telefono arriva", [esito.riuscito, esito.nuovi], [true, 1]);
+
+  // Venti minuti dopo carica la conduttura: dieci articoli con HLC dati prima
+  // della nota del telefono.
+  s.avanza(20 * 60_000);
+  s.semina("eventi", Array.from({ length: 10 }, (_, i) =>
+    notaRemota(`b12-rassegna-${i}`, hlcRemoto(1_000 + i, "rassegna"), "rassegna")));
+  esito = await sincronizza(tab, s);
+  uguali("arrivano tutti e dieci", [esito.riuscito, esito.nuovi], [true, 10]);
+  ok("e sono scritti", (await noteArrivate("b12-rassegna-")) === 10, String(await noteArrivate("b12-rassegna-")));
+
+  // Il tablet torna in rete dopo un giorno senza: le sue note hanno l'ora di
+  // quando sono state scritte, ieri.
+  s.avanza(60 * 60_000);
+  s.semina("eventi", [notaRemota("b12-offline", hlcRemoto(-86_400_000, "tablet-due"), "tablet-due")]);
+  esito = await sincronizza(tab, s);
+  uguali("la nota scritta senza rete arriva anche lei", [esito.riuscito, esito.nuovi], [true, 1]);
+
+  // Un caricamento lento: la sua transazione e' cominciata cinque minuti
+  // prima della lettura appena fatta, ed e' diventata visibile dopo.
+  const segnaposto = await leggiMeta(tab, "nuvola_creato");
+  s.iniziaCaricamentoAlle(spostato(s.ora(), -5 * 60_000));
+  s.semina("eventi", [notaRemota("b12-lento", hlcRemoto(70_000, "telefono"), "telefono")]);
+  esito = await sincronizza(tab, s);
+  uguali("il margine lo riprende", [esito.riuscito, esito.nuovi], [true, 1]);
+  ok("e il segnaposto non torna indietro per lui",
+     (await leggiMeta(tab, "nuvola_creato")) === segnaposto, String(await leggiMeta(tab, "nuvola_creato")));
+
+  esito = await sincronizza(tab, s);
+  uguali("dopo, niente di nuovo", [esito.riuscito, esito.nuovi], [true, 0]);
+  ok("e la schermata dice che e' allineato", esito.motivo.startsWith("Già allineato."), esito.motivo);
+  ok("tutte le note della prova ci sono, una volta sola",
+     (await noteArrivate("b12-")) === 13, String(await noteArrivate("b12-")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B13 il primo scambio dopo l'aggiornamento rilegge tutto, e recupera cio' che il segnaposto per HLC aveva perso", async () => {
+  // Il telefono arriva dalla versione di prima: ha il vecchio segnaposto
+  // (`nuvola_hlc`) e non il nuovo. Nel registro remoto c'e' un articolo che
+  // quel segnaposto aveva saltato: non e' mai entrato.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await tab.Db.inTransazione(async (d) => {
+    await d.runAsync("DELETE FROM meta WHERE chiave = 'nuvola_creato'");
+    await d.runAsync(
+      `INSERT INTO meta (chiave, valore) VALUES ('nuvola_hlc', ?)
+       ON CONFLICT (chiave) DO UPDATE SET valore = excluded.valore`,
+      [hlcRemoto(5_000_000, "telefono")]);
+  });
+  s.semina("eventi", [
+    notaRemota("b13-gia-qui", hlcRemoto(4_000_000, "telefono"), "telefono"),
+    notaRemota("b13-perso", hlcRemoto(2_000, "rassegna"), "rassegna"),
+  ]);
+  await depositaEventi(tab, [{ ...notaRemota("b13-gia-qui", hlcRemoto(4_000_000, "telefono"), "telefono"),
+    dispositivo: "telefono", payload: JSON.stringify({ titolo: "b13-gia-qui", testo: "corpo", creato_a: "2026-09-01T10:00:00.000Z" }) }]);
+  s.azzeraRichieste();
+
+  const esito = await sincronizza(tab, s);
+  ok("si legge dall'inizio", s.versoEventi("GET")[0].parametri.get("creato_a") === null, s.versoEventi("GET")[0].url);
+  uguali("l'articolo perso arriva, quello gia' qui no",
+    { riuscito: esito.riuscito, ricevuti: esito.ricevuti, nuovi: esito.nuovi },
+    { riuscito: true, ricevuti: 2, nuovi: 1 });
+  ok("ed e' scritto", (await noteArrivate("b13-perso")) === 1);
+  ok("da qui il segnaposto e' quello nuovo",
+     (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(s), String(await leggiMeta(tab, "nuvola_creato")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B14 l'ora del server si legge in tutte le forme in cui Postgres e HTTP la scrivono", async () => {
+  // Postgres toglie gli zeri in coda ai decimali e, senza decimali, il punto:
+  // le tre forme escono dallo stesso server. Una che non si legge vale NaN, e
+  // la soglia resta quella di prima o si rilegge tutto: costa, ma non perde.
+  const { istanteDelServer, istanteHttp, prossimaSoglia, oraAffidabile, MARGINE_MS } = tab.Sincronia;
+  const iso = (ms) => (Number.isNaN(ms) ? "NaN" : new Date(ms).toISOString());
+  uguali("microsecondi, millisecondi, decimi, niente, Z, altri fusi, lo spazio",
+    ["2026-10-01T03:14:44.548609+00:00", "2026-10-01T03:14:44.548+00:00", "2026-10-01T03:14:44.5+00:00",
+     "2026-10-01T03:14:44+00:00", "2026-10-01T03:14:44Z", "2026-10-01T05:14:44.548609+02:00",
+     "2026-09-30T21:14:44.548609-06:00", "2026-10-01 03:14:44.548609+00"].map((x) => iso(istanteDelServer(x))),
+    ["2026-10-01T03:14:44.548Z", "2026-10-01T03:14:44.548Z", "2026-10-01T03:14:44.500Z",
+     "2026-10-01T03:14:44.000Z", "2026-10-01T03:14:44.000Z", "2026-10-01T03:14:44.548Z",
+     "2026-10-01T03:14:44.548Z", "2026-10-01T03:14:44.548Z"]);
+  uguali("e quelle che non si leggono valgono NaN",
+    ["", "ieri", "2026-10-01", "1727752484", "2026-10-01T03:14:44"].map((x) => iso(istanteDelServer(x))),
+    ["NaN", "NaN", "NaN", "NaN", "NaN"]);
+  uguali("l'intestazione Date",
+    [istanteHttp("Thu, 01 Oct 2026 03:14:44 GMT"), istanteHttp(null), istanteHttp("Thu, 01 Ott 2026 03:14:44 GMT"),
+     istanteHttp("2026-10-01T03:14:44Z")].map(iso),
+    ["2026-10-01T03:14:44.000Z", "NaN", "NaN", "NaN"]);
+
+  const ultimo = Date.parse("2026-10-01T03:00:00.000Z");
+  const ora = Date.parse("2026-10-01T05:00:00.000Z");
+  uguali("arrivati in fondo si parte dall'ora meno il margine; a meta' dall'ultimo arrivo, che e' piu' vecchio",
+    [prossimaSoglia(true, ultimo, ora), prossimaSoglia(false, ultimo, ora)],
+    [iso(ora - MARGINE_MS), iso(ultimo)]);
+  uguali("a meta', con l'ultimo arrivo dentro il margine, dall'ora meno il margine",
+    prossimaSoglia(false, ora - 60_000, ora), iso(ora - MARGINE_MS));
+  uguali("senza ora del server conta l'ultimo arrivo",
+    prossimaSoglia(true, ultimo, NaN), iso(ultimo - MARGINE_MS));
+  const http = "Thu, 01 Oct 2026 03:00:00 GMT";
+  uguali("l'ora della prima pagina vale se non e' prima del suo ultimo arrivo, secondo troncato compreso",
+    [oraAffidabile(http, NaN), oraAffidabile(http, ultimo + 999), oraAffidabile(http, ultimo + 1001), oraAffidabile(null, NaN)].map(iso),
+    [iso(ultimo), iso(ultimo), "NaN", "NaN"]);
+  uguali("niente letto e niente ora: nessuna soglia nuova; niente letto ma l'ora c'e': l'ora",
+    [prossimaSoglia(true, NaN, NaN), prossimaSoglia(true, NaN, ora)], ["", iso(ora - MARGINE_MS)]);
+});
+
+await scenario("B15 senza l'intestazione Date si riparte dall'ultimo arrivo, come prima", async () => {
+  // Nessun server la toglie, ma un proxy potrebbe: allora la soglia viene
+  // dall'ultimo evento letto, che e' cio' che fa Postgres. Si rilegge di piu',
+  // non si perde niente.
+  const s = servitoreNuovo();
+  s.senzaData = true;
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+  s.semina("eventi", [notaRemota("b15-una", hlcRemoto(80_000, "telefono"), "telefono")]);
+  const esito = await sincronizza(tab, s);
+  uguali("arriva", [esito.riuscito, esito.nuovi], [true, 1]);
+  ok("e la soglia e' l'arrivo meno il margine",
+     (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(s), String(await leggiMeta(tab, "nuvola_creato")));
+  s.avanza(60 * 60_000);
+  await sincronizza(tab, s);
+  ok("anche un'ora dopo: senza ora del server non avanza da sola",
+     (await leggiMeta(tab, "nuvola_creato")) === new Date(Date.parse(s.righe("eventi")[0].creato_a) - 10 * 60_000).toISOString(),
+     String(await leggiMeta(tab, "nuvola_creato")));
+
+  // E con un orologio HTTP indietro di un'ora rispetto a Postgres: la prima
+  // pagina porta un arrivo piu' recente dell'ora che dichiara, e l'ora non vale.
+  const indietro = servitoreNuovo();
+  indietro.scartoData = -60 * 60_000;
+  await fissaSegnaposto(tab, "");
+  indietro.semina("eventi", [notaRemota("b15-due", hlcRemoto(81_000, "telefono"), "telefono")]);
+  await sincronizza(tab, indietro);
+  ok("con due orologi in disaccordo si riparte dall'ultimo arrivo meno il margine",
+     (await leggiMeta(tab, "nuvola_creato")) === sogliaDopo(indietro), String(await leggiMeta(tab, "nuvola_creato")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B16 piu' eventi di quanti ne legge uno scambio, arrivati in pochi secondi, arrivano tutti", async () => {
+  // Il tablet torna in rete con la coda di settimane e la carica in un
+  // minuto: piu' di 3000 eventi (30 pagine da 100, il tetto di uno scambio)
+  // con l'ora d'arrivo dentro dieci minuti. Con il margine tolto anche a
+  // meta' lettura, ogni scambio ripartiva dagli stessi 3000 e il resto non
+  // arrivava mai, nemmeno ore dopo.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+  for (let lotto = 0; lotto < 31; lotto++) {
+    s.semina("eventi", Array.from({ length: 100 }, (_, i) => {
+      const k = String(lotto * 100 + i).padStart(4, "0");
+      return notaRemota(`b16-${k}`, hlcRemoto(1_000_000 + lotto * 100 + i, "tablet-due"), "tablet-due");
+    }));
+  }
+  // E mentre il primo scambio legge, diventa visibile un caricamento lento
+  // cominciato cinque minuti prima: finisce dietro la prima pagina. E' lui
+  // che vieta di ripartire dall'ultimo arrivo quando l'ultimo arrivo e'
+  // dentro il margine.
+  s.allaRichiesta = (r) => {
+    if (r.metodo !== "GET" || r.parametri.get("offset") !== "100") return;
+    s.allaRichiesta = null;
+    s.iniziaCaricamentoAlle(spostato(s.ora(), -5 * 60_000));
+    s.semina("eventi", [notaRemota("b16-lento", hlcRemoto(900_000, "telefono"), "telefono")]);
+  };
+  let esito = await sincronizza(tab, s);
+  // 3000 righe lette, ma il caricamento lento ha spostato tutto in avanti di
+  // una: la seconda pagina ne rilegge una della prima, che fondi() scarta.
+  uguali("il primo scambio si ferma al tetto", [esito.riuscito, esito.ricevuti, esito.nuovi], [true, 3000, 2999]);
+  esito = await sincronizza(tab, s);
+  ok("subito dopo arriva il caricamento lento, e la finestra e' ancora piena",
+     esito.riuscito && esito.nuovi === 1 && (await noteArrivate("b16-lento")) === 1, JSON.stringify(esito.nuovi));
+  s.avanza(11 * 60_000);
+  let arrivati = 0;
+  for (let giro = 0; giro < 3; giro++) arrivati += (await sincronizza(tab, s)).nuovi;
+  uguali("passati dieci minuti, arriva il resto", arrivati, 101);
+  ok("e ci sono tutti e 3101", (await noteArrivate("b16-")) === 3101, String(await noteArrivate("b16-")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B17 uno scambio lungo, con un caricamento lento dietro la prima pagina e uno nuovo in fondo, li legge tutti e due", async () => {
+  // L'intreccio trovato dalla seconda revisione. La prima pagina e' piena; prima
+  // della seconda diventa visibile un caricamento cominciato nove minuti
+  // prima (finisce DIETRO la prima pagina), e mentre la seconda pagina arriva
+  // a fatica, settanta secondi, ne arriva uno nuovo. Confrontando l'ora della
+  // prima pagina con l'ultimo arrivo della seconda, l'ora si scartava, la
+  // soglia ripiegava sull'ultimo arrivo meno il margine, e quello stava dopo
+  // il caricamento lento: non si leggeva piu'.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+  s.semina("eventi", Array.from({ length: 100 }, (_, i) =>
+    notaRemota(`b17-a-${String(i).padStart(3, "0")}`, hlcRemoto(2_000_000 + i, "rassegna"), "rassegna")));
+  s.avanza(5 * 60_000);
+  const primaPagina = s.ora();
+  s.allaRichiesta = (r) => {
+    if (r.metodo !== "GET" || r.parametri.get("offset") !== "100") return;
+    s.allaRichiesta = null;
+    s.iniziaCaricamentoAlle(spostato(primaPagina, -9 * 60_000));
+    s.semina("eventi", [notaRemota("b17-lento", hlcRemoto(2_100_000, "telefono"), "telefono")]);
+    s.avanza(70_000);
+    s.semina("eventi", Array.from({ length: 50 }, (_, i) =>
+      notaRemota(`b17-d-${String(i).padStart(3, "0")}`, hlcRemoto(2_200_000 + i, "rassegna"), "rassegna")));
+  };
+  let esito = await sincronizza(tab, s);
+  ok("il primo scambio arriva in fondo", esito.riuscito && esito.nuovi === 150, JSON.stringify(esito.nuovi));
+  ok("senza il caricamento lento, che e' finito dietro la prima pagina", (await noteArrivate("b17-lento")) === 0);
+  ok("e la soglia parte dall'ora della prima pagina meno il margine",
+     (await leggiMeta(tab, "nuvola_creato")) === new Date(Date.parse(primaPagina) - 10 * 60_000).toISOString(),
+     String(await leggiMeta(tab, "nuvola_creato")));
+  esito = await sincronizza(tab, s);
+  uguali("lo scambio dopo lo prende", [esito.riuscito, esito.nuovi], [true, 1]);
+  ok("e ci sono tutti", (await noteArrivate("b17-")) === 151, String(await noteArrivate("b17-")));
   servitoreInUso = servitore;
 });
 

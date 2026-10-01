@@ -105,11 +105,20 @@ export class Nuvola {
   // ------------------------------------------------------------- PostgREST
 
   async seleziona<T>(tabella: string, query = ""): Promise<T[]> {
+    return (await this.selezionaConOra<T>(tabella, query)).righe;
+  }
+
+  /**
+   * Come seleziona(), con l'ora del server quando ha risposto (intestazione
+   * Date, null se manca). sincronia.ts ci misura il tempo passato senza
+   * fidarsi dell'orologio del telefono, che in viaggio può essere sbagliato.
+   */
+  async selezionaConOra<T>(tabella: string, query = ""): Promise<{ righe: T[]; ora: string | null }> {
     const r = await this.chiama(
       `${this.base}/rest/v1/${tabella}${query ? "?" + query : ""}`,
       { method: "GET", headers: this.intestazioni({ "Accept-Profile": SCHEMA }) }
     );
-    return (await r.json()) as T[];
+    return { righe: (await r.json()) as T[], ora: r.headers?.get("date") ?? null };
   }
 
   /**

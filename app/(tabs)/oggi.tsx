@@ -55,7 +55,14 @@ export default function Oggi() {
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
-      <Text style={{ fontSize: 22, fontWeight: "600" }}>Oggi</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={{ fontSize: 22, fontWeight: "600" }}>Oggi</Text>
+        {/* Profilo non è più una scheda: da qui passa l'aggiornamento dell'app. */}
+        <Pressable onPress={() => router.push("/profilo")}
+          style={{ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 18, backgroundColor: C.superficie }}>
+          <Text style={{ fontSize: 13, fontWeight: "600" }}>Profilo</Text>
+        </Pressable>
+      </View>
       <Text style={{ fontSize: 13, opacity: 0.6 }}>
         Tutto funziona offline. La sincronizzazione è un extra, non un requisito.
       </Text>
@@ -81,11 +88,11 @@ export default function Oggi() {
         prima cosa che cambia da un giorno all'altro, e l'unica che arriva da
         fuori mentre il telefono era spento.
       */}
-      <Pressable onPress={() => router.push("/rassegna")}
+      <Pressable onPress={() => router.push("/notizie?categoria=titoli")}
         style={{ padding: 13, borderRadius: 11, borderWidth: 1,
                  borderColor: novita.daLeggere ? C.verde : C.bordo,
                  backgroundColor: novita.daLeggere ? C.verdeFondo : "transparent" }}>
-        <Text style={{ fontSize: 12, opacity: 0.6 }}>Rassegna quotidiana</Text>
+        <Text style={{ fontSize: 12, opacity: 0.6 }}>Notizie</Text>
         <Text style={{ fontSize: 20, fontWeight: "500", marginTop: 2 }}>
           {novita.daLeggere ? `${novita.daLeggere} da leggere` : "Tutto letto"}
         </Text>

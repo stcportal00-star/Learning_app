@@ -124,7 +124,7 @@ export async function leggiMateriali(adesso = new Date()): Promise<Record<string
 
 export async function leggiPercorso(adesso = new Date()): Promise<Unita[]> {
   const temi = await database().getAllAsync<Tema>(
-    "SELECT slug, nome, trimestre FROM temi WHERE attivo = 1");
+    "SELECT slug, nome, trimestre, pista FROM temi WHERE attivo = 1");
   return costruisciPercorso(temi, await leggiMateriali(adesso), TEMI.map(([slug]) => slug));
 }
 

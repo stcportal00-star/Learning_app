@@ -4,7 +4,8 @@ import { Link, router, useFocusEffect } from "expo-router";
 import { database } from "../../lib/db";
 import { supportaWindowFunctions } from "../../lib/palestra";
 import { leggiPercorso } from "../../lib/avanzamento";
-import { Unita, prossimoPasso } from "../../lib/percorso";
+import { Unita, daFare } from "../../lib/percorso";
+import { leggiSeguiti, leggiSubentrate } from "../../lib/progetti";
 import ProssimoPasso from "../../components/ProssimoPasso";
 import { Text } from "../../components/Base";
 import { C } from "../../lib/tema";
@@ -27,6 +28,8 @@ const ETICHETTA_STATO: Record<Unita["stato"], string> = {
 export default function Studio() {
   const [c, setC] = useState<Conteggio>({ sql: 0, codice: 0, ripasso: 0, scenari: 0 });
   const [unita, setUnita] = useState<Unita[]>([]);
+  const [seguiti, setSeguiti] = useState<string[]>([]);
+  const [precedenti, setPrecedenti] = useState<Record<string, string>>({});
 
   useEffect(() => {
     (async () => {
@@ -53,13 +56,14 @@ export default function Studio() {
   useFocusEffect(useCallback(() => {
     let vivo = true;
     (async () => {
-      const u = await leggiPercorso();
-      if (vivo) setUnita(u);
+      const [u, s, p] = await Promise.all([leggiPercorso(), leggiSeguiti(), leggiSubentrate()]);
+      if (vivo) { setUnita(u); setSeguiti(s); setPrecedenti(p); }
     })();
     return () => { vivo = false; };
   }, []));
 
-  const corrente = prossimoPasso(unita)?.unita.tema.slug ?? null;
+  // «Adesso» sono le unità dei progetti; senza progetti, quella del piano.
+  const correnti = new Set(daFare(unita, seguiti, precedenti).map((v) => v.unita.tema.slug));
 
   const Voce = ({ href, titolo, nota, n }: { href: string; titolo: string; nota: string; n: number }) => (
     <Link href={href as never} asChild>
@@ -74,7 +78,7 @@ export default function Studio() {
   );
 
   const RigaUnita = ({ u }: { u: Unita }) => {
-    const qui = u.tema.slug === corrente;
+    const qui = correnti.has(u.tema.slug);
     const colore = u.stato === "completa" ? C.verde : qui ? C.blu : C.testoTenue;
     return (
       <Pressable onPress={() => router.push(`/unita?tema=${encodeURIComponent(u.tema.slug)}` as never)}
@@ -111,8 +115,9 @@ export default function Studio() {
     <ScrollView contentContainerStyle={{ padding: 16, gap: 12, paddingBottom: 32 }}>
       <Text style={{ fontSize: 22, fontWeight: "600" }}>Studio</Text>
       <Text style={{ fontSize: 13, opacity: 0.6, lineHeight: 19 }}>
-        Un tema alla volta, nell'ordine del piano. Ogni unità: leggi la fonte, esercitati, fissa i
-        concetti con le schede, applica a uno scenario. Si passa alla successiva all'80%.
+        L'ordine del piano è un consiglio: puoi seguire i temi che vuoi, anche più d'uno insieme
+        (apri l'unità e tocca «Segui»). Ogni unità: leggi la fonte, esercitati, fissa i concetti
+        con le schede, applica a uno scenario. Si supera all'80%.
       </Text>
 
       <ProssimoPasso />

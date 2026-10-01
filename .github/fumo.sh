@@ -52,7 +52,11 @@ fi
 adb exec-out screencap -p > fumo/01-oggi.png
 
 annota "== navigazione =="
-for rotta in studio libreria note profilo esercizi; do
+# Tutte e cinque le schede, poi le impilate. Notizie è la quinta scheda da
+# quando Profilo si apre da Oggi: le schede si montano solo quando si aprono,
+# e una scheda che nessuno apre qui arriverebbe sul telefono senza essere mai
+# stata disegnata.
+for rotta in studio libreria note notizie profilo esercizi; do
   adb shell am start -W -a android.intent.action.VIEW -d "percorso://$rotta" "$PACCHETTO" >/dev/null 2>&1
   sleep 4
   vivo || fallisci "processo terminato aprendo /$rotta"

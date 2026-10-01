@@ -57,6 +57,14 @@ for ora in 00 06 12 23; do
     node test/simulazione/promemoria-notifiche.mjs
 done
 
+# Le notizie dicono «ieri» e «3 ore fa» nell'ora del telefono. Un giorno
+# calcolato in UTC passa la prova in UTC e sbaglia a Città del Messico dopo le
+# sei di sera: si prova nei fusi in cui il telefono starà davvero.
+echo "— notizie nei fusi del viaggio (UTC, Città del Messico, Roma)"
+for fuso in UTC America/Mexico_City Europe/Rome; do
+  esegui "notizie $fuso" env TZ="$fuso" node test/simulazione/notizie.mjs
+done
+
 esegui "coda-scritture" node --import ./test/banco/carica.mjs test/simulazione/coda-scritture.mjs
 esegui "triage indipendente" node test/simulazione/triage-schermate-stato.mjs
 
