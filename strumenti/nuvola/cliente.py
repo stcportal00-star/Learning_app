@@ -367,6 +367,14 @@ class Nuvola:
             if not pagina:
                 break
             righe.extend(pagina)
+        # Arrivati al tetto con altre righe dopo: fermarsi qui sarebbe di
+        # nuovo il troncamento muto delle mille, solo più in là. Meglio una
+        # corsa che si ferma dicendo perché.
+        if len(righe) >= massimo and self._seleziona_una(
+                tabella, f"{query}&limit=1&offset={len(righe)}", None):
+            raise ErroreNuvola(
+                f"lettura di {tabella}: più di {massimo} righe, e il resto si "
+                f"perderebbe in silenzio. Alza il tetto di chi chiama")
         return righe
 
     def _seleziona_una(self, tabella, query, massimo):
@@ -633,6 +641,41 @@ if __name__ == "__main__":
              _attesa_429({"Retry-After": "3600"}, 0) == TETTO_ATTESA)
     verifica("senza Retry-After si torna all'esponenziale",
              _attesa_429({}, 2) == 8)
+
+    # La lettura a pagine, contro un finto server che ne dà al massimo
+    # `tetto` per richiesta come max_rows di Supabase.
+    def finto(totale, tetto=1000):
+        f = Nuvola()
+        f.chiamate = 0
+        def una(tabella, query, massimo):
+            f.chiamate += 1
+            q = urllib.parse.parse_qs(query)
+            inizio = int(q.get("offset", ["0"])[0])
+            quante = min(int(q.get("limit", ["1000"])[0]), tetto)
+            return [{"id": i} for i in range(inizio, min(inizio + quante, totale))]
+        f._seleziona_una = una
+        return f
+    f = finto(2500)
+    lette = f.seleziona("articoli", "select=id&order=id.asc", massimo=20000)
+    verifica("oltre le mille si legge a pagine, fino alla pagina vuota",
+             [r["id"] for r in lette] == list(range(2500)) and f.chiamate == 4)
+    f = finto(2500, tetto=300)
+    verifica("con un server che ne dà meno di quante se ne chiedono, arrivano tutte",
+             len(f.seleziona("articoli", "select=id&order=id.asc", massimo=20000)) == 2500)
+    sollevato = False
+    try:
+        finto(2500).seleziona("articoli", "select=id&order=id.asc", massimo=2000)
+    except ErroreNuvola:
+        sollevato = True
+    verifica("oltre il tetto di chi chiama si solleva, non si tronca", sollevato)
+    verifica("esattamente al tetto non si solleva",
+             len(finto(2000).seleziona("articoli", "select=id&order=id.asc", massimo=2000)) == 2000)
+    sollevato = False
+    try:
+        finto(10).seleziona("articoli", "select=id", massimo=5000)
+    except ErroreNuvola:
+        sollevato = True
+    verifica("a pagine senza order= si solleva", sollevato)
 
     e = ErroreNuvola("prova", 400, "message=column x does not exist")
     verifica("l'errore porta stato e corpo nel messaggio",
