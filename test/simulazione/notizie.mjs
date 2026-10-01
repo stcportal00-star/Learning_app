@@ -141,6 +141,28 @@ const notizia = (id, extra = {}) => ({
     r.map((x) => x.tipo === "sezione" ? `[${x.titolo}]` : `${x.tipo}:${x.notizia.id}`),
     ["[Oggi]", "principale:o1", "voce:o2", "[Ieri]", "principale:i1", "[Prima]", "principale:p1"]);
 }
+{
+  // Dalla revisione: a Città del Messico, un RSS delle 21 di ieri (3 UTC di
+  // oggi), un arXiv datato oggi e un RSS di ieri pomeriggio, nell'ordine in
+  // cui li dà la query. Si controllano le proprietà in ogni fuso.
+  const ora = new Date(2026, 9, 1, 10, 0);
+  const arrivo = "2026-10-01T15:00:00+00:00";
+  const elenco = [
+    notizia("rss-sera", { pubblicato_a: "2026-10-01T03:00:00+00:00", raccolto_a: arrivo }),
+    notizia("arxiv-oggi", { pubblicato_a: "2026-10-01T00:00:00+00:00", raccolto_a: arrivo }),
+    notizia("rss-ieri", { pubblicato_a: "2026-09-30T20:00:00+00:00", raccolto_a: arrivo }),
+  ];
+  const r = N.righePerGiorno(elenco, ora);
+  const titoli = r.filter((x) => x.tipo === "sezione").map((x) => x.titolo);
+  const ordine = ["Oggi", "Ieri", "Questa settimana", "Prima"];
+  ok(`N7 [${fuso}] date nude e date con l'ora insieme: ogni giorno una volta, nel suo ordine`,
+    new Set(titoli).size === titoli.length && titoli.every((t, i) => i === 0 || ordine.indexOf(titoli[i - 1]) < ordine.indexOf(t)),
+    titoli.join(" / "));
+  ok(`N7 [${fuso}] nessuna chiave ripetuta, nessun articolo perso`,
+    new Set(r.map((x) => x.chiave)).size === r.length && r.filter((x) => x.tipo !== "sezione").length === 3);
+  ok(`N7 [${fuso}] una sola notizia in evidenza per giorno`,
+    r.filter((x) => x.tipo === "principale").length === titoli.length);
+}
 uguale("N8 per te: le aree dei temi studiati, una volta sola, senza l'esplorazione",
   N.areePerTe(["sql_base", "hardware", "sql_join", "esplorazione"]), ["dati", "hardware"]);
 uguale("N8 senza temi studiati, nessuna area", N.areePerTe([]), []);

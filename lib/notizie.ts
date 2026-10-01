@@ -196,20 +196,29 @@ export function righeTitoli(perArea: Array<{ chiave: string; nome: string; notiz
   return r;
 }
 
+const GIORNI: Giorno[] = ["Oggi", "Ieri", "Questa settimana", "Prima"];
+
 /**
  * Una categoria: le notizie per giorno (oggi, ieri, questa settimana, prima),
- * e la prima di ogni giorno in evidenza. L'ordine dentro il giorno è quello
- * che arriva, cioè per data.
+ * e la prima di ogni giorno in evidenza. Dentro il giorno, l'ordine in cui
+ * arrivano.
+ *
+ * I giorni si riempiono e poi si scrivono nel loro ordine, invece di aprire
+ * un giorno nuovo a ogni cambio: la query ordina per l'ora UTC, i giorni sono
+ * quelli del telefono, e una data nuda vale il giorno scritto. A Città del
+ * Messico un articolo delle 21 di ieri (le 3 UTC di oggi) viene prima di un
+ * articolo di arXiv datato oggi, e si avevano «Ieri», «Oggi», «Ieri», con
+ * due intestazioni dalla stessa chiave.
  */
 export function righePerGiorno(notizie: Notizia[], adesso: Date): Riga[] {
+  const perGiorno = new Map<Giorno, Notizia[]>(GIORNI.map((g) => [g, []]));
+  for (const n of notizie) perGiorno.get(gruppoDi(dataDi(n), adesso))!.push(n);
   const r: Riga[] = [];
-  let ultimo: Giorno | null = null;
-  for (const n of notizie) {
-    const g = gruppoDi(dataDi(n), adesso);
-    const nuovo = g !== ultimo;
-    if (nuovo) r.push({ tipo: "sezione", chiave: `g:${g}`, titolo: g, categoria: null });
-    r.push({ tipo: nuovo ? "principale" : "voce", chiave: n.id, notizia: n });
-    ultimo = g;
+  for (const g of GIORNI) {
+    const voci = perGiorno.get(g)!;
+    if (!voci.length) continue;
+    r.push({ tipo: "sezione", chiave: `g:${g}`, titolo: g, categoria: null });
+    voci.forEach((n, i) => r.push({ tipo: i === 0 ? "principale" : "voce", chiave: n.id, notizia: n }));
   }
   return r;
 }
