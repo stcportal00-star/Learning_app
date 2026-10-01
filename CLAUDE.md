@@ -76,8 +76,11 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
      meno dieci minuti (`MARGINE_MS`: `now()` è l'inizio della transazione,
      e un caricamento lento diventa visibile dopo uno svelto), i doppioni li
      scarta `fondi()`. Dall'ultimo arrivo invece che dall'ora, a riposo ogni
-     scambio riscaricava l'ultimo lotto della conduttura. Le prove sono B4 e
-     B12–B15 in `test/simulazione/nuvola.mjs`.
+     scambio riscaricava l'ultimo lotto della conduttura. Una lettura che si
+     ferma a metà riparte dall'ultimo arrivo senza margine: con il margine,
+     più di 3000 eventi arrivati in dieci minuti la fermavano per sempre. Si
+     legge a pagine da 100, perché ogni pagina arrivi entro il timeout. Le
+     prove sono B4 e B12–B16 in `test/simulazione/nuvola.mjs`.
    - La chiave è una *publishable key* nel sorgente, di proposito: è la stessa
      che finisce nell'APK. Ciò che recinta i dati sono le policy RLS dello
      schema `percorso`, legate a un identificativo utente fisso.

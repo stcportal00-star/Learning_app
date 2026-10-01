@@ -194,11 +194,23 @@ export function istanteHttp(s: string | null): number {
  * se è prima dell'ultimo arrivo letto: i due orologi non sono d'accordo, e
  * l'ultimo arrivo è quello che viene da Postgres.
  *
- * A metà lettura (una pagina piena) si riparte dall'ultimo arrivo letto.
+ * A metà lettura (una pagina piena, o le pagine dello scambio finite) si
+ * riparte dall'ultimo arrivo letto SENZA margine, se è più di un margine
+ * prima dell'ora: un evento che non si è visto è diventato visibile dopo la
+ * prima pagina, quindi è arrivato dopo, e il margine lì non serve. Con il
+ * margine sempre, più eventi di quanti ne legge uno scambio arrivati in dieci
+ * minuti (il tablet che torna in rete con la coda di settimane) facevano
+ * ripartire ogni scambio dagli stessi e fermavano la lettura per sempre. Se
+ * l'ultimo arrivo è più recente, si riparte dall'ora meno il margine: col
+ * passare del tempo la finestra si svuota, e la lettura riprende.
  */
 export function prossimaSoglia(fine: boolean, ultimoArrivo: number, oraDelServer: number): string {
-  const daOra = oraDelServer >= ultimoArrivo || Number.isNaN(ultimoArrivo) ? oraDelServer : NaN;
-  const ms = (fine && !Number.isNaN(daOra) ? daOra : ultimoArrivo) - MARGINE_MS;
+  const daOra = oraDelServer >= ultimoArrivo || Number.isNaN(ultimoArrivo) ? oraDelServer - MARGINE_MS : NaN;
+  const ms = Number.isNaN(daOra)
+    ? ultimoArrivo - MARGINE_MS
+    : fine
+      ? daOra
+      : Math.min(ultimoArrivo, daOra);
   return Number.isNaN(ms) ? "" : new Date(ms).toISOString();
 }
 

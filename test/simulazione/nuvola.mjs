@@ -1427,9 +1427,11 @@ await scenario("B14 l'ora del server si legge in tutte le forme in cui Postgres 
 
   const ultimo = Date.parse("2026-10-01T03:00:00.000Z");
   const ora = Date.parse("2026-10-01T05:00:00.000Z");
-  uguali("arrivati in fondo si parte dall'ora; a meta' dall'ultimo arrivo; tolto sempre il margine",
+  uguali("arrivati in fondo si parte dall'ora meno il margine; a meta' dall'ultimo arrivo, che e' piu' vecchio",
     [prossimaSoglia(true, ultimo, ora), prossimaSoglia(false, ultimo, ora)],
-    [iso(ora - MARGINE_MS), iso(ultimo - MARGINE_MS)]);
+    [iso(ora - MARGINE_MS), iso(ultimo)]);
+  uguali("a meta', con l'ultimo arrivo dentro il margine, dall'ora meno il margine",
+    prossimaSoglia(false, ora - 60_000, ora), iso(ora - MARGINE_MS));
   uguali("senza ora del server, o con un'ora prima dell'ultimo arrivo, conta l'ultimo arrivo",
     [prossimaSoglia(true, ultimo, NaN), prossimaSoglia(true, ultimo, ultimo - 1000)],
     [iso(ultimo - MARGINE_MS), iso(ultimo - MARGINE_MS)]);
@@ -1455,6 +1457,33 @@ await scenario("B15 senza l'intestazione Date si riparte dall'ultimo arrivo, com
   ok("anche un'ora dopo: senza ora del server non avanza da sola",
      (await leggiMeta(tab, "nuvola_creato")) === new Date(Date.parse(s.righe("eventi")[0].creato_a) - 10 * 60_000).toISOString(),
      String(await leggiMeta(tab, "nuvola_creato")));
+  servitoreInUso = servitore;
+});
+
+await scenario("B16 piu' eventi di quanti ne legge uno scambio, arrivati in pochi secondi, arrivano tutti", async () => {
+  // Il tablet torna in rete con la coda di settimane e la carica in un
+  // minuto: piu' di 3000 eventi (30 pagine da 100, il tetto di uno scambio)
+  // con l'ora d'arrivo dentro dieci minuti. Con il margine tolto anche a
+  // meta' lettura, ogni scambio ripartiva dagli stessi 3000 e il resto non
+  // arrivava mai, nemmeno ore dopo.
+  const s = servitoreNuovo();
+  await svuotaCoda(tab);
+  await fissaSegnaposto(tab, "");
+  for (let lotto = 0; lotto < 31; lotto++) {
+    s.semina("eventi", Array.from({ length: 100 }, (_, i) => {
+      const k = String(lotto * 100 + i).padStart(4, "0");
+      return notaRemota(`b16-${k}`, hlcRemoto(1_000_000 + lotto * 100 + i, "tablet-due"), "tablet-due");
+    }));
+  }
+  let esito = await sincronizza(tab, s);
+  uguali("il primo scambio si ferma al tetto", [esito.riuscito, esito.nuovi], [true, 3000]);
+  esito = await sincronizza(tab, s);
+  ok("subito dopo, la finestra e' ancora piena", esito.riuscito && esito.nuovi === 0, JSON.stringify(esito.nuovi));
+  s.avanza(11 * 60_000);
+  let arrivati = 0;
+  for (let giro = 0; giro < 3; giro++) arrivati += (await sincronizza(tab, s)).nuovi;
+  uguali("passati dieci minuti, arriva il resto", arrivati, 100);
+  ok("e ci sono tutti e 3100", (await noteArrivate("b16-")) === 3100, String(await noteArrivate("b16-")));
   servitoreInUso = servitore;
 });
 
