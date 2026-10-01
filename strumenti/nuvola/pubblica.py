@@ -515,9 +515,11 @@ def pubblica(cartella, cartella_manuale, nuvola, tetti, rapporto):
         catalogo = list(catalogo) + pulite
 
     # Lo stato: le chiavi già pubblicate. Una colonna sola, qualche migliaio di
-    # righe: costa meno di qualunque file di stato da tenere allineato.
+    # righe: costa meno di qualunque file di stato da tenere allineato. Tutte,
+    # a pagine ordinate per id: lette solo le prime mille, ogni mattina si
+    # ripubblicavano articoli già in archivio, con letto e salvato a zero.
     gia, titoli_gia, url_gia = set(), set(), set()
-    for r in nuvola.seleziona("articoli", "select=chiave,titolo,url", massimo=20000):
+    for r in nuvola.seleziona("articoli", "select=chiave,titolo,url&order=id.asc", massimo=20000):
         if r.get("chiave"):
             gia.add(r["chiave"])
         if r.get("titolo"):

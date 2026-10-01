@@ -79,6 +79,11 @@ PAGINA_DEPOSITO = 1000
 PAGINE_MASSIME = 20
 
 
+# Quante righe PostgREST di Supabase restituisce al massimo per richiesta
+# (max_rows). Chiederne di più non dà errore: arrivano le prime 1000.
+RIGHE_PER_RICHIESTA = 1000
+
+
 class ErroreNuvola(Exception):
     """Porta sempre stato HTTP e corpo della risposta nel messaggio.
 
@@ -336,7 +341,35 @@ class Nuvola:
         `query` e' una stringa PostgREST gia' formata e gia' codificata, per
         esempio "chiave=in.(a,b)&select=chiave". Qui non si compone nulla: la
         sintassi degli operatori e' di chi conosce la tabella.
+
+        Oltre RIGHE_PER_RICHIESTA si legge a pagine. PostgREST di Supabase non
+        restituisce mai piu' di 1000 righe (max_rows), qualunque `limit` gli
+        si chieda, e senza errore: la conduttura chiedeva 20000 chiavi, ne
+        riceveva 1000 su 1304, e ripubblicava ogni giorno articoli gia' in
+        archivio. Le pagine vogliono un `order=` su una colonna univoca, o
+        una riga puo' cadere fra due pagine: senza, si solleva.
         """
+        if massimo is None or massimo <= RIGHE_PER_RICHIESTA:
+            return self._seleziona_una(tabella, query, massimo)
+        if "order=" not in query or "limit=" in query or "offset=" in query:
+            raise ErroreNuvola(
+                f"lettura di {tabella} oltre {RIGHE_PER_RICHIESTA} righe: serve "
+                f"order= su una colonna univoca, e niente limit= o offset= "
+                f"nella query (le pagine le mette questa funzione)")
+        righe = []
+        while len(righe) < massimo:
+            passo = min(RIGHE_PER_RICHIESTA, massimo - len(righe))
+            pagina = self._seleziona_una(
+                tabella, f"{query}&limit={passo}&offset={len(righe)}", None)
+            # Ci si ferma alla pagina VUOTA, non a quella corta: se il server
+            # ne desse meno di quante se ne chiedono, una pagina corta
+            # sembrerebbe l'ultima e il resto sparirebbe di nuovo.
+            if not pagina:
+                break
+            righe.extend(pagina)
+        return righe
+
+    def _seleziona_una(self, tabella, query, massimo):
         url = self._url_tabella(tabella, query, massimo)
         _, corpo = self._esegui("GET", url, testate=self._testate_lettura())
         dati = _da_json(corpo, f"lettura di {tabella}")
