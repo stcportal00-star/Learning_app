@@ -559,3 +559,11 @@ difetto è nell'app, non in `fumo.sh` né nei workflow.
 150 esercizi SQL, 20 moduli di lettura del codice, 199 flashcard con citazione,
 12 scenari a rubrica, 52 voci di biblioteca aperta. **Non modificarli a mano**:
 si rigenerano con gli script Python in `strumenti/contenuti/`.
+
+`caricaContenuti()` carica tutto solo su un database vuoto. Su telefono e
+tablet già in uso i temi, le schede e gli scenari arrivati con una versione
+nuova li aggiunge `aggiornaContenuti()` a ogni avvio, con INSERT OR IGNORE e
+una volta per versione (impronta in `meta`, `contenuti_impronta`): i
+progressi e la coda di ripasso delle schede che c'erano non si toccano. Un
+contenuto CAMBIATO, a parità di id, invece non arriva: per correggere una
+scheda serve un id nuovo.
