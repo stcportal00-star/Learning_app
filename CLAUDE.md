@@ -52,6 +52,12 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
    incorporato in `assets/lettore/lettore.html`: JavaScript puro, nessun modulo
    nativo di terze parti. Se si aggiorna `pdfjs-dist`, rigenerare con
    `node strumenti/genera-lettore.mjs`: la verifica fallisce se non combaciano.
+   Sopra ogni pagina c'è il livello di testo di pdf.js: si seleziona col dito
+   e «Sottolinea» crea un segno `evidenza` con i rettangoli in frazioni della
+   pagina nell'`ancora` (`sottolinea`, `evidenzeDa` in `lib/nuvola/segni.ts`).
+   Il CSS del lettore è piatto: le WebView prima di Chrome 112 ignorano
+   l'annidamento. La prova nel browser vero è `test/lettore.browser.mjs`
+   (Playwright; dove manca si salta e lo dice).
    Prima di aggiungere qualunque dipendenza, verifica che sia in
    `node_modules/expo/bundledNativeModules.json`. Se non c'è, non si aggiunge.
 

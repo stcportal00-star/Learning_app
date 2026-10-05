@@ -4,14 +4,17 @@ import { useLocalSearchParams, router } from "expo-router";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 import { database } from "../lib/db";
 import { preparaLettore, pdfDiProva, salvaPagina, apriVolume, Volume } from "../lib/palestra";
-import { annota, cancella, segniDi, Segno } from "../lib/nuvola/segni";
+import { annota, cancella, evidenzeDa, segniDi, Segno, sottolinea } from "../lib/nuvola/segni";
 import { Text, TextInput, ActivityIndicator } from "../components/Base";
 import { C } from "../lib/tema";
 
 type Messaggio =
   | { tipo: "pronto"; pagine: number }
   | { tipo: "pagina"; n: number }
+  | { tipo: "selezione"; testo: string; pagina?: number; r?: number[][] }
   | { tipo: "errore"; messaggio: string };
+
+type Selezione = { testo: string; pagina: number; r: number[][] };
 
 /**
  * Lettore interno: pdf.js in un WebView, offline, con ripresa della pagina
@@ -38,6 +41,11 @@ export default function Lettore() {
   const [segni, setSegni] = useState<Segno[]>([]);
   const [pannello, setPannello] = useState(false);
   const [bozza, setBozza] = useState("");
+  const [selezione, setSelezione] = useState<Selezione | null>(null);
+  const vista = useRef<WebView>(null);
+  // Il visore accetta le sottolineature solo dopo aver aperto il documento:
+  // prima, le funzioni che le disegnano non esistono ancora.
+  const pronto = useRef(false);
 
   /**
    * I segni stanno ACCANTO al PDF, mai dentro. Annotarlo dentro cambierebbe i
@@ -52,6 +60,20 @@ export default function Lettore() {
   }, [id]);
 
   useEffect(() => { void ricaricaSegni(); }, [ricaricaSegni]);
+
+  // Ogni volta che i segni cambiano (una sottolineatura nuova, una cancellata,
+  // una arrivata dall'altro dispositivo) il visore riceve la lista intera.
+  const mandaEvidenze = useCallback((lista: Segno[]) => {
+    if (!pronto.current) return;
+    vista.current?.injectJavaScript(
+      `window.percorsoEvidenze && window.percorsoEvidenze(${JSON.stringify(evidenzeDa(lista))}); true;`);
+  }, []);
+  useEffect(() => { mandaEvidenze(segni); }, [segni, mandaEvidenze]);
+
+  function vaiA(n: number) {
+    setPagina(n);
+    vista.current?.injectJavaScript(`window.percorsoVaiA && window.percorsoVaiA(${Number(n) || 1}); true;`);
+  }
 
   useEffect(() => {
     (async () => {
@@ -77,7 +99,14 @@ export default function Lettore() {
   function suMessaggio(e: WebViewMessageEvent) {
     let m: Messaggio;
     try { m = JSON.parse(e.nativeEvent.data) as Messaggio; } catch { return; }
-    if (m.tipo === "pronto") setTotale(m.pagine);
+    if (m.tipo === "pronto") {
+      setTotale(m.pagine);
+      pronto.current = true;
+      mandaEvidenze(segni);
+    }
+    else if (m.tipo === "selezione") {
+      setSelezione(m.testo && m.pagina && m.r?.length ? { testo: m.testo, pagina: m.pagina, r: m.r } : null);
+    }
     else if (m.tipo === "errore") {
       // Senza PC, logcat è l'unica traccia leggibile: il workflow la raccoglie
       // e la pubblica nel rapporto di build. Un guasto del lettore che resta
@@ -115,6 +144,40 @@ export default function Lettore() {
     </View>
   );
 
+  async function sottolineaSelezione() {
+    if (!selezione) return;
+    try {
+      await sottolinea(String(id), selezione.testo, selezione.pagina, selezione.r);
+    } catch (e) {
+      Alert.alert("Non si può sottolineare", String(e instanceof Error ? e.message : e));
+      return;
+    }
+    setSelezione(null);
+    vista.current?.injectJavaScript("window.percorsoTogliSelezione && window.percorsoTogliSelezione(); true;");
+    await ricaricaSegni();
+  }
+
+  // Compare quando il dito ha selezionato del testo nel PDF: tieni premuto su
+  // una parola, allarga con le maniglie, poi «Sottolinea».
+  const Barra = selezione && id !== "prova" ? (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 11,
+                   borderTopWidth: 1, borderColor: C.bordo, backgroundColor: C.sfondo }}>
+      <Text numberOfLines={2} style={{ flex: 1, fontSize: 12, lineHeight: 17, opacity: 0.75 }}>
+        «{selezione.testo}»
+      </Text>
+      <Pressable onPress={() => { void sottolineaSelezione(); }}
+        style={{ paddingHorizontal: 13, paddingVertical: 8, borderRadius: 8, backgroundColor: C.ambra }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: C.ambraFondo }}>Sottolinea</Text>
+      </Pressable>
+      <Pressable hitSlop={10} onPress={() => {
+        setSelezione(null);
+        vista.current?.injectJavaScript("window.percorsoTogliSelezione && window.percorsoTogliSelezione(); true;");
+      }}>
+        <Text style={{ fontSize: 13, color: C.testoSecondario }}>Annulla</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
   async function aggiungiSegno(genere: "nota" | "segnalibro") {
     const testo = genere === "segnalibro" ? `Segnalibro a pagina ${pagina}` : bozza.trim();
     if (!testo) return;
@@ -137,22 +200,28 @@ export default function Lettore() {
       <ScrollView contentContainerStyle={{ paddingHorizontal: 11, paddingBottom: 11, gap: 8 }}>
         {segni.length === 0 ? (
           <Text style={{ fontSize: 12, opacity: 0.55, lineHeight: 18 }}>
-            Nessun segno. Restano anche se il file viene riscaricato, e raggiungono
-            l'altro dispositivo alla prima sincronizzazione.
+            Nessun segno. Per sottolineare tieni premuta una parola del PDF e
+            allarga la selezione. I segni restano anche se il file viene
+            riscaricato, e raggiungono l'altro dispositivo alla prima
+            sincronizzazione.
           </Text>
         ) : null}
         {segni.map((sg) => (
           <Pressable key={sg.id}
-            onPress={() => { if (sg.pagina) setPagina(sg.pagina); }}
-            onLongPress={() => Alert.alert(sg.genere === "segnalibro" ? "Segnalibro" : "Nota", sg.testo, [
+            onPress={() => { if (sg.pagina) vaiA(sg.pagina); }}
+            onLongPress={() => Alert.alert(
+              sg.genere === "segnalibro" ? "Segnalibro" : sg.genere === "evidenza" ? "Sottolineatura" : "Nota",
+              sg.testo, [
               { text: "Cancella", style: "destructive",
                 onPress: async () => { await cancella(sg.id); await ricaricaSegni(); } },
               { text: "Annulla", style: "cancel" },
             ])}
-            style={{ backgroundColor: sg.genere === "segnalibro" ? C.verdeFondo : C.superficie,
+            style={{ backgroundColor: sg.genere === "segnalibro" ? C.verdeFondo
+                       : sg.genere === "evidenza" ? C.ambraFondo : C.superficie,
+                     borderLeftWidth: sg.genere === "evidenza" ? 3 : 0, borderColor: C.ambra,
                      borderRadius: 8, padding: 10 }}>
             <Text style={{ fontSize: 10, opacity: 0.5 }}>
-              {sg.pagina ? `p. ${sg.pagina}` : "—"} · {sg.genere}
+              {sg.pagina ? `p. ${sg.pagina}` : "—"} · {sg.genere === "evidenza" ? "sottolineatura" : sg.genere}
             </Text>
             <Text style={{ fontSize: 13, lineHeight: 19, marginTop: 2 }}>{sg.testo}</Text>
           </Pressable>
@@ -204,6 +273,7 @@ export default function Lettore() {
     <View style={{ flex: 1, backgroundColor: C.sfondo }}>
       {Intestazione}
       <WebView
+        ref={vista}
         source={{ uri: visore }}
         originWhitelist={["*"]}
         javaScriptEnabled
@@ -213,13 +283,14 @@ export default function Lettore() {
         setBuiltInZoomControls
         setDisplayZoomControls={false}
         injectedJavaScriptBeforeContentLoaded={
-          `window.PERCORSO = ${JSON.stringify({ pdf, pagina })}; true;`
+          `window.PERCORSO = ${JSON.stringify({ pdf, pagina, colori: { evidenza: C.ambra } })}; true;`
         }
         onMessage={suMessaggio}
         onError={(e) => setErrore(e.nativeEvent.description)}
         onRenderProcessGone={() => setErrore(PROCESSO_CHIUSO)}
         style={{ flex: 1, backgroundColor: C.sfondo }}
       />
+      {Barra}
       {pannello ? Pannello : null}
     </View>
   );

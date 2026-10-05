@@ -8,8 +8,33 @@
 <style>
   html, body { margin: 0; background: #000000; }
   #pagine { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0 40px; }
-  .pagina { width: calc(100vw - 16px); background: #fff; }
+  .pagina { position: relative; width: calc(100vw - 16px); background: #fff; }
   .pagina canvas { display: block; width: 100%; height: auto; }
+  /* Le regole di pdf.js per il livello di testo, senza annidamento: il CSS
+     annidato di pdf_viewer.css non lo capiscono le WebView prima di Chrome
+     112, e il telefono in viaggio non si aggiorna. */
+  .evidenze { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+  .evidenza { position: absolute; border-radius: 2px; }
+  .textLayer { position: absolute; inset: 0; width: 100% !important; height: 100% !important;
+               overflow: hidden; line-height: 1; text-align: initial; z-index: 2;
+               -webkit-text-size-adjust: none; text-size-adjust: none; transform-origin: 0 0;
+               --min-font-size: 1;
+               --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+               --min-font-size-inv: calc(1 / var(--min-font-size)); }
+  .textLayer span, .textLayer br { color: transparent; position: absolute; white-space: pre;
+               cursor: text; transform-origin: 0% 0%; -webkit-user-select: text; user-select: text; }
+  .textLayer > :not(.markedContent), .textLayer .markedContent span:not(.markedContent) {
+               z-index: 1; --font-height: 0;
+               font-size: calc(var(--text-scale-factor) * var(--font-height));
+               --scale-x: 1; --rotate: 0deg;
+               transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)); }
+  .textLayer .markedContent { display: contents; }
+  .textLayer span[role="img"] { -webkit-user-select: none; user-select: none; cursor: default; }
+  .textLayer ::selection { background: rgba(0, 90, 255, 0.3); }
+  .textLayer br::selection { background: transparent; }
+  .textLayer .endOfContent { display: block; position: absolute; inset: 100% 0 0; z-index: 0;
+               cursor: default; -webkit-user-select: none; user-select: none; }
+  .textLayer.selecting .endOfContent { top: 0; }
   #stato { padding: 40vh 24px 0; text-align: center; font: 14px system-ui, sans-serif; color: #A1A1AA; }
 </style>
 </head>
@@ -88,6 +113,41 @@ if (typeof Promise.withResolvers !== "function") {
     stato.remove();
     invia({ tipo: "pronto", pagine: n });
 
+    // Le sottolineature: rettangoli in frazioni della pagina (0..1), così
+    // valgono a qualunque larghezza e su qualunque dispositivo. Le dà l'app,
+    // che le tiene come segni («evidenza») accanto al file, mai dentro.
+    const COLORE = (cfg.colori && cfg.colori.evidenza) || "#F2B35B";
+    const evidenze = new Map();
+    function impostaEvidenze(lista) {
+      evidenze.clear();
+      for (const e of lista || []) {
+        if (!e || !(e.pagina > 0) || !Array.isArray(e.r)) continue;
+        if (!evidenze.has(e.pagina)) evidenze.set(e.pagina, []);
+        evidenze.get(e.pagina).push(e);
+      }
+      for (const [i, c] of disegnate) if (c) disegnaEvidenze(i);
+    }
+    function disegnaEvidenze(i) {
+      const strato = pagine[i - 1].querySelector(".evidenze");
+      if (!strato) return;
+      const pezzi = [];
+      for (const e of evidenze.get(i) || []) {
+        for (const q of e.r) {
+          if (!Array.isArray(q) || q.length !== 4) continue;
+          const s = document.createElement("div");
+          s.className = "evidenza";
+          s.style.left = q[0] * 100 + "%";
+          s.style.top = q[1] * 100 + "%";
+          s.style.width = q[2] * 100 + "%";
+          s.style.height = q[3] * 100 + "%";
+          s.style.background = COLORE + "55";
+          s.style.borderBottom = "2px solid " + COLORE;
+          pezzi.push(s);
+        }
+      }
+      strato.replaceChildren(...pezzi);
+    }
+
     const disegnate = new Map();
     async function disegna(i) {
       if (disegnate.has(i)) return;
@@ -102,8 +162,108 @@ if (typeof Promise.withResolvers !== "function") {
       c.width = Math.floor(vp.width);
       c.height = Math.floor(vp.height);
       await p.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
-      if (disegnate.has(i)) { div.replaceChildren(c); disegnate.set(i, c); }
+      if (!disegnate.has(i)) return;
+      // Sopra il disegno, nell'ordine: le sottolineature, poi il testo
+      // trasparente di pdf.js, che è ciò che si seleziona col dito. Senza il
+      // livello di testo un PDF è un'immagine: niente da selezionare, niente
+      // da sottolineare.
+      const strato = document.createElement("div");
+      strato.className = "evidenze";
+      const testo = document.createElement("div");
+      testo.className = "textLayer";
+      const css = div.clientWidth / base.width;
+      testo.style.setProperty("--total-scale-factor", String(css));
+      div.replaceChildren(c, strato, testo);
+      disegnate.set(i, c);
+      disegnaEvidenze(i);
+      try {
+        await new pdfjs.TextLayer({
+          textContentSource: p.streamTextContent(),
+          container: testo,
+          viewport: p.getViewport({ scale: css }),
+        }).render();
+      } catch (e) {
+        // Una pagina senza testo (una scansione) resta leggibile: solo non si
+        // sottolinea.
+      }
     }
+
+    // La selezione si legge a riposo: mentre il dito trascina le maniglie
+    // gli eventi arrivano a decine.
+    let attesa = null;
+    let selezionato = "";
+    document.addEventListener("selectionchange", () => {
+      clearTimeout(attesa);
+      attesa = setTimeout(leggiSelezione, 250);
+    });
+    function leggiSelezione() {
+      const sel = document.getSelection();
+      const testo = sel && !sel.isCollapsed ? sel.toString().replace(/\s+/g, " ").trim() : "";
+      if (!testo) {
+        if (selezionato) { selezionato = ""; invia({ tipo: "selezione", testo: "" }); }
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      const nodo = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+      const pag = nodo && nodo.closest ? nodo.closest(".pagina") : null;
+      if (!pag) return;
+      const r = rettangoli(range, pag);
+      if (!r.length) return;
+      selezionato = testo;
+      invia({ tipo: "selezione", testo: testo.slice(0, 2000), pagina: Number(pag.dataset.n), r });
+    }
+    // I rettangoli della selezione sulla pagina dove comincia, in frazioni
+    // della pagina, uniti per riga: una riga di dieci parole sono dieci
+    // rettangoli per il browser e uno solo per chi la rilegge.
+    function rettangoli(range, pag) {
+      const box = pag.getBoundingClientRect();
+      const grezzi = [];
+      for (const q of range.getClientRects()) {
+        const x0 = Math.max(q.left, box.left), x1 = Math.min(q.right, box.right);
+        const y0 = Math.max(q.top, box.top), y1 = Math.min(q.bottom, box.bottom);
+        if (x1 - x0 < 1 || y1 - y0 < 1) continue;
+        grezzi.push([(x0 - box.left) / box.width, (y0 - box.top) / box.height,
+                     (x1 - x0) / box.width, (y1 - y0) / box.height]);
+      }
+      // Prima le righe: il browser dà per ogni pezzo due rettangoli (il
+      // riquadro dell'elemento e quello del testo) con altezze appena diverse,
+      // e i pezzi di una riga non arrivano in ordine. Poi, dentro la riga, si
+      // uniscono i pezzi separati da meno di un ventesimo di pagina: lo spazio
+      // fra due parole di un PDF vero arriva a tre centesimi, il margine fra
+      // due colonne di solito no.
+      grezzi.sort((a, b) => a[1] - b[1]);
+      const righe = [];
+      for (const q of grezzi) {
+        const riga = righe.find((g) => Math.abs(g.y - q[1]) < Math.min(g.h, q[3]) / 2);
+        if (riga) riga.pezzi.push(q);
+        else righe.push({ y: q[1], h: q[3], pezzi: [q] });
+      }
+      const uniti = [];
+      for (const riga of righe) {
+        riga.pezzi.sort((a, b) => a[0] - b[0]);
+        let u = null;
+        for (const q of riga.pezzi) {
+          if (u && q[0] <= u[0] + u[2] + 0.05) {
+            const x1 = Math.max(u[0] + u[2], q[0] + q[2]);
+            const y0 = Math.min(u[1], q[1]), y1 = Math.max(u[1] + u[3], q[1] + q[3]);
+            u[2] = x1 - u[0]; u[1] = y0; u[3] = y1 - y0;
+          } else {
+            u = q.slice();
+            uniti.push(u);
+          }
+        }
+      }
+      return uniti.slice(0, 200).map((q) => q.map((v) => Math.round(v * 10000) / 10000));
+    }
+
+    // Ciò che l'app chiama da fuori, con injectJavaScript.
+    window.percorsoEvidenze = impostaEvidenze;
+    window.percorsoVaiA = (n) => { const d = pagine[n - 1]; if (d) d.scrollIntoView(); };
+    window.percorsoTogliSelezione = () => {
+      const s = document.getSelection();
+      if (s) s.removeAllRanges();
+    };
+    impostaEvidenze(cfg.evidenze);
     // Memoria: su un tablet economico un PDF lungo esaurirebbe la RAM se si
     // tenessero tutte le pagine disegnate. Si liberano quelle lontane.
     function libera(corrente) {

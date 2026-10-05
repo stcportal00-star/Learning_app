@@ -1802,6 +1802,42 @@ await scenario("B25 i file scendono da soli solo lasciando 1 GB libero; un gross
   servitoreInUso = servitore;
 });
 
+await scenario("B26 una sottolineatura è un segno «evidenza» con i rettangoli nell'ancora", async () => {
+  const s = await tab.Segni.sottolinea("b26-vol", "  La triage   decide\nchi passa prima ", 3,
+    [[0.1, 0.2, 0.5, 0.03], [0.1, 0.24, 0.3, 0.03]]);
+  const r = await riga(tab, "segni", "id", s.id);
+  uguali("il segno ha genere, pagina e testo ripulito",
+    [r.genere, r.pagina, r.testo], ["evidenza", 3, "La triage decide chi passa prima"]);
+  uguali("e i rettangoli stanno nell'ancora", JSON.parse(r.ancora), { r: [[0.1, 0.2, 0.5, 0.03], [0.1, 0.24, 0.3, 0.03]] });
+  const ev = await tab.Db.database().getFirstAsync(
+    "SELECT tipo, payload FROM eventi WHERE entita = 'segni' AND entita_id = ?", [s.id]);
+  uguali("ed è un evento come gli altri segni, che si sincronizza da solo",
+    [ev.tipo, JSON.parse(ev.payload).genere, JSON.parse(ev.payload).ancora], ["crea", "evidenza", r.ancora]);
+
+  const fuori = await tab.Segni.sottolinea("b26-vol", "bordo", 1, [[-0.01, 0.98, 0.5, 0.05], ["x", 1, 2, 3], [0.2]]);
+  uguali("un bordo che esce di un soffio si riporta dentro la pagina, i rettangoli rotti si scartano",
+    JSON.parse(fuori.ancora).r, [[0, 0.98, 0.5, 0.020000000000000018]]);
+
+  for (const [nome, args] of [
+    ["senza testo", ["b26-vol", "   ", 1, [[0.1, 0.1, 0.1, 0.1]]]],
+    ["senza pagina", ["b26-vol", "parole", 0, [[0.1, 0.1, 0.1, 0.1]]]],
+    ["senza rettangoli sulla pagina", ["b26-vol", "parole", 2, [[0.5, 0.5, 0, 0]]]],
+  ]) {
+    let errore = null;
+    try { await tab.Segni.sottolinea(...args); } catch (e) { errore = e; }
+    ok(`una selezione ${nome} non diventa un segno`, errore !== null);
+  }
+
+  await tab.Segni.annota("b26-vol", "nota", "una nota con un'ancora vecchia", 5, "cap-2:tab-3");
+  await tab.Segni.annota("b26-vol", "evidenza", "ancora rotta", 6, "{non json");
+  await tab.Segni.annota("b26-vol", "nota", "una nota con un'ancora che sembra una sottolineatura", 7,
+    JSON.stringify({ r: [[0.1, 0.1, 0.1, 0.1]] }));
+  const lista = tab.Segni.evidenzeDa(await tab.Segni.segniDi("b26-vol"));
+  uguali("evidenzeDa dà al visore solo le sottolineature disegnabili, per pagina",
+    lista.map((e) => [e.id, e.pagina, e.r.length]).sort(),
+    [[fuori.id, 1, 1], [s.id, 3, 2]].sort());
+});
+
 // =========================================================================
 // PARTE C — cliente: tentativi, attese misurate, blocchi, intestazioni
 // =========================================================================
@@ -2011,6 +2047,23 @@ await scenario("D1 quello che il primo scrive ricompare IDENTICO sul secondo", a
   ok("e l'articolo non compare piu' fra quelli da leggere",
      !letti.some((a) => a.id === "d-art-1"), JSON.stringify(letti.map((a) => a.id)));
 
+  servitoreInUso = servitore;
+});
+
+await scenario("D2 una sottolineatura fatta sul tablet cade nello stesso punto sul telefono", async () => {
+  const uno = await apriDispositivo("d2a", "d2a-tablet", true);
+  const due = await apriDispositivo("d2b", "d2b-telefono", true);
+  const nuvola = servitoreNuovo();
+  const r = [[0.121, 0.1378, 0.4996, 0.0375]];
+  const s = await uno.Segni.sottolinea("d2-vol", "Percorso - pagina 1 di 2", 1, r);
+  const salita = await sincronizza(uno, nuvola);
+  uguali("il tablet la manda", [salita.riuscito, salita.inviati], [true, 1]);
+  const discesa = await sincronizza(due, nuvola);
+  uguali("il telefono la riceve e la proietta",
+    [discesa.riuscito, discesa.proiezione.scritte, discesa.proiezione.incomplete], [true, 1, []]);
+  uguali("ed è identica, colonna per colonna", await riga(due, "segni", "id", s.id), await riga(uno, "segni", "id", s.id));
+  uguali("e il visore del telefono la disegna negli stessi rettangoli",
+    due.Segni.evidenzeDa(await due.Segni.segniDi("d2-vol")), [{ id: s.id, pagina: 1, r }]);
   servitoreInUso = servitore;
 });
 

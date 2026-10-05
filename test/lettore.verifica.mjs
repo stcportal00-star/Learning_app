@@ -50,6 +50,18 @@ verifica("il visore non assegna workerSrc",
   !visore.includes("GlobalWorkerOptions.workerSrc"));
 verifica("il visore importa il worker sul thread principale",
   visore.includes("import(blob(WORKER))"));
+// Sottolineare: il testo trasparente di pdf.js sopra il disegno, e la
+// selezione che diventa un messaggio per l'app. La prova vera è nel browser
+// (lettore.browser.mjs); queste tre reggono anche dove il browser non c'è.
+verifica("il visore disegna il livello di testo di pdf.js su ogni pagina",
+  visore.includes("new pdfjs.TextLayer(") && visore.includes('testo.className = "textLayer"'));
+// In un template literal «\\s» diventa «s»: la regex toglieva le «s» dal
+// testo sottolineato («Percor o»). Nel file generato deve arrivare «\s».
+verifica("la selezione si ripulisce con /\\s+/g, non con /s+/g",
+  visore.includes("sel.toString().replace(/\\s+/g") && !visore.includes("sel.toString().replace(/s+/g"));
+const stile = html.slice(html.indexOf("<style>"), html.indexOf("</style>"));
+verifica("il CSS del lettore non usa l'annidamento, che le WebView vecchie ignorano",
+  !stile.includes("&") && !/\{[^{}]*\{/.test(stile));
 console.log(`Test superati : ${ok}`);
 for (const k of ko) console.log("  FALLITA: " + k);
 process.exit(ko.length ? 1 : 0);
