@@ -1,6 +1,8 @@
 /**
  * Carica nel database locale i contenuti impacchettati nell'app.
- * Gira una sola volta, al primo avvio, e non richiede rete.
+ * Tutto il pacchetto al primo avvio (caricaContenuti); a ogni avvio dopo un
+ * aggiornamento, solo temi, schede e scenari nuovi (aggiornaContenuti). Mai
+ * la rete.
  *
  * I contenuti sono asset statici: non passano dal registro eventi, perché non
  * sono dati dell'utente e sono identici su tutti i dispositivi. Solo i tentativi,
@@ -87,6 +89,36 @@ function ordineRilevante(consegna: string, soluzione: string): boolean {
   );
 }
 
+/**
+ * I contenuti impacchettati, letti quando servono. Le cinque require stanno
+ * qui e solo qui: sono asset locali, e una prova ne conta il numero.
+ */
+const pacchetto = {
+  sql: (): EsercizioSql[] => require("../assets/contenuti/esercizi_sql.json"),
+  codice: (): EsercizioCodice[] => require("../assets/contenuti/esercizi_codice.json"),
+  flash: (): Flashcard[] => require("../assets/contenuti/flashcard.json"),
+  scenari: (): Scenario[] => require("../assets/contenuti/scenari_rubrica.json"),
+  volumi: (): VolumeAperto[] => require("../assets/contenuti/biblioteca.json"),
+};
+
+/**
+ * Un'impronta di ciò che aggiornaContenuti() sa aggiungere: temi, schede,
+ * scenari. Cambia quando un aggiornamento dell'app ne porta di nuovi.
+ */
+function improntaContenuti(flash: Flashcard[], scenari: Scenario[]): string {
+  const parti = [
+    ...TEMI.map((t) => t.join("|")),
+    // String(): un elemento rovinato senza id non deve far fallire l'avvio.
+    ...flash.map((f) => String(f?.id ?? "")),
+    ...scenari.map((x) => String(x?.id ?? "")),
+  ];
+  let h = 0;
+  for (const p of parti) {
+    for (let i = 0; i < p.length; i++) h = (Math.imul(31, h) + p.charCodeAt(i)) | 0;
+  }
+  return `${parti.length}:${(h >>> 0).toString(16)}`;
+}
+
 export async function caricaContenuti(): Promise<{
   temi: number; sql: number; codice: number; flashcard: number;
   scenari: number; biblioteca: number; saltato: boolean;
@@ -97,11 +129,11 @@ export async function caricaContenuti(): Promise<{
     return { temi: 0, sql: 0, codice: 0, flashcard: 0, scenari: 0, biblioteca: 0, saltato: true };
   }
 
-  const sql: EsercizioSql[] = require("../assets/contenuti/esercizi_sql.json");
-  const codice: EsercizioCodice[] = require("../assets/contenuti/esercizi_codice.json");
-  const flash: Flashcard[] = require("../assets/contenuti/flashcard.json");
-  const scenari: Scenario[] = require("../assets/contenuti/scenari_rubrica.json");
-  const volumi: VolumeAperto[] = require("../assets/contenuti/biblioteca.json");
+  const sql = pacchetto.sql();
+  const codice = pacchetto.codice();
+  const flash = pacchetto.flash();
+  const scenari = pacchetto.scenari();
+  const volumi = pacchetto.volumi();
 
   await inTransazione(async (d) => {
     for (const [slug, nome, pista, trimestre] of TEMI) {
@@ -180,4 +212,76 @@ export async function caricaContenuti(): Promise<{
     flashcard: flash.length, scenari: scenari.length, biblioteca: volumi.length,
     saltato: false,
   };
+}
+
+/**
+ * Temi, schede e scenari arrivati con un aggiornamento dell'app.
+ *
+ * caricaContenuti() gira solo su un database vuoto: su telefono e tablet
+ * già in uso salta tutto, e senza questa funzione le unità nuove (hardware e
+ * IA in ogni trimestre) non arriverebbero mai. Aggiunge soltanto, con INSERT
+ * OR IGNORE: i progressi, la coda di ripasso delle schede che c'erano e le
+ * note non si toccano. Le schede nuove entrano nella coda di ripasso come
+ * nuove, come al primo avvio.
+ *
+ * Gira a ogni avvio ma lavora una volta per aggiornamento: l'impronta in
+ * `meta` dice se il pacchetto è già stato letto. La prima volta la scrive
+ * qui, subito dopo il primo caricamento, senza trovare niente da aggiungere:
+ * caricaContenuti() non tocca `meta`.
+ */
+export async function aggiornaContenuti(): Promise<{
+  temi: number; flashcard: number; scenari: number; saltato: boolean;
+}> {
+  const nulla = { temi: 0, flashcard: 0, scenari: 0 };
+  const d = database();
+  const flash = pacchetto.flash();
+  const scenari = pacchetto.scenari();
+  const impronta = improntaContenuti(flash, scenari);
+  const letta = await d.getFirstAsync<{ valore: string }>(
+    "SELECT valore FROM meta WHERE chiave = 'contenuti_impronta'");
+  if (letta?.valore === impronta) return { ...nulla, saltato: true };
+  // Un database vuoto è del primo avvio, non di un aggiornamento.
+  const gia = await d.getFirstAsync<{ n: number }>("SELECT count(*) AS n FROM esercizi");
+  if (!gia?.n) return { ...nulla, saltato: true };
+
+  const fatti = { ...nulla };
+  await inTransazione(async (d) => {
+    for (const [slug, nome, pista, trimestre] of TEMI) {
+      const r = await d.runAsync(
+        `INSERT OR IGNORE INTO temi (id, slug, nome, pista, trimestre) VALUES (?,?,?,?,?)`,
+        [`tema:${slug}`, slug, nome, pista, trimestre]
+      );
+      fatti.temi += r.changes;
+    }
+    const adesso = new Date().toISOString();
+    for (const f of flash) {
+      const r = await d.runAsync(
+        `INSERT OR IGNORE INTO esercizi
+         (id, tema_slug, tipo, livello, consegna, soluzione_riferimento, fonte_citazione)
+         VALUES (?,?,'quiz_citato',2,?,?,?)`,
+        [f.id, f.tema, f.domanda, f.risposta, `${f.fonte} — ${f.riferimento}`]
+      );
+      if (r.changes) {
+        fatti.flashcard++;
+        await d.runAsync(
+          `INSERT OR IGNORE INTO ripasso (esercizio_id, prossima_revisione) VALUES (?,?)`,
+          [f.id, adesso]
+        );
+      }
+    }
+    for (const s of scenari) {
+      const r = await d.runAsync(
+        `INSERT OR IGNORE INTO esercizi
+         (id, tema_slug, tipo, livello, consegna, rubrica)
+         VALUES (?,?,'rubrica',4,?,?)`,
+        [s.id, s.tema, s.consegna, JSON.stringify(s.rubrica)]
+      );
+      fatti.scenari += r.changes;
+    }
+    await d.runAsync(
+      `INSERT OR REPLACE INTO meta (chiave, valore) VALUES ('contenuti_impronta', ?)`,
+      [impronta]
+    );
+  });
+  return { ...fatti, saltato: false };
 }

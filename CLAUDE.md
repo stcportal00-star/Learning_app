@@ -52,6 +52,12 @@ Sincronizzazione, ripasso e statistiche possono aspettare.
    incorporato in `assets/lettore/lettore.html`: JavaScript puro, nessun modulo
    nativo di terze parti. Se si aggiorna `pdfjs-dist`, rigenerare con
    `node strumenti/genera-lettore.mjs`: la verifica fallisce se non combaciano.
+   Sopra ogni pagina c'è il livello di testo di pdf.js: si seleziona col dito
+   e «Sottolinea» crea un segno `evidenza` con i rettangoli in frazioni della
+   pagina nell'`ancora` (`sottolinea`, `evidenzeDa` in `lib/nuvola/segni.ts`).
+   Il CSS del lettore è piatto: le WebView prima di Chrome 112 ignorano
+   l'annidamento. La prova nel browser vero è `test/lettore.browser.mjs`
+   (Playwright; dove manca si salta e lo dice).
    Prima di aggiungere qualunque dipendenza, verifica che sia in
    `node_modules/expo/bundledNativeModules.json`. Se non c'è, non si aggiunge.
 
@@ -553,3 +559,11 @@ difetto è nell'app, non in `fumo.sh` né nei workflow.
 150 esercizi SQL, 20 moduli di lettura del codice, 199 flashcard con citazione,
 12 scenari a rubrica, 52 voci di biblioteca aperta. **Non modificarli a mano**:
 si rigenerano con gli script Python in `strumenti/contenuti/`.
+
+`caricaContenuti()` carica tutto solo su un database vuoto. Su telefono e
+tablet già in uso i temi, le schede e gli scenari arrivati con una versione
+nuova li aggiunge `aggiornaContenuti()` a ogni avvio, con INSERT OR IGNORE e
+una volta per versione (impronta in `meta`, `contenuti_impronta`): i
+progressi e la coda di ripasso delle schede che c'erano non si toccano. Un
+contenuto CAMBIATO, a parità di id, invece non arriva: per correggere una
+scheda serve un id nuovo.

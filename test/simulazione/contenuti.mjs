@@ -1275,6 +1275,66 @@ await scenario("I4 · ricaricare su un database gia pieno e idempotente (INSERT 
     d.getFirstSync("SELECT aggiunto_a AS a FROM biblioteca LIMIT 1").a, istantePrima);
 });
 
+await scenario("U1 · un aggiornamento dell'app porta schede, scenari e temi nuovi su un telefono già in uso", async () => {
+  // caricaContenuti() salta su un database con esercizi: senza aggiornaContenuti()
+  // le unità aggiunte in una versione nuova non arriverebbero mai sui
+  // dispositivi già installati, cioè su quelli dell'utente.
+  const d = dbApp.database();
+  await caricaIlContenutoVero();
+  const tutteLeSchede = JSON.parse(readFileSync(RADICE + "/assets/contenuti/flashcard.json", "utf8"));
+  const tuttiGliScenari = JSON.parse(readFileSync(RADICE + "/assets/contenuti/scenari_rubrica.json", "utf8"));
+  const prima = { esercizi: conta("esercizi"), temi: conta("temi"), ripasso: conta("ripasso"), biblioteca: conta("biblioteca") };
+
+  // Il telefono com'era con la versione vecchia: tre schede, uno scenario e
+  // un tema in meno, e un'impronta diversa.
+  const nuove = tutteLeSchede.slice(-3).map((f) => f.id);
+  const scenarioNuovo = tuttiGliScenari[tuttiGliScenari.length - 1].id;
+  for (const id of nuove) {
+    d.runSync("DELETE FROM esercizi WHERE id = ?", [id]);
+    d.runSync("DELETE FROM ripasso WHERE esercizio_id = ?", [id]);
+  }
+  d.runSync("DELETE FROM esercizi WHERE id = ?", [scenarioNuovo]);
+  const temaNuovo = contenuti.TEMI[contenuti.TEMI.length - 1][0];
+  d.runSync("DELETE FROM temi WHERE slug = ?", [temaNuovo]);
+  d.runSync("INSERT OR REPLACE INTO meta (chiave, valore) VALUES ('contenuti_impronta', 'versione-vecchia')");
+
+  // E i progressi dell'utente su ciò che c'era già.
+  const vecchia = tutteLeSchede[0].id;
+  d.runSync("UPDATE ripasso SET prossima_revisione = '2030-01-01T00:00:00Z', stabilita = 9.5 WHERE esercizio_id = ?", [vecchia]);
+  const ripassoVecchia = d.getFirstSync("SELECT * FROM ripasso WHERE esercizio_id = ?", [vecchia]);
+  const eventiPrima = conta("eventi");
+
+  const esito = await contenuti.aggiornaContenuti();
+  ugualeJson("arrivano proprio le cose nuove",
+    [esito.saltato, esito.temi, esito.flashcard, esito.scenari], [false, 1, 3, 1]);
+  uguale("gli esercizi tornano quelli del pacchetto", conta("esercizi"), prima.esercizi);
+  uguale("i temi pure", conta("temi"), prima.temi);
+  uguale("le schede nuove entrano nella coda di ripasso", conta("ripasso"), prima.ripasso);
+  ok("come nuove, da ripassare subito",
+    nuove.every((id) => d.getFirstSync("SELECT prossima_revisione AS p FROM ripasso WHERE esercizio_id = ?", [id])?.p));
+  ugualeJson("il ripasso di una scheda che c'era già non si tocca",
+    d.getFirstSync("SELECT * FROM ripasso WHERE esercizio_id = ?", [vecchia]), ripassoVecchia);
+  uguale("la biblioteca non si tocca", conta("biblioteca"), prima.biblioteca);
+  uguale("e nessun evento: i contenuti non passano dal registro", conta("eventi"), eventiPrima);
+
+  const ancora = await contenuti.aggiornaContenuti();
+  ugualeJson("all'avvio dopo non fa niente", [ancora.saltato, ancora.temi, ancora.flashcard, ancora.scenari], [true, 0, 0, 0]);
+});
+
+await scenario("U2 · su un database vuoto aggiornaContenuti() non carica a metà: è il lavoro del primo avvio", async () => {
+  azzeraContenuti();
+  dbApp.database().runSync("DELETE FROM meta WHERE chiave = 'contenuti_impronta'");
+  const esito = await contenuti.aggiornaContenuti();
+  uguale("saltato", esito.saltato, true);
+  uguale("nessuna scheda senza i suoi esercizi SQL", conta("esercizi"), 0);
+  const primo = await contenuti.caricaContenuti();
+  uguale("il primo avvio carica tutto", primo.saltato, false);
+  const subito = await contenuti.aggiornaContenuti();
+  ugualeJson("subito dopo, il primo aggiornamento non trova niente da aggiungere e lascia l'impronta",
+    [subito.saltato, subito.temi, subito.flashcard, subito.scenari], [false, 0, 0, 0]);
+  uguale("dall'avvio dopo non rilegge il pacchetto", (await contenuti.aggiornaContenuti()).saltato, true);
+});
+
 await scenario("I5 · nessuna chiamata di rete in tutto il percorso di caricamento", async () => {
   // Trappole installate prima dell'import dei moduli dell'app.
   ugualeJson("nessuna chiamata intercettata", reteTentata, []);

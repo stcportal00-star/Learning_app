@@ -7,6 +7,9 @@ echo "— test di logica"
 npm test
 echo "— lettore PDF incorporato"
 node test/lettore.verifica.mjs 2>/dev/null
+# Nel browser vero, con Playwright se c'è: il livello di testo, la selezione,
+# le sottolineature disegnate. Senza Playwright si salta e lo dice.
+node test/lettore.browser.mjs
 
 # I banchi di prova e le simulazioni girano sul CODICE VERO dell'app sopra
 # node:sqlite. Stanno qui da quando i difetti confermati sono stati corretti:

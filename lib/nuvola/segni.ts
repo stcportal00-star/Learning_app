@@ -72,6 +72,75 @@ export async function annota(
   return { ...s, hlc };
 }
 
+/**
+ * Una sottolineatura su un PDF: dove sta e che cosa dice.
+ *
+ * I rettangoli sono in frazioni della pagina, [x, y, larghezza, altezza]
+ * fra 0 e 1, così valgono su uno schermo di qualunque larghezza: lo stesso
+ * segno fatto sul telefono cade nello stesso punto sul tablet. Viaggiano in
+ * `ancora` come JSON {"r": [...]}, perché `ancora` è la colonna che dice
+ * DOVE sta un segno, e così non serve cambiare lo schema.
+ */
+export type Evidenza = { id: string; pagina: number; r: number[][] };
+
+/** Oltre, un rettangolo per riga non serve più: è una selezione sbagliata. */
+const RETTANGOLI_MASSIMI = 200;
+const TESTO_MASSIMO = 2000;
+
+function rettangoliValidi(r: unknown): number[][] {
+  if (!Array.isArray(r)) return [];
+  const fuori: number[][] = [];
+  for (const q of r.slice(0, RETTANGOLI_MASSIMI)) {
+    if (!Array.isArray(q) || q.length !== 4) continue;
+    const n = q.map(Number);
+    if (!n.every(Number.isFinite)) continue;
+    // Il visore arrotonda, e un bordo può uscire di un soffio dalla pagina.
+    const [x, y] = [Math.min(Math.max(n[0], 0), 1), Math.min(Math.max(n[1], 0), 1)];
+    const w = Math.min(Math.max(n[2], 0), 1 - x);
+    const h = Math.min(Math.max(n[3], 0), 1 - y);
+    if (w > 0 && h > 0) fuori.push([x, y, w, h]);
+  }
+  return fuori;
+}
+
+/**
+ * Sottolinea ciò che è selezionato nel lettore. Solleva se la selezione non
+ * dice niente (nessun testo, nessun rettangolo sulla pagina): un segno che
+ * non si può disegnare né rileggere non va nel registro.
+ */
+export async function sottolinea(
+  volumeId: string,
+  testo: string,
+  pagina: number,
+  r: unknown
+): Promise<Segno> {
+  const parole = (testo ?? "").replace(/\s+/g, " ").trim().slice(0, TESTO_MASSIMO);
+  const rettangoli = rettangoliValidi(r);
+  if (!parole) throw new Error("niente testo selezionato");
+  if (!Number.isInteger(pagina) || pagina < 1) throw new Error("pagina non valida");
+  if (!rettangoli.length) throw new Error("la selezione non sta su una pagina");
+  return annota(volumeId, "evidenza", parole, pagina, JSON.stringify({ r: rettangoli }));
+}
+
+/** Le sottolineature fra i segni, pronte per il visore. Le altre si ignorano. */
+export function evidenzeDa(segni: Segno[]): Evidenza[] {
+  const fuori: Evidenza[] = [];
+  for (const s of segni) {
+    if (s.genere !== "evidenza" || !s.pagina || !s.ancora) continue;
+    let r: unknown;
+    try {
+      r = (JSON.parse(s.ancora) as { r?: unknown }).r;
+    } catch {
+      // Un'ancora che non è JSON viene da altro (una nota con «cap-2:tab-3»):
+      // resta nella lista dei segni, solo non si disegna.
+      continue;
+    }
+    const rettangoli = rettangoliValidi(r);
+    if (rettangoli.length) fuori.push({ id: s.id, pagina: s.pagina, r: rettangoli });
+  }
+  return fuori;
+}
+
 export async function riscrivi(id: string, testo: string): Promise<void> {
   await registra("segni", id, "aggiorna", { testo }, async (d, h) => {
     await d.runAsync("UPDATE segni SET testo = ?, hlc = ? WHERE id = ?", [testo, h, id]);

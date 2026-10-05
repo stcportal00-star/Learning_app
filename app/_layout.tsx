@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Crypto from "expo-crypto";
 import AsyncStorageLike from "expo-sqlite/kv-store";
 import { apri } from "../lib/db";
-import { caricaContenuti } from "../lib/contenuti";
+import { aggiornaContenuti, caricaContenuti } from "../lib/contenuti";
 import { apriPalestra, versioneMotore, supportaWindowFunctions } from "../lib/palestra";
 import { ripristina as ripristinaPromemoria } from "../lib/notifiche";
 import { useNuvola } from "../lib/nuvola/useNuvola";
@@ -42,6 +42,9 @@ export default function Radice() {
         setDispositivo(id);
         await apri(id);
         await caricaContenuti();
+        // Su un telefono già in uso caricaContenuti() salta: le schede e le
+        // unità arrivate con questa versione le aggiunge questa.
+        await aggiornaContenuti();
         await apriPalestra();
         if (!supportaWindowFunctions()) {
           setAvviso(
