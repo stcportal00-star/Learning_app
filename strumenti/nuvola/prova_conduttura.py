@@ -181,11 +181,18 @@ def controlla_unici(tabella, righe, deposito, chiavi_upsert):
     il lotto in una transazione sola.
     """
     risolto = tuple(chiavi_upsert)
+    # Le righe che l'upsert sostituisce non contano: Postgres le aggiorna, e i
+    # loro valori diventano quelli in arrivo, che si controllano sotto. Senza
+    # questa eccezione il finto rifiutava la riscrittura di una riga con il
+    # suo stesso url, che il database vero accetta.
+    sostituite = {tuple(r.get(c) for c in risolto) for r in righe} if risolto else set()
     for colonne in UNICI.get(tabella, []):
         if colonne == risolto:
             continue
         visti = {}
         for r in deposito:
+            if risolto and tuple(r.get(c) for c in risolto) in sostituite:
+                continue
             visti[tuple(r.get(c) for c in colonne)] = "gia in tabella"
         for r in righe:
             firma = tuple(r.get(c) for c in colonne)
@@ -955,6 +962,8 @@ def principale():
     prova("i feed sono stati riletti", rapporto2["feed_letti"], 2)
     prova("e le stesse voci non si depositano due volte", rapporto2["voci_da_feed"], 6)
 
+    manuali_e_testi(base, cartella, manuale, rapporto, niente_rete, vero_scarica)
+
     server.shutdown()
     shutil.rmtree(cartella, ignore_errors=True)
 
@@ -966,6 +975,258 @@ def principale():
         return 1
     print("%d verifiche passate" % passate)
     return 0
+
+
+def pdf_con_testo(cartella, nome, righe):
+    """Un PDF vero, con testo vero: lo scrive guida_pdf, solo libreria standard."""
+    import guida_pdf
+    percorso = os.path.join(cartella, nome)
+    guida_pdf.scrivi(percorso, [("testo", r) for r in righe])
+    with open(percorso, "rb") as f:
+        return f.read()
+
+
+FRASE_PDF = "La triage delle segnalazioni decide chi passa prima e con quale criterio."
+
+
+def manuali_e_testi(base, cartella, manuale, rapporto_base, niente_rete, vero_scarica):
+    """I dieci manuali dal pacchetto della release, e il testo dai PDF.
+
+    Due richieste dell'utente prima del viaggio: col wifi scende tutto da solo,
+    manuali compresi; e un articolo letto lascia il testo e toglie il PDF. La
+    seconda sul telefono funziona solo se il testo c'è, e fino a oggi degli
+    articoli con il PDF non ce l'aveva nessuno.
+    """
+    import zipfile
+    import hashlib
+    import estrattore
+
+    # --- il finto server resta severo dove il database lo è
+    gia = [{"utente_id": "u", "chiave": "a", "url": "https://x/1"}]
+    try:
+        controlla_unici("articoli", [{"utente_id": "u", "chiave": "a", "url": "https://x/1"}],
+                        gia, ["utente_id", "chiave"])
+        riscritta = True
+    except UnicoViolato:
+        riscritta = False
+    prova_vero("riscrivere una riga con il suo stesso url passa, come in Postgres", riscritta)
+    try:
+        controlla_unici("articoli", [{"utente_id": "u", "chiave": "b", "url": "https://x/1"}],
+                        gia, ["utente_id", "chiave"])
+        respinta = False
+    except UnicoViolato:
+        respinta = True
+    prova_vero("ma una chiave nuova con un url già in tabella è respinta", respinta)
+
+    righe_pdf = [FRASE_PDF] + ["Paragrafo %d del documento, con abbastanza parole da "
+                               "superare la soglia dei quattrocento caratteri." % i
+                               for i in range(12)]
+    buono = pdf_con_testo(cartella, "buono.pdf", righe_pdf)
+    # Un PDF di sole immagini: la firma c'è, il testo no.
+    muto = b"%PDF-1.4\n%immagini\n" + b"\x00" * 64
+
+    # --- un PDF trovato oggi porta anche il suo testo
+    voce = {"chiave": "oggi:PDF", "url_pdf": base + "/un.pdf", "url": base + "/un"}
+    pubblica.scarica = lambda url, massimo_byte=None, timeout=None: (
+        (buono, "application/pdf") if url.endswith("/un.pdf") else niente_rete(url))
+    try:
+        testo, pdf = pubblica.testo_della_voce(voce, {}, {"falliti": []}, time.time() + 60)
+    finally:
+        pubblica.scarica = vero_scarica
+    # pypdf è facoltativo anche qui: se il passo che lo installa fallisce, la
+    # verifica deve restare verde e provare la strada senza, non fermare la
+    # pubblicazione della mattina.
+    leggibili = estrattore.PDF_LEGGIBILI
+    if leggibili:
+        prova_vero("un PDF trovato oggi porta il PDF e anche il suo testo",
+                   pdf is not None and FRASE_PDF in (testo or ""), repr((testo or "")[:120]))
+    else:
+        print("  (pypdf non installato: il testo dai PDF si prova solo spento)")
+        prova_vero("senza pypdf un PDF trovato oggi arriva come prima, senza testo",
+                   pdf is not None and testo is None, repr(testo))
+
+    # --- l'archivio: articoli col solo PDF, nel deposito
+    def ras(chiave):
+        return "RAS-" + hashlib.sha1(chiave.encode("utf-8")).hexdigest()[:16]
+
+    articoli = RICEVUTO["tabelle"]["articoli"]
+    articoli += [
+        {"utente_id": cliente.UTENTE, "chiave": "ras:testo", "titolo": "Con testo nel PDF",
+         "url": base + "/ras/testo", "testo": None, "letto": True, "salvato": True},
+        {"utente_id": cliente.UTENTE, "chiave": "ras:muto", "titolo": "PDF di sole immagini",
+         "url": base + "/ras/muto", "testo": None},
+        {"utente_id": cliente.UTENTE, "chiave": "ras:gia", "titolo": "Già con testo",
+         "url": base + "/ras/gia", "testo": "C'era già."},
+    ]
+    biblioteca = RICEVUTO["tabelle"].setdefault("biblioteca", [])
+    for chiave, dati in (("ras:testo", buono), ("ras:muto", muto), ("ras:gia", buono)):
+        codice = ras(chiave)
+        biblioteca.append({"utente_id": cliente.UTENTE, "codice": codice, "titolo": chiave,
+                           "pdf_path": "rassegna/%s.pdf" % codice})
+        RICEVUTO["deposito"]["%s/rassegna/%s.pdf" % (cliente.DEPOSITO, codice)] = dati
+    # Un manuale già nel deposito da una corsa precedente.
+    biblioteca.append({"utente_id": cliente.UTENTE, "codice": "BIB-94", "titolo": "Già su",
+                       "pdf_path": "manuale/BIB-94.pdf"})
+
+    # --- il pacchetto della release
+    manuale_buono = pdf_con_testo(cartella, "bib90.pdf", ["Un manuale aperto."])
+    pacchetto = os.path.join(cartella, "biblioteca.zip")
+    voci = [
+        {"codice": "BIB-90", "titolo": "Manuale buono", "autore": "Autrice",
+         "tema_slug": "hardware", "trimestre": "T0", "licenza": "CC BY 4.0",
+         "url": "https://esempio.invalid/bib90.pdf", "formato": "pdf",
+         "file": "BIB-90_Manuale_2ª_ed.pdf",
+         "sha256": hashlib.sha256(manuale_buono).hexdigest()},
+        {"codice": "BIB-91", "titolo": "Impronta sbagliata", "formato": "pdf",
+         "file": "BIB-91.pdf", "sha256": "0" * 64},
+        {"codice": "BIB-92", "titolo": "Non un PDF", "formato": "pdf", "file": "BIB-92.pdf"},
+        {"codice": "BIB-93", "titolo": "File mancante", "formato": "pdf", "file": "BIB-93.pdf"},
+        {"codice": "BIB-94", "titolo": "Già su", "formato": "pdf", "file": "BIB-94.pdf"},
+    ]
+    with zipfile.ZipFile(pacchetto, "w") as z:
+        z.writestr("manifesto.json", json.dumps(voci, ensure_ascii=False))
+        z.writestr("BIB-90_Manuale_2ª_ed.pdf", manuale_buono)
+        z.writestr("BIB-91.pdf", manuale_buono)
+        z.writestr("BIB-92.pdf", b"<html>403</html>")
+        z.writestr("BIB-94.pdf", manuale_buono)
+
+    def corsa():
+        r = dict(rapporto_base, articoli=0, volumi=0, eventi=0, falliti=[],
+                 gia_in_archivio=0, candidate=0, manuali=0, pdf=0, con_testo=0,
+                 feed_letti=0, voci_da_feed=0, rumore_feed=0, url_ripetuti=0,
+                 manuali_aperti=0, testi_da_pdf=0, tempo_scaduto=False)
+        prima = len(RICEVUTO["tabelle"].get("eventi", []))
+        depositi = len(RICEVUTO["deposito"])
+        RICEVUTO["richieste"].clear()
+        pubblica.scarica = niente_rete
+        try:
+            pubblica.pubblica(os.path.join(cartella, "rassegna"), manuale,
+                              cliente.Nuvola(base=base),
+                              {"articoli": 80, "pdf": 8, "minuti": 20}, r,
+                              zip_biblioteca=pacchetto)
+        finally:
+            pubblica.scarica = vero_scarica
+        return r, RICEVUTO["tabelle"]["eventi"][prima:], depositi
+
+    # Un invio per articolo, per vedere che i testi si scrivono a pezzi.
+    per_invio = pubblica.PER_INVIO
+    pubblica.PER_INVIO = 1
+    try:
+        r3, nuovi, _ = corsa()
+    finally:
+        pubblica.PER_INVIO = per_invio
+    richieste3 = list(RICEVUTO["richieste"])
+    riga = {a["chiave"]: a for a in RICEVUTO["tabelle"]["articoli"] if a["chiave"].startswith("ras:")}
+
+    # --- i manuali
+    prova("un manuale aperto caricato: BIB-90", r3.get("manuali_aperti"), 1)
+    prova("con i suoi byte, sotto manuale/",
+          RICEVUTO["deposito"].get("%s/manuale/BIB-90.pdf" % cliente.DEPOSITO), manuale_buono)
+    ev90 = [e for e in nuovi if e["entita"] == "biblioteca" and e["entita_id"] == "BIB-90"]
+    prova("e un evento «aggiorna» con le sole tre colonne del file",
+          [(e["tipo"], sorted(e["payload"])) for e in ev90],
+          [("aggiorna", ["byte", "pdf_path", "sha256"])])
+    prova("che dicono il vero sul file",
+          ev90[0]["payload"] if ev90 else None,
+          {"pdf_path": "manuale/BIB-90.pdf", "byte": len(manuale_buono),
+           "sha256": hashlib.sha256(manuale_buono).hexdigest()})
+    riga90 = [v for v in RICEVUTO["tabelle"]["biblioteca"] if v.get("codice") == "BIB-90"]
+    prova_vero("la riga remota c'è, aperta e con pdf_path",
+               len(riga90) == 1 and riga90[0]["origine"] == "aperta"
+               and riga90[0]["pdf_path"] == "manuale/BIB-90.pdf", repr(riga90))
+    prova_vero("l'impronta diversa dal manifesto ferma il file",
+               "%s/manuale/BIB-91.pdf" % cliente.DEPOSITO not in RICEVUTO["deposito"]
+               and any("BIB-91" in f and "impronta" in f for f in r3["falliti"]),
+               repr(r3["falliti"]))
+    prova_vero("un file che non è un PDF non sale",
+               "%s/manuale/BIB-92.pdf" % cliente.DEPOSITO not in RICEVUTO["deposito"]
+               and any("BIB-92" in f for f in r3["falliti"]), repr(r3["falliti"]))
+    prova_vero("un manuale già nel deposito non si ricarica",
+               not any("BIB-94" in q["percorso"] for q in RICEVUTO["richieste"])
+               and not any(e["entita_id"] == "BIB-94" for e in nuovi))
+
+    # --- il testo dai PDF
+    if leggibili:
+        testi_dai_pdf_veri(riga, nuovi, r3, cartella, richieste3, base)
+
+    # --- la corsa dopo non rifà niente
+    r4, nuovi4, depositi4 = corsa()
+    prova("la corsa dopo non ricarica manuali", r4.get("manuali_aperti"), 0)
+    prova("né rilegge PDF già letti", r4.get("testi_da_pdf"), 0)
+    prova_vero("e non manda eventi per loro",
+               not any(e["entita_id"] in ("BIB-90", "ras:testo", "ras:muto") for e in nuovi4),
+               repr([e["entita_id"] for e in nuovi4]))
+
+    # --- senza pypdf: la conduttura gira come prima, e lo dice
+    salvato = (estrattore._pypdf, estrattore.PDF_LEGGIBILI)
+    estrattore._pypdf, estrattore.PDF_LEGGIBILI = None, False
+    try:
+        prova("senza pypdf un PDF non dà testo", estrattore.testo_da_pdf(buono), "")
+        riga["ras:muto"]["testo"] = None
+        r5, nuovi5, _ = corsa()
+    finally:
+        estrattore._pypdf, estrattore.PDF_LEGGIBILI = salvato
+    prova_vero("e la passata dei testi si salta, senza segnare niente",
+               r5.get("pdf_illeggibili") is True and riga["ras:muto"].get("testo") is None
+               and not any(e["entita"] == "articoli" for e in nuovi5),
+               repr(r5))
+    prova_vero("il rapporto lo dice",
+               "pypdf non è installato" in pubblica.scrivi_rapporto(cartella, r5))
+
+
+def testi_dai_pdf_veri(riga, nuovi, r3, cartella, richieste, base):
+    """La passata dei testi con pypdf presente: quella che gira in produzione."""
+    def corpo(q):
+        try:
+            return json.loads(q["corpo"] or "[]")
+        except ValueError:
+            return []
+    parziali = [i for i, q in enumerate(richieste)
+                if q["metodo"] == "POST" and q["percorso"].startswith("/rest/v1/articoli")
+                and any(set(r) == {"chiave", "titolo", "url", "testo", "utente_id"}
+                        for r in corpo(q))]
+    eventi_rassegna = [i for i, q in enumerate(richieste)
+                       if q["metodo"] == "POST" and q["percorso"].startswith("/rest/v1/eventi")]
+    prova_vero("i testi si scrivono DOPO gli eventi della rassegna",
+               parziali and eventi_rassegna and min(parziali) > min(eventi_rassegna),
+               "%r contro %r" % (parziali, eventi_rassegna))
+    prova("e a pezzi: con un articolo per invio, due invii", len(parziali), 2)
+
+    # Un rifiuto del server sulla passata dei testi non solleva: si scrive
+    # fra i non riusciti e la corsa finisce.
+    class Rifiuta(cliente.Nuvola):
+        def innesta(self, tabella, righe, su_conflitto, doppioni="unisci"):
+            if tabella == "articoli":
+                raise cliente.ErroreNuvola("POST articoli respinta", 413, "troppo grande")
+            return super().innesta(tabella, righe, su_conflitto, doppioni)
+    testo_buono = riga["ras:testo"]["testo"]
+    riga["ras:muto"]["testo"] = riga["ras:testo"]["testo"] = None
+    rifiuto = {"falliti": [], "eventi": 0}
+    pubblica.testi_dai_pdf(Rifiuta(base=base), pubblica.Orologio(), rifiuto, time.time() + 60)
+    riga["ras:testo"]["testo"] = testo_buono
+    prova_vero("un rifiuto sulla passata dei testi resta fra i non riusciti",
+               any("testi dai PDF" in f and "413" in f for f in rifiuto["falliti"]),
+               repr(rifiuto))
+    prova("e non conta testi che non sono stati scritti", rifiuto.get("testi_da_pdf", 0), 0)
+    riga["ras:muto"]["testo"] = ""
+    prova_vero("l'articolo col solo PDF ora ha il testo del PDF",
+               FRASE_PDF in (riga["ras:testo"].get("testo") or ""),
+               repr((riga["ras:testo"].get("testo") or "")[:120]))
+    ev_testo = [e for e in nuovi if e["entita"] == "articoli" and e["entita_id"] == "ras:testo"]
+    prova("con un evento «aggiorna» che porta solo il testo",
+          [(e["tipo"], sorted(e["payload"])) for e in ev_testo], [("aggiorna", ["testo"])])
+    prova_vero("letto e salvato restano com'erano",
+               riga["ras:testo"].get("letto") is True and riga["ras:testo"].get("salvato") is True,
+               repr(riga["ras:testo"]))
+    prova("il PDF di sole immagini si segna col testo vuoto, per non riprovarci ogni mattina",
+          riga["ras:muto"].get("testo"), "")
+    prova_vero("e non manda nessun evento",
+               not any(e["entita_id"] == "ras:muto" for e in nuovi))
+    prova_vero("l'articolo che il testo l'aveva già non si tocca",
+               riga["ras:gia"].get("testo") == "C'era già."
+               and not any(e["entita_id"] == "ras:gia" for e in nuovi))
+    prova("il rapporto conta un testo dai PDF", r3.get("testi_da_pdf"), 1)
+    prova_vero("e lo scrive", "Testi dai PDF    : 1" in pubblica.scrivi_rapporto(cartella, r3))
 
 
 if __name__ == "__main__":

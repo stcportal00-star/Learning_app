@@ -28,7 +28,9 @@ import type { EventoSerializzato } from "../sync/pacchetto";
 import { Nuvola, ErroreNuvola } from "./cliente";
 import { applica, EsitoProiezione } from "./proiezione";
 import { caricaArretrati } from "./manuale";
-import { liberaVisti } from "./media";
+import { liberaVisti, scaricaMediaMancanti } from "./media";
+import { liberaPdfLetti, volumiLetti } from "./letti";
+import { cePosto, suWifi } from "./rete";
 
 /** Quanti eventi per viaggio in invio. Oltre, il corpo diventa scomodo. */
 const PAGINA = 500;
@@ -234,15 +236,34 @@ export function prossimaSoglia(fine: boolean, ultimoArrivo: number, oraDelServer
   return Number.isNaN(ms) ? "" : new Date(ms).toISOString();
 }
 
+type OpzioniNuvola = { scaricaVolumi?: boolean; nuvola?: Nuvola };
+
+/** Il giro in corso, se ce n'è uno. */
+let inVolo: Promise<EsitoNuvola> | null = null;
+
 /**
+ * Un giro per volta: chi chiede mentre uno è in corso riceve quello.
+ *
+ * Col wifi un giro scarica tutto, e può durare minuti. Nel frattempo il
+ * bottone «Ora» di Oggi, il ritorno in primo piano e l'arrivo del wifi
+ * chiamano di nuovo: due giri insieme scaricherebbero gli stessi file nello
+ * stesso posto e caricherebbero due volte gli stessi PDF aggiunti a mano.
+ *
  * Non prende il dispositivo, e non è una dimenticanza: l'identità del mittente
  * viaggia dentro ogni evento, nel campo `dispositivo` che `registra()` ci ha
  * scritto quando l'evento è nato. Un parametro qui prometterebbe che il
  * chiamante possa cambiarla, e non può.
  */
-export async function sincronizzaNuvola(
-  opzioni: { scaricaVolumi?: boolean; nuvola?: Nuvola } = {}
-): Promise<EsitoNuvola> {
+export function sincronizzaNuvola(opzioni: OpzioniNuvola = {}): Promise<EsitoNuvola> {
+  if (!inVolo) {
+    inVolo = unGiro(opzioni).finally(() => {
+      inVolo = null;
+    });
+  }
+  return inVolo;
+}
+
+async function unGiro(opzioni: OpzioniNuvola): Promise<EsitoNuvola> {
   const esito: EsitoNuvola = {
     riuscito: false,
     motivo: "",
@@ -397,15 +418,36 @@ export async function sincronizzaNuvola(
     // Un file che non si lascia cancellare non deve far fallire una
     // sincronizzazione riuscita: si riprova alla prossima.
   }
+  // Lo stesso per i PDF degli articoli letti, anche sull'altro dispositivo:
+  // il «letto» può essere appena arrivato da lì.
+  try {
+    const tolti = await liberaPdfLetti();
+    if (tolti) esito.motivo += ` ${tolti} PDF già letti tolti dal telefono (resta il testo).`;
+  } catch {
+    // Come sopra: si riprova alla prossima.
+  }
 
   // I file vengono DOPO, e fuori da ogni transazione: un PDF da venti mega
   // tenuto dentro una transazione SQLite bloccherebbe ogni altra scrittura
   // per tutto lo scaricamento.
-  if (opzioni.scaricaVolumi !== false) {
+  //
+  // Solo sul wifi, e allora TUTTO: i PDF che mancano, i manuali, i podcast non
+  // ancora visti. Sui dati mobili niente: in viaggio si pagano a megabyte, e
+  // un mese di rassegna sono centinaia di megabyte (lib/nuvola/rete.ts).
+  if (opzioni.scaricaVolumi !== false && (await suWifi())) {
     try {
-      esito.scaricati = await scaricaVolumiMancanti(n);
+      esito.scaricati = await scaricaVolumiMancanti(n, Infinity);
     } catch (e) {
       esito.motivo += ` (i testi non si sono scaricati: ${String(e)})`;
+    }
+    try {
+      const podcast = await scaricaMediaMancanti();
+      if (podcast) esito.motivo += ` ${podcast} podcast scaricati.`;
+    } catch {
+      // Un podcast che non scende resta «da scaricare», e ci si riprova.
+    }
+    if (!cePosto(0)) {
+      esito.motivo += " Spazio quasi finito: il resto si scarica quando se ne libera (si tiene 1 GB per l'app).";
     }
     try {
       // Nella stessa occasione partono i file aggiunti a mano mentre era
@@ -486,14 +528,25 @@ export async function scaricaVolume(volumeId: string, nuvola?: Nuvola): Promise<
 }
 
 export async function scaricaVolumiMancanti(n: Nuvola, massimo = 5): Promise<number> {
-  const mancanti = await database().getAllAsync<{ id: string }>(
-    `SELECT id FROM biblioteca
-     WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')
-     ORDER BY aggiunto_a DESC LIMIT ?`,
-    [massimo]
-  );
+  // Il limite si applica qui e non in SQL: col wifi è Infinity, che SQLite
+  // non accetta come LIMIT. I PDF di articoli già letti non si riscaricano: il
+  // testo è già qui, ed è proprio per lasciarlo al posto del file che sono
+  // stati tolti (letti.ts).
+  const letti = await volumiLetti();
+  const mancanti = (
+    await database().getAllAsync<{ id: string; byte: number | null }>(
+      `SELECT id, byte FROM biblioteca
+       WHERE pdf_path IS NOT NULL AND (file_locale IS NULL OR file_locale = '')
+       ORDER BY aggiunto_a DESC`
+    )
+  )
+    .filter((v) => !letti.has(v.id))
+    .slice(0, massimo);
   let fatti = 0;
   for (const v of mancanti) {
+    // La riserva di spazio (rete.ts): un manuale da venti mega che non entra
+    // non ferma i PDF piccoli dopo di lui.
+    if (!cePosto(v.byte)) continue;
     try {
       if (await scaricaVolume(v.id, n)) fatti++;
     } catch {

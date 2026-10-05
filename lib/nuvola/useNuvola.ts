@@ -1,12 +1,13 @@
 /**
  * Quando parlare con Supabase.
  *
- * Il requisito è «appena torna in rete». Senza un modulo nativo che avvisi del
- * cambio di connettività — e aggiungerne uno significherebbe una dipendenza in
- * più (invariante 8) — la cosa onesta è provarci spesso finché è offline e di
- * rado quando è allineato. In pratica il momento che conta è uno solo:
- * l'utente riprende in mano il telefono, l'app torna in primo piano, e lì si
- * tenta subito. I timer in secondo piano su Android non girano comunque.
+ * Il requisito è «appena torna in rete». Si prova spesso finché è offline e
+ * di rado quando è allineato, e subito in due momenti: quando l'app torna in
+ * primo piano, e quando arriva il wifi (expo-network, nel catalogo dell'SDK:
+ * invariante 8). Il secondo l'ha chiesto l'utente: col wifi si scarica tutto,
+ * e aspettare il giro dei dieci minuti vorrebbe dire perdere il wifi di un
+ * caffè. I timer in secondo piano su Android non girano comunque: con l'app
+ * chiusa non scende niente.
  *
  * Sta montato nella radice, non in una schermata: se vivesse dentro
  * `app/sync.tsx` — che è dove vive `useAutoSync` — non girerebbe mai, perché
@@ -15,6 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppState, AppStateStatus } from "react-native";
 import { sincronizzaNuvola, EsitoNuvola } from "./sincronia";
+import { quandoArrivaIlWifi } from "./rete";
 
 const QUANDO_VA = 10 * 60_000;
 const QUANDO_NON_VA = 60_000;
@@ -55,11 +57,13 @@ export function useNuvola(dispositivo: string) {
     const sub = AppState.addEventListener("change", (s: AppStateStatus) => {
       if (s === "active") void tenta();
     });
+    const smettiWifi = quandoArrivaIlWifi(() => void tenta());
     void giro();
 
     return () => {
       vivo = false;
       sub.remove();
+      smettiWifi();
       if (timer.current) clearTimeout(timer.current);
     };
   }, [dispositivo]);
